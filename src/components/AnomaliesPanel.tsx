@@ -3,7 +3,8 @@ import { Card } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { ScrollArea } from './ui/scroll-area';
-import { AlertCircle, Filter, Grid, List } from 'lucide-react';
+import { Badge } from './ui/badge';
+import { AlertCircle, Filter, Grid, List, Settings2 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { anomaliesManager, AnomalyDefinition } from '@/lib/anomaliesManager';
@@ -139,6 +140,9 @@ export const AnomaliesPanel = ({ bits, onJumpTo }: AnomaliesPanelProps) => {
     }
   };
   
+  const uniqueCategories = [...new Set(definitions.map(d => d.category))];
+  const totalDefinitions = anomaliesManager.getAllDefinitions().length;
+
   return (
     <ScrollArea className="h-full p-4">
       <div className="space-y-4">
@@ -146,9 +150,14 @@ export const AnomaliesPanel = ({ bits, onJumpTo }: AnomaliesPanelProps) => {
         <Card className="p-4 bg-card border-border">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-semibold text-primary">Anomaly Detection Summary</h3>
-            <span className="text-xs text-muted-foreground">
-              {definitions.length} detectors active
-            </span>
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="text-xs">
+                {definitions.length}/{totalDefinitions} active
+              </Badge>
+              <Badge variant="secondary" className="text-xs">
+                {uniqueCategories.length} categories
+              </Badge>
+            </div>
           </div>
           <div className="grid grid-cols-3 gap-3 text-sm mb-3">
             <div>

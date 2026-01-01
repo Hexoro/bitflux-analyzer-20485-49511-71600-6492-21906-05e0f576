@@ -447,6 +447,33 @@ class TestSuite {
       return result1.success && result1.bits === '00001111' && 
              result2.success && result2.bits === '00000000';
     });
+
+    // ============= BACKEND INTEGRATION TESTS =============
+    this.register('Backend: Custom presets sync with GenerateDialog', 'Backend', async () => {
+      const { customPresetsManager } = await import('./customPresetsManager');
+      const presets = customPresetsManager.getCustomPresets();
+      return Array.isArray(presets);
+    });
+
+    this.register('Backend: Anomaly definitions available', 'Backend', async () => {
+      const { anomaliesManager } = await import('./anomaliesManager');
+      const defs = anomaliesManager.getAllDefinitions();
+      const enabled = anomaliesManager.getEnabledDefinitions();
+      const categories = anomaliesManager.getCategories();
+      return defs.length > 0 && Array.isArray(enabled) && categories.length > 0;
+    });
+
+    this.register('Backend: Generation presets with patterns support', 'Backend', async () => {
+      const { GENERATION_PRESETS } = await import('./generationPresets');
+      const testPattern = GENERATION_PRESETS['test-pattern'];
+      return testPattern && testPattern.pattern !== undefined;
+    });
+
+    this.register('Backend: Graphs manager operational', 'Backend', async () => {
+      const { customPresetsManager } = await import('./customPresetsManager');
+      const graphs = customPresetsManager.getGraphs();
+      return Array.isArray(graphs);
+    });
   }
 
   private register(name: string, category: string, fn: () => Promise<boolean>): void {

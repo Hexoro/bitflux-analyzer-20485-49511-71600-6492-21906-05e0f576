@@ -55,7 +55,7 @@ export const GenerationTab = () => {
   const [form, setForm] = useState<{
     name: string;
     description: string;
-    config: GenerationConfig;
+    config: GenerationConfig & { patterns?: string[] };
     code?: string;
     isCodeBased?: boolean;
   }>({
@@ -65,6 +65,7 @@ export const GenerationTab = () => {
       mode: 'random',
       length: 1024,
       probability: 0.5,
+      patterns: ['1010'],
     },
     code: '',
     isCodeBased: false,
@@ -87,6 +88,7 @@ export const GenerationTab = () => {
         mode: 'random',
         length: 1024,
         probability: 0.5,
+        patterns: ['1010'],
       },
       code: '',
       isCodeBased: false,
@@ -99,7 +101,10 @@ export const GenerationTab = () => {
     setForm({
       name: preset.name,
       description: preset.description,
-      config: { ...preset.config },
+      config: { 
+        ...preset.config,
+        patterns: (preset.config as any).patterns || [preset.config.pattern || '1010'],
+      },
       code: preset.code || '',
       isCodeBased: preset.isCodeBased || false,
     });
@@ -410,16 +415,60 @@ export const GenerationTab = () => {
 
             {form.config.mode === 'pattern' && (
               <div className="space-y-2">
-                <Label>Pattern</Label>
-                <Input
-                  value={form.config.pattern || '1010'}
-                  onChange={(e) => setForm({ 
-                    ...form, 
-                    config: { ...form.config, pattern: e.target.value } 
-                  })}
-                  placeholder="e.g., 1010 or 11001100"
-                  className="font-mono"
-                />
+                <div className="flex items-center justify-between">
+                  <Label>Patterns</Label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const currentPatterns = form.config.patterns || ['1010'];
+                      if (currentPatterns.length < 8) {
+                        setForm({
+                          ...form,
+                          config: { ...form.config, patterns: [...currentPatterns, '01'] }
+                        });
+                      }
+                    }}
+                    className="h-7"
+                  >
+                    <Plus className="w-3 h-3 mr-1" />
+                    Add
+                  </Button>
+                </div>
+                <div className="space-y-2 max-h-32 overflow-y-auto">
+                  {(form.config.patterns || ['1010']).map((p, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <Input
+                        value={p}
+                        onChange={(e) => {
+                          const newPatterns = [...(form.config.patterns || ['1010'])];
+                          newPatterns[idx] = e.target.value;
+                          setForm({ ...form, config: { ...form.config, patterns: newPatterns } });
+                        }}
+                        placeholder="e.g., 1010"
+                        className="font-mono flex-1"
+                      />
+                      {(form.config.patterns || ['1010']).length > 1 && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => {
+                            const newPatterns = (form.config.patterns || ['1010']).filter((_, i) => i !== idx);
+                            setForm({ ...form, config: { ...form.config, patterns: newPatterns } });
+                          }}
+                          className="h-8 w-8 text-destructive"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Multiple patterns will be combined sequentially
+                </p>
               </div>
             )}
 

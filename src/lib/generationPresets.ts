@@ -15,8 +15,10 @@ export interface GenerationConfig {
   
   // Pattern mode
   pattern?: string;
+  patterns?: string[]; // Support for multiple patterns
   repetitions?: number;
   noise?: number;
+  patternMode?: 'sequential' | 'interleave' | 'random';
   
   // Structured mode
   template?: 'zeros' | 'ones' | 'alternating' | 'blocks' | 'gray-code' | 'fibonacci' | 'custom-rle';

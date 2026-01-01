@@ -30,7 +30,7 @@ import {
 } from 'lucide-react';
 
 export const GuidesTab = () => {
-  const [activeGuide, setActiveGuide] = useState('scheduler');
+  const [activeGuide, setActiveGuide] = useState('overview');
 
   return (
     <ScrollArea className="h-full">
@@ -51,6 +51,8 @@ export const GuidesTab = () => {
 
         <Tabs value={activeGuide} onValueChange={setActiveGuide}>
           <TabsList className="w-full flex-wrap h-auto gap-1">
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="player">Player Mode</TabsTrigger>
             <TabsTrigger value="scheduler">Scheduler</TabsTrigger>
             <TabsTrigger value="algorithm">Algorithm</TabsTrigger>
             <TabsTrigger value="scoring">Scoring</TabsTrigger>
@@ -61,6 +63,277 @@ export const GuidesTab = () => {
             <TabsTrigger value="encoding">Encoding</TabsTrigger>
             <TabsTrigger value="compression">Compression</TabsTrigger>
           </TabsList>
+
+          {/* Strategy Overview */}
+          <TabsContent value="overview" className="mt-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <Brain className="w-4 h-4" />
+                  How Strategies Work
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="p-3 bg-primary/10 rounded border border-primary/30">
+                  <h4 className="font-medium mb-2">Strategy Execution Pipeline</h4>
+                  <div className="text-xs text-muted-foreground space-y-2">
+                    <p><strong>1. Scheduler</strong> → Determines which algorithms to run and in what order</p>
+                    <p><strong>2. Algorithm</strong> → Contains the transformation logic that modifies binary data</p>
+                    <p><strong>3. Scoring</strong> → Defines budget constraints and success metrics</p>
+                    <p><strong>4. Policy</strong> → Enforces constraints and validates algorithm behavior</p>
+                  </div>
+                </div>
+
+                <Accordion type="multiple" className="space-y-2">
+                  <AccordionItem value="creation">
+                    <AccordionTrigger>Creating a Strategy</AccordionTrigger>
+                    <AccordionContent>
+                      <div className="space-y-3 text-sm">
+                        <p>Strategies are created in <strong>Algorithm Mode → Strategy Tab</strong>:</p>
+                        <ol className="list-decimal pl-4 space-y-2">
+                          <li>Click "New Strategy" to create a new strategy bundle</li>
+                          <li>Add files for each component: Scheduler, Algorithm, Scoring, Policy</li>
+                          <li>Write Python code in each file using the bitwise_api</li>
+                          <li>Save and run your strategy on the active file</li>
+                        </ol>
+                        <pre className="bg-muted p-3 rounded text-xs overflow-x-auto mt-2">{`# Example: Minimal strategy structure
+# scheduler.py
+def schedule(bits, context):
+    return [{"algorithm": "my_algo", "params": {}}]
+
+# algorithm.py  
+def run(bits, params, context):
+    return context.execute_op("NOT", bits, {})
+
+# scoring.py
+INITIAL_BUDGET = 1000
+def calculate_score(context):
+    return {"score": context.get_entropy_change(), "success": True}
+
+# policy.py
+def validate_all(initial_size, initial_entropy, initial_budget):
+    return True, "OK"`}</pre>
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+
+                  <AccordionItem value="execution">
+                    <AccordionTrigger>Strategy Execution Flow</AccordionTrigger>
+                    <AccordionContent>
+                      <div className="space-y-3 text-sm">
+                        <p>When you click "Run" on a strategy:</p>
+                        <ol className="list-decimal pl-4 space-y-2">
+                          <li><strong>Load Source:</strong> The active file's bits are loaded as input</li>
+                          <li><strong>Run Scheduler:</strong> Scheduler determines algorithm sequence</li>
+                          <li><strong>Execute Algorithms:</strong> Each algorithm transforms the bits</li>
+                          <li><strong>Track Steps:</strong> Each operation is recorded with before/after states</li>
+                          <li><strong>Check Policies:</strong> Constraints are validated after each step</li>
+                          <li><strong>Calculate Score:</strong> Final scoring determines success</li>
+                          <li><strong>Save Result:</strong> Complete execution is saved for replay</li>
+                        </ol>
+                        <div className="mt-3 p-2 bg-yellow-500/10 rounded border border-yellow-500/30">
+                          <p className="text-xs"><strong>Budget System:</strong> Each operation has a cost. If budget runs out, execution stops.</p>
+                        </div>
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+
+                  <AccordionItem value="results">
+                    <AccordionTrigger>Understanding Results</AccordionTrigger>
+                    <AccordionContent>
+                      <div className="space-y-3 text-sm">
+                        <p>After execution, results are saved and can be:</p>
+                        <ul className="list-disc pl-4 space-y-1">
+                          <li><strong>Viewed in Results Tab:</strong> Summary cards with metrics</li>
+                          <li><strong>Opened in Player Mode:</strong> Step-by-step replay</li>
+                          <li><strong>Exported as CSV/JSON/ZIP:</strong> For external analysis</li>
+                          <li><strong>Compared:</strong> Multiple results side-by-side</li>
+                        </ul>
+                        <p className="mt-2">Each result stores:</p>
+                        <ul className="list-disc pl-4 space-y-1 text-xs text-muted-foreground">
+                          <li>Initial and final binary data</li>
+                          <li>Every transformation step with before/after states</li>
+                          <li>Metrics at each step (entropy, balance, etc.)</li>
+                          <li>Cost and budget usage</li>
+                          <li>Memory windows and bit ranges affected</li>
+                        </ul>
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+                </Accordion>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Player Mode Guide */}
+          <TabsContent value="player" className="mt-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <FileCode className="w-4 h-4" />
+                  Player Mode Guide
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  Player Mode provides step-by-step replay of strategy executions, allowing deep analysis of each transformation.
+                </p>
+
+                <Accordion type="multiple" className="space-y-2">
+                  <AccordionItem value="accessing">
+                    <AccordionTrigger>Accessing Player Mode</AccordionTrigger>
+                    <AccordionContent>
+                      <div className="space-y-2 text-sm">
+                        <p>There are two ways to enter Player Mode:</p>
+                        <ol className="list-decimal pl-4 space-y-1">
+                          <li>From <strong>Results Tab</strong>: Click the Play button on any result card</li>
+                          <li>From <strong>Algorithm Mode</strong>: After running a strategy, click "Open in Player"</li>
+                        </ol>
+                        <p className="mt-2 text-xs text-muted-foreground">
+                          Player Mode creates a temporary file for playback and locks file switching until you exit.
+                        </p>
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+
+                  <AccordionItem value="controls">
+                    <AccordionTrigger>Playback Controls</AccordionTrigger>
+                    <AccordionContent>
+                      <div className="space-y-3 text-sm">
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                          <div className="p-2 bg-muted rounded flex items-center gap-2">
+                            <span>⏮</span>
+                            <span>Jump to first step</span>
+                          </div>
+                          <div className="p-2 bg-muted rounded flex items-center gap-2">
+                            <span>⏭</span>
+                            <span>Jump to last step</span>
+                          </div>
+                          <div className="p-2 bg-muted rounded flex items-center gap-2">
+                            <span>◀</span>
+                            <span>Previous step</span>
+                          </div>
+                          <div className="p-2 bg-muted rounded flex items-center gap-2">
+                            <span>▶</span>
+                            <span>Next step</span>
+                          </div>
+                          <div className="p-2 bg-muted rounded flex items-center gap-2">
+                            <span>▶️/⏸</span>
+                            <span>Play/Pause auto-playback</span>
+                          </div>
+                          <div className="p-2 bg-muted rounded flex items-center gap-2">
+                            <span>🔄</span>
+                            <span>Reset to beginning</span>
+                          </div>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Use the slider to scrub through steps or adjust playback speed (0.25x to 4x).
+                        </p>
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+
+                  <AccordionItem value="verification">
+                    <AccordionTrigger>Verification Status</AccordionTrigger>
+                    <AccordionContent>
+                      <div className="space-y-3 text-sm">
+                        <p>Player Mode verifies that replaying all operations produces the same final result:</p>
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2 p-2 bg-green-500/10 rounded">
+                            <Badge className="bg-green-500/20 text-green-500">✓ Verified</Badge>
+                            <span className="text-xs">Replay matches stored final bits exactly</span>
+                          </div>
+                          <div className="flex items-center gap-2 p-2 bg-red-500/10 rounded">
+                            <Badge variant="destructive">Replay Mismatch</Badge>
+                            <span className="text-xs">Replay differs from stored result (may indicate non-deterministic operations)</span>
+                          </div>
+                          <div className="flex items-center gap-2 p-2 bg-muted rounded">
+                            <Badge variant="secondary">Verifying...</Badge>
+                            <span className="text-xs">Currently reconstructing steps</span>
+                          </div>
+                        </div>
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+
+                  <AccordionItem value="highlights">
+                    <AccordionTrigger>Understanding Highlights</AccordionTrigger>
+                    <AccordionContent>
+                      <div className="space-y-3 text-sm">
+                        <p>During playback, the Binary Viewer shows colored highlights:</p>
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2">
+                            <div className="w-6 h-4 bg-cyan-500/30 border border-cyan-500/50 rounded"></div>
+                            <span className="text-xs"><strong>Cyan:</strong> Bit ranges affected by the current operation</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className="w-6 h-4 bg-yellow-500/20 border border-yellow-500/50 rounded"></div>
+                            <span className="text-xs"><strong>Gold:</strong> Memory window (algorithm's view area)</span>
+                          </div>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-2">
+                          These highlights help visualize exactly which bits were accessed and modified at each step.
+                        </p>
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+
+                  <AccordionItem value="tabs">
+                    <AccordionTrigger>Analysis Tabs</AccordionTrigger>
+                    <AccordionContent>
+                      <div className="space-y-3 text-sm">
+                        <div className="space-y-2">
+                          <div className="p-2 bg-muted rounded">
+                            <strong>Step Details:</strong> Operation name, parameters, bit ranges, memory window, and metrics at this step
+                          </div>
+                          <div className="p-2 bg-muted rounded">
+                            <strong>Visual Diff:</strong> Side-by-side comparison of bits before and after, with changes highlighted
+                          </div>
+                          <div className="p-2 bg-muted rounded">
+                            <strong>Metrics Timeline:</strong> Chart showing how metrics evolve over all steps
+                          </div>
+                          <div className="p-2 bg-muted rounded">
+                            <strong>Binary Data:</strong> Full binary representation at current step with statistics
+                          </div>
+                        </div>
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+
+                  <AccordionItem value="troubleshooting">
+                    <AccordionTrigger>Troubleshooting</AccordionTrigger>
+                    <AccordionContent>
+                      <div className="space-y-3 text-sm">
+                        <div className="space-y-2">
+                          <p><strong>Replay Mismatch:</strong></p>
+                          <ul className="list-disc pl-4 text-xs text-muted-foreground">
+                            <li>Operations may use randomness - results differ on replay</li>
+                            <li>External state may have changed since execution</li>
+                            <li>Check the Visual Diff tab to see exact differences</li>
+                          </ul>
+                        </div>
+                        <div className="space-y-2">
+                          <p><strong>No Results Available:</strong></p>
+                          <ul className="list-disc pl-4 text-xs text-muted-foreground">
+                            <li>Run a strategy first in Algorithm Mode</li>
+                            <li>Results are stored in browser localStorage</li>
+                            <li>Check Results Tab to confirm execution saved</li>
+                          </ul>
+                        </div>
+                        <div className="space-y-2">
+                          <p><strong>Highlights Not Showing:</strong></p>
+                          <ul className="list-disc pl-4 text-xs text-muted-foreground">
+                            <li>Ensure the Binary Viewer is visible</li>
+                            <li>Some operations affect entire file (no specific range)</li>
+                          </ul>
+                        </div>
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+                </Accordion>
+              </CardContent>
+            </Card>
+          </TabsContent>
 
           {/* Encoding Guide */}
           <TabsContent value="encoding" className="mt-4">

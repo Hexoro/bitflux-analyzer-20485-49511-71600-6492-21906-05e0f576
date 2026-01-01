@@ -13,7 +13,7 @@ import { BinaryModel } from '@/lib/binaryModel';
 import { GENERATION_PRESETS, PRESET_DESCRIPTIONS, QUICK_SIZES, GenerationConfig } from '@/lib/generationPresets';
 import { customPresetsManager, CustomPreset } from '@/lib/customPresetsManager';
 import { toast } from 'sonner';
-import { ChevronDown, Code, Sparkles } from 'lucide-react';
+import { ChevronDown, Code, Sparkles, Plus } from 'lucide-react';
 
 interface GenerateDialogProps {
   open: boolean;
@@ -31,9 +31,10 @@ export const GenerateDialog = ({ open, onOpenChange, onGenerate }: GenerateDialo
   const [seed, setSeed] = useState('');
   const [targetEntropy, setTargetEntropy] = useState<number | null>(null);
   
-  // Pattern mode
-  const [pattern, setPattern] = useState('1010');
+  // Pattern mode - support multiple patterns
+  const [patterns, setPatterns] = useState<string[]>(['1010']);
   const [noise, setNoise] = useState(0);
+  const [patternMode, setPatternMode] = useState<'sequential' | 'interleave' | 'random'>('sequential');
   
   // Structured mode
   const [template, setTemplate] = useState<string>('alternating');
@@ -59,6 +60,71 @@ return generate(length, seed, probability);`);
   
   // Advanced options
   const [showAdvanced, setShowAdvanced] = useState(false);
+
+  const addPattern = () => {
+    if (patterns.length < 8) {
+      setPatterns([...patterns, '01']);
+    }
+  };
+
+  const removePattern = (index: number) => {
+    if (patterns.length > 1) {
+      setPatterns(patterns.filter((_, i) => i !== index));
+    }
+  };
+
+  const updatePattern = (index: number, value: string) => {
+    const newPatterns = [...patterns];
+    newPatterns[index] = value;
+    setPatterns(newPatterns);
+  };
+
+  const generateMultiPattern = (patternsArr: string[], len: number, mode: string, noiseLevel: number): string => {
+    let result = '';
+    const validPatterns = patternsArr.filter(p => /^[01]+$/.test(p));
+    if (validPatterns.length === 0) return '0'.repeat(len);
+    
+    if (mode === 'sequential') {
+      // Each pattern fills a portion
+      const perPattern = Math.ceil(len / validPatterns.length);
+      for (const p of validPatterns) {
+        const repetitions = Math.ceil(perPattern / p.length);
+        result += p.repeat(repetitions).slice(0, perPattern);
+      }
+    } else if (mode === 'interleave') {
+      // Interleave patterns bit by bit
+      let patternIndex = 0;
+      const patternPositions = validPatterns.map(() => 0);
+      for (let i = 0; i < len; i++) {
+        const p = validPatterns[patternIndex];
+        result += p[patternPositions[patternIndex] % p.length];
+        patternPositions[patternIndex]++;
+        patternIndex = (patternIndex + 1) % validPatterns.length;
+      }
+    } else {
+      // Random selection from patterns
+      for (let i = 0; i < len; ) {
+        const p = validPatterns[Math.floor(Math.random() * validPatterns.length)];
+        result += p;
+        i += p.length;
+      }
+    }
+    
+    result = result.slice(0, len);
+    
+    // Apply noise
+    if (noiseLevel > 0) {
+      const chars = result.split('');
+      for (let i = 0; i < chars.length; i++) {
+        if (Math.random() < noiseLevel) {
+          chars[i] = chars[i] === '0' ? '1' : '0';
+        }
+      }
+      result = chars.join('');
+    }
+    
+    return result;
+  };
 
   // Load custom presets from customPresetsManager
   useEffect(() => {
@@ -119,11 +185,12 @@ return generate(length, seed, probability);`);
           break;
           
         case 'pattern':
-          if (!pattern || !/^[01]+$/.test(pattern)) {
-            toast.error('Pattern must contain only 0s and 1s');
+          const invalidPatterns = patterns.filter(p => !p || !/^[01]+$/.test(p));
+          if (invalidPatterns.length > 0) {
+            toast.error('All patterns must contain only 0s and 1s');
             return;
           }
-          bits = BinaryModel.generateFromPattern(pattern, length, noise);
+          bits = generateMultiPattern(patterns, length, patternMode, noise);
           break;
           
         case 'structured':
@@ -163,7 +230,8 @@ return generate(length, seed, probability);`);
       setLength(preset.length);
       setMode(preset.mode);
       if (preset.probability !== undefined) setProbability(preset.probability);
-      if (preset.pattern) setPattern(preset.pattern);
+      if (preset.pattern) setPatterns([preset.pattern]);
+      if (preset.patterns) setPatterns(preset.patterns);
       if (preset.noise !== undefined) setNoise(preset.noise);
       if (preset.template) setTemplate(preset.template);
       if (preset.blockSize) setBlockSize(preset.blockSize);
@@ -187,7 +255,8 @@ return generate(length, seed, probability);`);
       }
       
       if (cfg.probability !== undefined) setProbability(cfg.probability);
-      if (cfg.pattern) setPattern(cfg.pattern);
+      if (cfg.pattern) setPatterns([cfg.pattern]);
+      if (cfg.patterns) setPatterns(cfg.patterns);
       if (cfg.noise !== undefined) setNoise(cfg.noise);
       if (cfg.template) setTemplate(cfg.template);
       if (cfg.blockSize) setBlockSize(cfg.blockSize);
@@ -333,16 +402,63 @@ return generate(length, seed, probability);`);
 
           <TabsContent value="pattern" className="space-y-4 mt-4">
             <div className="space-y-2">
-              <Label htmlFor="pattern">Pattern</Label>
-              <Input
-                id="pattern"
-                value={pattern}
-                onChange={(e) => setPattern(e.target.value)}
-                placeholder="e.g., 1010 or 11001100"
-                className="font-mono bg-input border-border"
-              />
-              <p className="text-xs text-muted-foreground">Pattern will repeat to fill the length</p>
+              <div className="flex items-center justify-between">
+                <Label>Patterns ({patterns.length})</Label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={addPattern}
+                  disabled={patterns.length >= 8}
+                  className="h-7"
+                >
+                  <Plus className="w-3 h-3 mr-1" />
+                  Add Pattern
+                </Button>
+              </div>
+              <div className="space-y-2 max-h-40 overflow-y-auto">
+                {patterns.map((p, index) => (
+                  <div key={index} className="flex items-center gap-2">
+                    <Input
+                      value={p}
+                      onChange={(e) => updatePattern(index, e.target.value)}
+                      placeholder="e.g., 1010"
+                      className="font-mono bg-input border-border flex-1"
+                    />
+                    {patterns.length > 1 && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => removePattern(index)}
+                        className="h-8 w-8 text-destructive"
+                      >
+                        ×
+                      </Button>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {patterns.length > 1 ? 'Multiple patterns will be combined based on mode' : 'Pattern will repeat to fill length'}
+              </p>
             </div>
+
+            {patterns.length > 1 && (
+              <div className="space-y-2">
+                <Label>Combination Mode</Label>
+                <Select value={patternMode} onValueChange={(v: any) => setPatternMode(v)}>
+                  <SelectTrigger className="bg-input border-border">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-popover border-border z-50">
+                    <SelectItem value="sequential">Sequential (one after another)</SelectItem>
+                    <SelectItem value="interleave">Interleave (alternate bits)</SelectItem>
+                    <SelectItem value="random">Random (pick patterns randomly)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             <div className="space-y-3">
               <Label htmlFor="noise">
@@ -466,7 +582,7 @@ return generate(length, seed, probability);`);
             {mode === 'pattern' && (
               <>
                 <div className="space-y-2">
-                  <Label>Pattern Variations</Label>
+                  <Label>Quick Pattern Variations</Label>
                   <div className="grid grid-cols-4 gap-2">
                     {['1010', '1100', '11110000', '10101010'].map(p => (
                       <Button
@@ -474,7 +590,7 @@ return generate(length, seed, probability);`);
                         variant="outline"
                         size="sm"
                         className="font-mono text-xs"
-                        onClick={() => setPattern(p)}
+                        onClick={() => setPatterns([p])}
                       >
                         {p}
                       </Button>
