@@ -7,19 +7,13 @@ import { Slider } from './ui/slider';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from './ui/collapsible';
+import { Textarea } from './ui/textarea';
+import { Badge } from './ui/badge';
 import { BinaryModel } from '@/lib/binaryModel';
 import { GENERATION_PRESETS, PRESET_DESCRIPTIONS, QUICK_SIZES, GenerationConfig } from '@/lib/generationPresets';
+import { customPresetsManager, CustomPreset } from '@/lib/customPresetsManager';
 import { toast } from 'sonner';
-import { ChevronDown } from 'lucide-react';
-
-const CUSTOM_PRESETS_KEY = 'bsee_custom_generation_presets';
-
-interface CustomPreset {
-  id: string;
-  name: string;
-  description: string;
-  config: GenerationConfig;
-}
+import { ChevronDown, Code, Sparkles } from 'lucide-react';
 
 interface GenerateDialogProps {
   open: boolean;
@@ -28,7 +22,7 @@ interface GenerateDialogProps {
 }
 
 export const GenerateDialog = ({ open, onOpenChange, onGenerate }: GenerateDialogProps) => {
-  const [mode, setMode] = useState<'random' | 'pattern' | 'structured' | 'file-format'>('random');
+  const [mode, setMode] = useState<'random' | 'pattern' | 'structured' | 'file-format' | 'code'>('random');
   const [length, setLength] = useState(1024);
   const [customPresets, setCustomPresets] = useState<CustomPreset[]>([]);
   
@@ -48,18 +42,32 @@ export const GenerateDialog = ({ open, onOpenChange, onGenerate }: GenerateDialo
   // File format mode
   const [headerPattern, setHeaderPattern] = useState('11111111');
   
+  // Code mode
+  const [customCode, setCustomCode] = useState(`// Custom generation function
+// Available: length, seed, probability
+// Must return a string of only 0s and 1s
+
+function generate(length, seed, probability) {
+  let result = '';
+  for (let i = 0; i < length; i++) {
+    result += Math.random() < probability ? '1' : '0';
+  }
+  return result;
+}
+
+return generate(length, seed, probability);`);
+  
   // Advanced options
   const [showAdvanced, setShowAdvanced] = useState(false);
 
-  // Load custom presets from localStorage
+  // Load custom presets from customPresetsManager
   useEffect(() => {
-    try {
-      const data = localStorage.getItem(CUSTOM_PRESETS_KEY);
-      if (data) {
-        setCustomPresets(JSON.parse(data));
-      }
-    } catch (e) {
-      console.error('Failed to load custom presets:', e);
+    if (open) {
+      setCustomPresets(customPresetsManager.getCustomPresets());
+      const unsubscribe = customPresetsManager.subscribe(() => {
+        setCustomPresets(customPresetsManager.getCustomPresets());
+      });
+      return unsubscribe;
     }
   }, [open]);
 
@@ -70,6 +78,26 @@ export const GenerateDialog = ({ open, onOpenChange, onGenerate }: GenerateDialo
     const compressionRatio = length > 0 ? (length / Math.max(entropy * length, 1)).toFixed(2) : '1.00';
     
     return { entropy, hammingWeight, compressionRatio };
+  };
+
+  const executeCustomCode = (): string => {
+    try {
+      // Create a safe execution context
+      const fn = new Function('length', 'seed', 'probability', customCode);
+      const result = fn(length, seed, probability);
+      
+      // Validate result
+      if (typeof result !== 'string') {
+        throw new Error('Code must return a string');
+      }
+      if (!/^[01]*$/.test(result)) {
+        throw new Error('Result must contain only 0s and 1s');
+      }
+      
+      return result;
+    } catch (error) {
+      throw new Error(`Code execution failed: ${(error as Error).message}`);
+    }
   };
 
   const handleGenerate = () => {
@@ -109,13 +137,21 @@ export const GenerateDialog = ({ open, onOpenChange, onGenerate }: GenerateDialo
           }
           bits = BinaryModel.generateFileFormat(length, headerPattern);
           break;
+          
+        case 'code':
+          bits = executeCustomCode();
+          if (bits.length === 0) {
+            toast.error('Generated code produced empty result');
+            return;
+          }
+          break;
       }
       
       onGenerate(bits);
-      toast.success(`Generated ${length} bits using ${mode} mode`);
+      toast.success(`Generated ${bits.length} bits using ${mode} mode`);
       onOpenChange(false);
     } catch (error) {
-      toast.error('Failed to generate binary data');
+      toast.error((error as Error).message || 'Failed to generate binary data');
       console.error(error);
     }
   };
@@ -141,13 +177,17 @@ export const GenerateDialog = ({ open, onOpenChange, onGenerate }: GenerateDialo
     if (customPreset) {
       const cfg = customPreset.config;
       setLength(cfg.length);
-      setMode(cfg.mode);
+      setMode(cfg.mode as any);
       if (cfg.probability !== undefined) setProbability(cfg.probability);
       if (cfg.pattern) setPattern(cfg.pattern);
       if (cfg.noise !== undefined) setNoise(cfg.noise);
       if (cfg.template) setTemplate(cfg.template);
       if (cfg.blockSize) setBlockSize(cfg.blockSize);
       if (cfg.headerPattern) setHeaderPattern(cfg.headerPattern);
+      if ((cfg as any).code) {
+        setCustomCode((cfg as any).code);
+        setMode('code');
+      }
       toast.success(`Applied custom preset: ${customPreset.name}`);
     }
   };
@@ -162,7 +202,10 @@ export const GenerateDialog = ({ open, onOpenChange, onGenerate }: GenerateDialo
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto bg-card border-border">
         <DialogHeader>
-          <DialogTitle className="text-primary">Generate Binary Data</DialogTitle>
+          <DialogTitle className="text-primary flex items-center gap-2">
+            <Sparkles className="w-5 h-5" />
+            Generate Binary Data
+          </DialogTitle>
           <DialogDescription>
             Create custom binary data with advanced generation options
           </DialogDescription>
@@ -239,11 +282,15 @@ export const GenerateDialog = ({ open, onOpenChange, onGenerate }: GenerateDialo
 
         {/* Generation Modes */}
         <Tabs value={mode} onValueChange={(v) => setMode(v as any)} className="w-full">
-          <TabsList className="grid w-full grid-cols-4 bg-muted">
+          <TabsList className="grid w-full grid-cols-5 bg-muted">
             <TabsTrigger value="random">Random</TabsTrigger>
             <TabsTrigger value="pattern">Pattern</TabsTrigger>
             <TabsTrigger value="structured">Structured</TabsTrigger>
             <TabsTrigger value="file-format">File Format</TabsTrigger>
+            <TabsTrigger value="code" className="flex items-center gap-1">
+              <Code className="w-3 h-3" />
+              Code
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="random" className="space-y-4 mt-4">
@@ -360,6 +407,25 @@ export const GenerateDialog = ({ open, onOpenChange, onGenerate }: GenerateDialo
               </p>
             </div>
           </TabsContent>
+
+          <TabsContent value="code" className="space-y-4 mt-4">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label>Custom Generation Code</Label>
+                <Badge variant="secondary" className="text-xs">JavaScript</Badge>
+              </div>
+              <Textarea
+                value={customCode}
+                onChange={(e) => setCustomCode(e.target.value)}
+                className="font-mono text-xs bg-input border-border min-h-[200px]"
+                placeholder="Write your custom generation function..."
+              />
+              <div className="text-xs text-muted-foreground space-y-1">
+                <p><strong>Available variables:</strong> length, seed, probability</p>
+                <p><strong>Must return:</strong> A string containing only 0s and 1s</p>
+              </div>
+            </div>
+          </TabsContent>
         </Tabs>
 
         {/* Advanced Options */}
@@ -421,6 +487,7 @@ export const GenerateDialog = ({ open, onOpenChange, onGenerate }: GenerateDialo
             Cancel
           </Button>
           <Button onClick={handleGenerate} className="flex-1">
+            <Sparkles className="w-4 h-4 mr-2" />
             Generate
           </Button>
         </div>

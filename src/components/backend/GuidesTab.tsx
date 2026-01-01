@@ -1,6 +1,7 @@
 /**
  * Comprehensive Guides Tab for Backend Mode
  * Contains detailed guides and examples for writing strategies, anomalies, operations, metrics
+ * Includes encoding and compression function documentation
  */
 
 import { useState } from 'react';
@@ -24,6 +25,8 @@ import {
   Cog,
   Calculator,
   Brain,
+  Binary,
+  Layers,
 } from 'lucide-react';
 
 export const GuidesTab = () => {
@@ -41,7 +44,7 @@ export const GuidesTab = () => {
           </CardHeader>
           <CardContent>
             <p className="text-sm text-muted-foreground">
-              This guide covers everything you need to know about writing strategies, anomalies, operations, and metrics for BSEE.
+              This guide covers everything you need to know about writing strategies, anomalies, operations, metrics, and using the encoding/compression library.
             </p>
           </CardContent>
         </Card>
@@ -55,8 +58,321 @@ export const GuidesTab = () => {
             <TabsTrigger value="anomalies">Anomalies</TabsTrigger>
             <TabsTrigger value="operations">Operations</TabsTrigger>
             <TabsTrigger value="metrics">Metrics</TabsTrigger>
-            <TabsTrigger value="training">ML Training</TabsTrigger>
+            <TabsTrigger value="encoding">Encoding</TabsTrigger>
+            <TabsTrigger value="compression">Compression</TabsTrigger>
           </TabsList>
+
+          {/* Encoding Guide */}
+          <TabsContent value="encoding" className="mt-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <Binary className="w-4 h-4" />
+                  Encoding Functions Guide
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground mb-4">
+                  The encoding library provides functions for converting binary data between different representations. All functions work with binary strings (0s and 1s).
+                </p>
+                
+                <Accordion type="multiple" className="space-y-2">
+                  <AccordionItem value="gray">
+                    <AccordionTrigger>Gray Code Encoding</AccordionTrigger>
+                    <AccordionContent>
+                      <p className="text-sm mb-2">Gray code is a binary numeral system where two successive values differ in only one bit.</p>
+                      <pre className="bg-muted p-4 rounded text-xs overflow-x-auto">{`// Binary to Gray Code
+import { EncodingFunctions } from '@/lib/encodingFunctions';
+
+const binary = "1010";
+const gray = EncodingFunctions.binaryToGray(binary);
+// gray = "1111"
+
+// Gray Code to Binary
+const decoded = EncodingFunctions.grayToBinary(gray);
+// decoded = "1010"
+
+// Use case: Reduces transitions in sequential data
+// Useful for error correction and reducing bit flips`}</pre>
+                    </AccordionContent>
+                  </AccordionItem>
+
+                  <AccordionItem value="manchester">
+                    <AccordionTrigger>Manchester Encoding</AccordionTrigger>
+                    <AccordionContent>
+                      <p className="text-sm mb-2">Manchester encoding uses transitions to represent bits: 0→01, 1→10. Always has a transition in the middle of each bit period.</p>
+                      <pre className="bg-muted p-4 rounded text-xs overflow-x-auto">{`// Manchester Encode (doubles the length)
+const data = "1010";
+const encoded = EncodingFunctions.manchesterEncode(data);
+// encoded = "10011001" (length doubled)
+
+// Manchester Decode
+const decoded = EncodingFunctions.manchesterDecode(encoded);
+// decoded = "1010"
+
+// Use case: Self-clocking, no DC component
+// Common in Ethernet and RFID`}</pre>
+                    </AccordionContent>
+                  </AccordionItem>
+
+                  <AccordionItem value="differential">
+                    <AccordionTrigger>Differential Encoding</AccordionTrigger>
+                    <AccordionContent>
+                      <p className="text-sm mb-2">Encodes data based on changes rather than absolute values. A change means 1, no change means 0.</p>
+                      <pre className="bg-muted p-4 rounded text-xs overflow-x-auto">{`// Differential Encode
+const data = "11001010";
+const encoded = EncodingFunctions.differentialEncode(data);
+// First bit is same, then encode changes
+
+// Differential Decode
+const decoded = EncodingFunctions.differentialDecode(encoded);
+
+// Use case: Immunity to polarity inversion
+// Common in telecommunications`}</pre>
+                    </AccordionContent>
+                  </AccordionItem>
+
+                  <AccordionItem value="nrzi">
+                    <AccordionTrigger>NRZI Encoding</AccordionTrigger>
+                    <AccordionContent>
+                      <p className="text-sm mb-2">Non-Return-to-Zero Inverted: transition on 1, no transition on 0.</p>
+                      <pre className="bg-muted p-4 rounded text-xs overflow-x-auto">{`// NRZI Encode
+const data = "10110";
+const encoded = EncodingFunctions.nrziEncode(data);
+// Signal inverts on each 1
+
+// NRZI Decode
+const decoded = EncodingFunctions.nrziDecode(encoded);
+
+// Use case: Used in USB, Fiber Channel
+// Good for long strings of zeros`}</pre>
+                    </AccordionContent>
+                  </AccordionItem>
+
+                  <AccordionItem value="hamming">
+                    <AccordionTrigger>Hamming (7,4) Error Correction</AccordionTrigger>
+                    <AccordionContent>
+                      <p className="text-sm mb-2">Adds parity bits to detect and correct single-bit errors. 4 data bits → 7 code bits.</p>
+                      <pre className="bg-muted p-4 rounded text-xs overflow-x-auto">{`// Hamming Encode (4 bits → 7 bits)
+const data = "1011";
+const encoded = EncodingFunctions.hammingEncode74(data);
+// Adds 3 parity bits
+
+// Hamming Decode (can correct 1-bit error)
+const decoded = EncodingFunctions.hammingDecode74(encoded);
+
+// Use case: Error detection and correction
+// Used in memory systems, data transmission`}</pre>
+                    </AccordionContent>
+                  </AccordionItem>
+
+                  <AccordionItem value="bitstuff">
+                    <AccordionTrigger>Bit Stuffing (HDLC)</AccordionTrigger>
+                    <AccordionContent>
+                      <p className="text-sm mb-2">Inserts a 0 after every five consecutive 1s to ensure sync patterns are unique.</p>
+                      <pre className="bg-muted p-4 rounded text-xs overflow-x-auto">{`// Bit Stuff (insert 0 after five 1s)
+const data = "01111110111111";
+const stuffed = EncodingFunctions.bitStuff(data);
+// "011111010111110" (0 inserted after each 11111)
+
+// Bit Unstuff
+const unstuffed = EncodingFunctions.bitUnstuff(stuffed);
+
+// Use case: Frame synchronization
+// Used in HDLC, USB`}</pre>
+                    </AccordionContent>
+                  </AccordionItem>
+
+                  <AccordionItem value="interleave">
+                    <AccordionTrigger>Bit Interleaving</AccordionTrigger>
+                    <AccordionContent>
+                      <p className="text-sm mb-2">Interleaves bits from two halves of data to spread burst errors.</p>
+                      <pre className="bg-muted p-4 rounded text-xs overflow-x-auto">{`// Interleave (spread bits)
+const data = "11110000"; // first half: 1111, second: 0000
+const interleaved = EncodingFunctions.interleave(data);
+// "10101010"
+
+// Deinterleave
+const original = EncodingFunctions.deinterleave(interleaved);
+// "11110000"
+
+// Use case: Burst error protection
+// Common in CD/DVD, wireless`}</pre>
+                    </AccordionContent>
+                  </AccordionItem>
+                </Accordion>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Compression Guide */}
+          <TabsContent value="compression" className="mt-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <Layers className="w-4 h-4" />
+                  Compression Functions Guide
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground mb-4">
+                  The compression library provides functions for reducing data size through various algorithms.
+                </p>
+                
+                <Accordion type="multiple" className="space-y-2">
+                  <AccordionItem value="rle">
+                    <AccordionTrigger>Run-Length Encoding (RLE)</AccordionTrigger>
+                    <AccordionContent>
+                      <p className="text-sm mb-2">Encodes sequences of identical bits as count + bit pairs.</p>
+                      <pre className="bg-muted p-4 rounded text-xs overflow-x-auto">{`import { CompressionFunctions } from '@/lib/encodingFunctions';
+
+// RLE Encode
+const data = "111111110000000011111111";
+const encoded = CompressionFunctions.rleEncode(data);
+// Format: 8-bit count + bit value
+// "00001000 1 00000111 0 00001000 1"
+
+// RLE Decode
+const decoded = CompressionFunctions.rleDecode(encoded);
+
+// Best for: Data with long runs of same bit
+// Ratio: Excellent for sparse data, poor for random`}</pre>
+                    </AccordionContent>
+                  </AccordionItem>
+
+                  <AccordionItem value="delta">
+                    <AccordionTrigger>Delta Encoding</AccordionTrigger>
+                    <AccordionContent>
+                      <p className="text-sm mb-2">Stores differences between consecutive bytes rather than absolute values.</p>
+                      <pre className="bg-muted p-4 rounded text-xs overflow-x-auto">{`// Delta Encode
+const data = "0000000100000010000001000000011";
+const encoded = CompressionFunctions.deltaEncode(data);
+// Stores: first byte, then differences
+
+// Delta Decode
+const decoded = CompressionFunctions.deltaDecode(encoded);
+
+// Best for: Sequential or slowly changing data
+// Common in: Audio, sensor data, time series`}</pre>
+                    </AccordionContent>
+                  </AccordionItem>
+
+                  <AccordionItem value="mtf">
+                    <AccordionTrigger>Move-to-Front Transform</AccordionTrigger>
+                    <AccordionContent>
+                      <p className="text-sm mb-2">Maintains a list of symbols and outputs their position, moving used symbols to front.</p>
+                      <pre className="bg-muted p-4 rounded text-xs overflow-x-auto">{`// MTF Encode
+const data = "0000000000000001"; // Two bytes
+const encoded = CompressionFunctions.mtfEncode(data);
+// Repeated bytes become 0 (at front of list)
+
+// MTF Decode
+const decoded = CompressionFunctions.mtfDecode(encoded);
+
+// Best for: Data with repeated patterns
+// Often combined with BWT`}</pre>
+                    </AccordionContent>
+                  </AccordionItem>
+
+                  <AccordionItem value="bwt">
+                    <AccordionTrigger>Burrows-Wheeler Transform</AccordionTrigger>
+                    <AccordionContent>
+                      <p className="text-sm mb-2">Reorganizes data to group similar characters together, improving compression.</p>
+                      <pre className="bg-muted p-4 rounded text-xs overflow-x-auto">{`// BWT Encode (block-based)
+const data = "1010101010101010";
+const transformed = CompressionFunctions.bwtEncode(data);
+// Groups similar patterns together
+
+// Note: This is a simplified implementation
+// Full BWT requires storing the original index
+
+// Best for: Text and structured data
+// Used in: bzip2 compression`}</pre>
+                    </AccordionContent>
+                  </AccordionItem>
+
+                  <AccordionItem value="lz77">
+                    <AccordionTrigger>LZ77 Compression</AccordionTrigger>
+                    <AccordionContent>
+                      <p className="text-sm mb-2">Dictionary-based compression using back-references to previously seen data.</p>
+                      <pre className="bg-muted p-4 rounded text-xs overflow-x-auto">{`// LZ77 Compress
+const data = "10101010101010101010";
+const { compressed, ratio } = CompressionFunctions.lz77Compress(data);
+// Returns compressed data and compression ratio
+
+// Format:
+// 0 + literal bit (for new data)
+// 1 + 5-bit offset + 4-bit length (for match)
+
+// Best for: Data with repeated patterns
+// Used in: ZIP, gzip, PNG`}</pre>
+                    </AccordionContent>
+                  </AccordionItem>
+
+                  <AccordionItem value="bitplane">
+                    <AccordionTrigger>Bit Plane Separation</AccordionTrigger>
+                    <AccordionContent>
+                      <p className="text-sm mb-2">Separates bytes into 8 bit planes, grouping MSBs together, LSBs together.</p>
+                      <pre className="bg-muted p-4 rounded text-xs overflow-x-auto">{`// Separate into bit planes
+const data = "1010101001010101"; // 2 bytes
+const planes = CompressionFunctions.separateBitPlanes(data);
+// planes[0] = all bit 7s
+// planes[1] = all bit 6s
+// ...
+// planes[7] = all bit 0s
+
+// Combine bit planes
+const combined = CompressionFunctions.combineBitPlanes(planes);
+
+// Best for: Image compression
+// MSB planes often more compressible`}</pre>
+                    </AccordionContent>
+                  </AccordionItem>
+
+                  <AccordionItem value="huffman">
+                    <AccordionTrigger>Huffman Statistics</AccordionTrigger>
+                    <AccordionContent>
+                      <p className="text-sm mb-2">Analyzes byte frequencies and calculates theoretical entropy.</p>
+                      <pre className="bg-muted p-4 rounded text-xs overflow-x-auto">{`// Get Huffman statistics
+const data = "11111111000000001111111100000000";
+const stats = CompressionFunctions.getHuffmanStats(data);
+
+// stats.frequencies: Record of byte → count
+// stats.entropy: Shannon entropy in bits/symbol
+
+// Use for: Estimating compression potential
+// Lower entropy = better compression possible`}</pre>
+                    </AccordionContent>
+                  </AccordionItem>
+                </Accordion>
+
+                <div className="mt-4 p-3 bg-primary/10 rounded border border-primary/30">
+                  <h4 className="font-medium text-sm mb-2 flex items-center gap-2">
+                    <Zap className="w-4 h-4" />
+                    Using in Strategies
+                  </h4>
+                  <pre className="bg-muted p-3 rounded text-xs overflow-x-auto">{`// Import in your algorithm files
+import { EncodingFunctions, CompressionFunctions, AnalysisFunctions } from '@/lib/encodingFunctions';
+
+// In algorithm:
+function optimize(bits) {
+  // Try different encodings
+  const gray = EncodingFunctions.binaryToGray(bits);
+  const grayEntropy = AnalysisFunctions.calculateEntropy(gray);
+  
+  // Try compression
+  const { compressed, ratio } = CompressionFunctions.lz77Compress(bits);
+  
+  // Choose best transformation
+  if (grayEntropy < originalEntropy) {
+    return gray;
+  }
+  return bits;
+}`}</pre>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
 
           {/* Scheduler Guide */}
           <TabsContent value="scheduler" className="mt-4">
@@ -125,55 +441,7 @@ def schedule(bits, context):
                   </AccordionItem>
 
                   <AccordionItem value="ex3">
-                    <AccordionTrigger>Example 3: Iterative Scheduler</AccordionTrigger>
-                    <AccordionContent>
-                      <pre className="bg-muted p-4 rounded text-xs overflow-x-auto">{`# Iterative Scheduler
-# Runs until a condition is met
-
-def schedule(bits, context):
-    algorithms = []
-    max_iterations = 10
-    target_entropy = 0.3
-    
-    for i in range(max_iterations):
-        algorithms.append({
-            "algorithm": "entropy_step",
-            "params": {"step": i, "target": target_entropy},
-            "condition": f"entropy > {target_entropy}"
-        })
-    
-    return algorithms`}</pre>
-                    </AccordionContent>
-                  </AccordionItem>
-
-                  <AccordionItem value="ex4">
-                    <AccordionTrigger>Example 4: Parallel Scheduler</AccordionTrigger>
-                    <AccordionContent>
-                      <pre className="bg-muted p-4 rounded text-xs overflow-x-auto">{`# Parallel Scheduler
-# Runs multiple algorithms on different segments
-
-def schedule(bits, context):
-    segment_size = len(bits) // 4
-    
-    parallel_tasks = []
-    for i in range(4):
-        start = i * segment_size
-        end = start + segment_size
-        parallel_tasks.append({
-            "algorithm": "segment_optimizer",
-            "params": {"start": start, "end": end},
-            "parallel_group": "segments"
-        })
-    
-    return [
-        {"parallel": parallel_tasks},
-        {"algorithm": "merge_segments", "params": {}}
-    ]`}</pre>
-                    </AccordionContent>
-                  </AccordionItem>
-
-                  <AccordionItem value="ex5">
-                    <AccordionTrigger>Example 5: Budget-Aware Scheduler</AccordionTrigger>
+                    <AccordionTrigger>Example 3: Budget-Aware Scheduler</AccordionTrigger>
                     <AccordionContent>
                       <pre className="bg-muted p-4 rounded text-xs overflow-x-auto">{`# Budget-Aware Scheduler
 # Manages algorithm execution within budget constraints
@@ -200,12 +468,6 @@ def schedule(bits, context):
         })
         budget -= 50
     
-    # Use remaining budget for cleanup
-    algorithms.append({
-        "algorithm": "final_cleanup",
-        "params": {"budget": budget}
-    })
-    
     return algorithms`}</pre>
                     </AccordionContent>
                   </AccordionItem>
@@ -225,7 +487,7 @@ def schedule(bits, context):
               </CardHeader>
               <CardContent>
                 <p className="text-sm text-muted-foreground mb-4">
-                  Algorithm files contain the transformation logic that modifies binary data. They use operations from the operations router.
+                  Algorithm files contain the transformation logic that modifies binary data.
                 </p>
                 
                 <Accordion type="multiple" className="space-y-2">
@@ -233,18 +495,7 @@ def schedule(bits, context):
                     <AccordionTrigger>Example 1: Entropy Reducer</AccordionTrigger>
                     <AccordionContent>
                       <pre className="bg-muted p-4 rounded text-xs overflow-x-auto">{`# Entropy Reducer Algorithm
-# Reduces entropy by identifying and compressing patterns
-
 def run(bits, params, context):
-    """
-    Main algorithm entry point
-    Args:
-        bits: Current binary string
-        params: Parameters from scheduler
-        context: Execution context with operation helpers
-    Returns:
-        Modified binary string
-    """
     result = bits
     
     # Find repeating patterns
@@ -264,8 +515,6 @@ def run(bits, params, context):
                     <AccordionTrigger>Example 2: Run Length Optimizer</AccordionTrigger>
                     <AccordionContent>
                       <pre className="bg-muted p-4 rounded text-xs overflow-x-auto">{`# Run Length Optimizer
-# Optimizes sequences of consecutive bits
-
 def run(bits, params, context):
     min_run = params.get("min_run", 8)
     result = bits
@@ -274,108 +523,13 @@ def run(bits, params, context):
     runs = context.find_runs(result, min_length=min_run)
     
     for run in runs:
-        # Apply NOT to alternating sections to break up runs
         if run.length > min_run * 2:
             mid = run.start + run.length // 2
             segment_length = run.length // 4
             result = context.execute_op_range(
-                "NOT",
-                result,
+                "NOT", result,
                 {"start": mid, "end": mid + segment_length}
             )
-    
-    return result`}</pre>
-                    </AccordionContent>
-                  </AccordionItem>
-
-                  <AccordionItem value="ex3">
-                    <AccordionTrigger>Example 3: Balance Normalizer</AccordionTrigger>
-                    <AccordionContent>
-                      <pre className="bg-muted p-4 rounded text-xs overflow-x-auto">{`# Balance Normalizer
-# Balances the ratio of 0s to 1s
-
-def run(bits, params, context):
-    target_ratio = params.get("target", 0.5)
-    tolerance = params.get("tolerance", 0.05)
-    
-    ones = bits.count("1")
-    total = len(bits)
-    current_ratio = ones / total
-    
-    result = bits
-    
-    while abs(current_ratio - target_ratio) > tolerance:
-        if current_ratio > target_ratio:
-            # Too many 1s, flip some to 0s
-            for i in range(len(result)):
-                if result[i] == "1":
-                    result = result[:i] + "0" + result[i+1:]
-                    break
-        else:
-            # Too many 0s, flip some to 1s
-            for i in range(len(result)):
-                if result[i] == "0":
-                    result = result[:i] + "1" + result[i+1:]
-                    break
-        
-        ones = result.count("1")
-        current_ratio = ones / total
-    
-    return result`}</pre>
-                    </AccordionContent>
-                  </AccordionItem>
-
-                  <AccordionItem value="ex4">
-                    <AccordionTrigger>Example 4: Transition Smoother</AccordionTrigger>
-                    <AccordionContent>
-                      <pre className="bg-muted p-4 rounded text-xs overflow-x-auto">{`# Transition Smoother
-# Reduces rapid bit transitions
-
-def run(bits, params, context):
-    window_size = params.get("window", 8)
-    threshold = params.get("threshold", 6)
-    
-    result = list(bits)
-    
-    for i in range(0, len(result) - window_size, window_size):
-        window = result[i:i + window_size]
-        transitions = sum(1 for j in range(len(window)-1) if window[j] != window[j+1])
-        
-        if transitions > threshold:
-            # Too many transitions, smooth by majority voting
-            ones = window.count("1")
-            majority = "1" if ones > window_size // 2 else "0"
-            for j in range(i, i + window_size):
-                result[j] = majority
-    
-    return "".join(result)`}</pre>
-                    </AccordionContent>
-                  </AccordionItem>
-
-                  <AccordionItem value="ex5">
-                    <AccordionTrigger>Example 5: Pattern Replacer</AccordionTrigger>
-                    <AccordionContent>
-                      <pre className="bg-muted p-4 rounded text-xs overflow-x-auto">{`# Pattern Replacer
-# Replaces specific patterns with optimized versions
-
-def run(bits, params, context):
-    replacements = params.get("replacements", {
-        "1111": "1010",
-        "0000": "0101",
-        "11110000": "10101010"
-    })
-    
-    result = bits
-    
-    # Sort by length to replace longer patterns first
-    sorted_patterns = sorted(replacements.keys(), key=len, reverse=True)
-    
-    for pattern in sorted_patterns:
-        replacement = replacements[pattern]
-        result = result.replace(pattern, replacement)
-        
-        # Log the replacement
-        context.log(f"Replaced {pattern} with {replacement}")
     
     return result`}</pre>
                     </AccordionContent>
@@ -396,187 +550,34 @@ def run(bits, params, context):
               </CardHeader>
               <CardContent>
                 <p className="text-sm text-muted-foreground mb-4">
-                  Scoring files define the budget system, operation costs, and success metrics for your strategy.
+                  Scoring files define the budget system and success metrics.
                 </p>
                 
                 <Accordion type="multiple" className="space-y-2">
                   <AccordionItem value="ex1">
-                    <AccordionTrigger>Example 1: Simple Budget System</AccordionTrigger>
+                    <AccordionTrigger>Budget Configuration</AccordionTrigger>
                     <AccordionContent>
-                      <pre className="bg-muted p-4 rounded text-xs overflow-x-auto">{`# Simple Budget System
-# Basic cost tracking with fixed operation costs
+                      <pre className="bg-muted p-4 rounded text-xs overflow-x-auto">{`# Budget is defined in scoring files
+INITIAL_BUDGET = 1000
 
-config = {
-    "initial_budget": 1000,
-    "operation_costs": {
-        "NOT": 1,
-        "AND": 2,
-        "OR": 2,
-        "XOR": 2,
-        "SHL": 1,
-        "SHR": 1
-    },
-    "success_threshold": 100  # Remaining budget for success
+OPERATION_COSTS = {
+    "NOT": 1,
+    "AND": 2,
+    "OR": 2,
+    "XOR": 2,
+    "left_shift": 1,
+    "right_shift": 1
 }
 
 def calculate_score(context):
     budget_used = context.get_total_cost()
-    budget_remaining = config["initial_budget"] - budget_used
+    budget_remaining = INITIAL_BUDGET - budget_used
     entropy_reduction = context.get_entropy_change()
     
     return {
         "score": entropy_reduction * budget_remaining,
         "budget_remaining": budget_remaining,
-        "success": budget_remaining >= config["success_threshold"]
-    }`}</pre>
-                    </AccordionContent>
-                  </AccordionItem>
-
-                  <AccordionItem value="ex2">
-                    <AccordionTrigger>Example 2: Dynamic Cost Scaling</AccordionTrigger>
-                    <AccordionContent>
-                      <pre className="bg-muted p-4 rounded text-xs overflow-x-auto">{`# Dynamic Cost Scaling
-# Costs increase as budget depletes
-
-config = {
-    "initial_budget": 1000,
-    "base_costs": {
-        "NOT": 1,
-        "AND": 2,
-        "XOR": 2,
-    },
-    "cost_multiplier_thresholds": [
-        (0.75, 1.0),   # >75% budget: normal cost
-        (0.50, 1.5),   # 50-75% budget: 1.5x cost
-        (0.25, 2.0),   # 25-50% budget: 2x cost
-        (0.0, 3.0),    # <25% budget: 3x cost
-    ]
-}
-
-def get_cost(operation, context):
-    budget_ratio = context.get_remaining_budget() / config["initial_budget"]
-    
-    multiplier = 1.0
-    for threshold, mult in config["cost_multiplier_thresholds"]:
-        if budget_ratio >= threshold:
-            multiplier = mult
-            break
-    
-    base_cost = config["base_costs"].get(operation, 1)
-    return int(base_cost * multiplier)`}</pre>
-                    </AccordionContent>
-                  </AccordionItem>
-
-                  <AccordionItem value="ex3">
-                    <AccordionTrigger>Example 3: Multi-Objective Scoring</AccordionTrigger>
-                    <AccordionContent>
-                      <pre className="bg-muted p-4 rounded text-xs overflow-x-auto">{`# Multi-Objective Scoring
-# Balances multiple optimization goals
-
-config = {
-    "initial_budget": 1000,
-    "weights": {
-        "entropy_reduction": 0.4,
-        "compression_ratio": 0.3,
-        "budget_efficiency": 0.2,
-        "pattern_regularity": 0.1
-    }
-}
-
-def calculate_score(context):
-    metrics = {
-        "entropy_reduction": max(0, context.initial_entropy - context.final_entropy),
-        "compression_ratio": context.get_compression_ratio(),
-        "budget_efficiency": context.get_remaining_budget() / config["initial_budget"],
-        "pattern_regularity": context.get_pattern_score()
-    }
-    
-    weighted_score = sum(
-        metrics[key] * config["weights"][key] 
-        for key in config["weights"]
-    )
-    
-    return {
-        "score": weighted_score,
-        "metrics": metrics,
-        "success": weighted_score > 0.5
-    }`}</pre>
-                    </AccordionContent>
-                  </AccordionItem>
-
-                  <AccordionItem value="ex4">
-                    <AccordionTrigger>Example 4: Penalty System</AccordionTrigger>
-                    <AccordionContent>
-                      <pre className="bg-muted p-4 rounded text-xs overflow-x-auto">{`# Penalty System
-# Applies penalties for undesirable outcomes
-
-config = {
-    "initial_budget": 1000,
-    "penalties": {
-        "entropy_increase": 50,       # Per 0.1 entropy increase
-        "size_increase": 10,          # Per bit added
-        "failed_operation": 25,       # Per failed operation
-        "timeout": 100                # If execution too slow
-    },
-    "bonuses": {
-        "entropy_decrease": 20,       # Per 0.1 entropy decrease
-        "pattern_found": 10,          # Per new pattern optimized
-        "perfect_balance": 50         # If 50/50 bit ratio
-    }
-}
-
-def calculate_final_score(context):
-    base_score = config["initial_budget"] - context.get_total_cost()
-    
-    # Apply penalties
-    if context.entropy_increased():
-        penalty = int(context.entropy_change * 10) * config["penalties"]["entropy_increase"]
-        base_score -= penalty
-    
-    # Apply bonuses
-    if context.entropy_decreased():
-        bonus = int(abs(context.entropy_change) * 10) * config["bonuses"]["entropy_decrease"]
-        base_score += bonus
-    
-    return max(0, base_score)`}</pre>
-                    </AccordionContent>
-                  </AccordionItem>
-
-                  <AccordionItem value="ex5">
-                    <AccordionTrigger>Example 5: Time-Based Scoring</AccordionTrigger>
-                    <AccordionContent>
-                      <pre className="bg-muted p-4 rounded text-xs overflow-x-auto">{`# Time-Based Scoring
-# Factors in execution time
-
-config = {
-    "initial_budget": 1000,
-    "time_budget_ms": 5000,
-    "time_penalty_per_ms": 0.1
-}
-
-def calculate_score(context):
-    operation_cost = context.get_total_cost()
-    time_ms = context.get_execution_time_ms()
-    
-    # Time penalty if over budget
-    time_penalty = 0
-    if time_ms > config["time_budget_ms"]:
-        overtime = time_ms - config["time_budget_ms"]
-        time_penalty = overtime * config["time_penalty_per_ms"]
-    
-    # Efficiency bonus if under time budget
-    time_bonus = 0
-    if time_ms < config["time_budget_ms"] * 0.5:
-        time_bonus = (config["time_budget_ms"] - time_ms) * 0.05
-    
-    final_score = config["initial_budget"] - operation_cost - time_penalty + time_bonus
-    
-    return {
-        "score": max(0, final_score),
-        "time_used": time_ms,
-        "operation_cost": operation_cost,
-        "time_penalty": time_penalty,
-        "time_bonus": time_bonus
+        "success": budget_remaining >= 100
     }`}</pre>
                     </AccordionContent>
                   </AccordionItem>
@@ -591,165 +592,34 @@ def calculate_score(context):
               <CardHeader>
                 <CardTitle className="text-sm flex items-center gap-2">
                   <AlertTriangle className="w-4 h-4" />
-                  Policies Files Guide
+                  Policy Files Guide
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <p className="text-sm text-muted-foreground mb-4">
-                  Policy files define constraints and rules that must be followed during strategy execution.
+                  Policy files enforce constraints and validate algorithm behavior.
                 </p>
                 
                 <Accordion type="multiple" className="space-y-2">
                   <AccordionItem value="ex1">
-                    <AccordionTrigger>Example 1: Size Constraint Policy</AccordionTrigger>
+                    <AccordionTrigger>Example: Validation Policy</AccordionTrigger>
                     <AccordionContent>
-                      <pre className="bg-muted p-4 rounded text-xs overflow-x-auto">{`# Size Constraint Policy
-# Ensures data size stays within limits
-
-policy = {
-    "max_size_multiplier": 1.5,  # Max 1.5x original size
-    "min_size_ratio": 0.1,       # Min 10% of original size
+                      <pre className="bg-muted p-4 rounded text-xs overflow-x-auto">{`POLICY_CONFIG = {
+    "max_size_multiplier": 2.0,
+    "min_size_multiplier": 0.1,
+    "max_entropy": 0.999,
+    "min_budget_remaining": 0.05,
 }
 
-def validate(bits, original_bits, context):
-    original_size = len(original_bits)
-    current_size = len(bits)
+def validate_all(initial_size, initial_entropy, initial_budget):
+    bits = get_bits()
     
-    max_allowed = int(original_size * policy["max_size_multiplier"])
-    min_allowed = int(original_size * policy["min_size_ratio"])
+    # Size check
+    ratio = len(bits) / initial_size
+    if ratio > POLICY_CONFIG["max_size_multiplier"]:
+        return False, "Size exceeded"
     
-    if current_size > max_allowed:
-        return {"valid": False, "error": f"Size {current_size} exceeds max {max_allowed}"}
-    
-    if current_size < min_allowed:
-        return {"valid": False, "error": f"Size {current_size} below min {min_allowed}"}
-    
-    return {"valid": True}`}</pre>
-                    </AccordionContent>
-                  </AccordionItem>
-
-                  <AccordionItem value="ex2">
-                    <AccordionTrigger>Example 2: Operation Whitelist Policy</AccordionTrigger>
-                    <AccordionContent>
-                      <pre className="bg-muted p-4 rounded text-xs overflow-x-auto">{`# Operation Whitelist Policy
-# Only allows specific operations
-
-policy = {
-    "allowed_operations": ["NOT", "AND", "OR", "XOR", "SHL", "SHR"],
-    "max_operations_per_step": 10,
-    "forbidden_sequences": [
-        ["NOT", "NOT"],  # Redundant
-        ["SHL", "SHR"],  # Potentially lossy
-    ]
-}
-
-def validate_operation(operation, context):
-    if operation not in policy["allowed_operations"]:
-        return {"valid": False, "error": f"Operation {operation} not allowed"}
-    
-    recent_ops = context.get_recent_operations(2)
-    for seq in policy["forbidden_sequences"]:
-        if recent_ops == seq:
-            return {"valid": False, "error": f"Forbidden sequence: {seq}"}
-    
-    return {"valid": True}`}</pre>
-                    </AccordionContent>
-                  </AccordionItem>
-
-                  <AccordionItem value="ex3">
-                    <AccordionTrigger>Example 3: Quality Threshold Policy</AccordionTrigger>
-                    <AccordionContent>
-                      <pre className="bg-muted p-4 rounded text-xs overflow-x-auto">{`# Quality Threshold Policy
-# Maintains minimum quality standards
-
-policy = {
-    "min_entropy": 0.1,
-    "max_entropy": 0.95,
-    "min_balance": 0.3,  # Min 30% of either bit
-    "max_run_length": 64
-}
-
-def validate(bits, context):
-    entropy = context.calculate_entropy(bits)
-    if entropy < policy["min_entropy"]:
-        return {"valid": False, "error": "Entropy too low - data may be degenerate"}
-    if entropy > policy["max_entropy"]:
-        return {"valid": False, "error": "Entropy too high - no compression achieved"}
-    
-    ones_ratio = bits.count("1") / len(bits)
-    if ones_ratio < policy["min_balance"] or ones_ratio > (1 - policy["min_balance"]):
-        return {"valid": False, "error": "Bit balance outside acceptable range"}
-    
-    max_run = context.find_longest_run(bits)
-    if max_run > policy["max_run_length"]:
-        return {"valid": False, "error": f"Run length {max_run} exceeds max {policy['max_run_length']}"}
-    
-    return {"valid": True}`}</pre>
-                    </AccordionContent>
-                  </AccordionItem>
-
-                  <AccordionItem value="ex4">
-                    <AccordionTrigger>Example 4: Reversibility Policy</AccordionTrigger>
-                    <AccordionContent>
-                      <pre className="bg-muted p-4 rounded text-xs overflow-x-auto">{`# Reversibility Policy
-# Ensures all transformations can be reversed
-
-policy = {
-    "reversible_operations": ["NOT", "XOR", "ROL", "ROR", "REVERSE", "SWAP"],
-    "track_history": True
-}
-
-def validate_operation(operation, params, context):
-    if operation not in policy["reversible_operations"]:
-        # Check if inverse operation is also recorded
-        if not context.has_inverse_recorded():
-            return {
-                "valid": False,
-                "error": f"Non-reversible operation {operation} without inverse"
-            }
-    
-    return {"valid": True}
-
-def get_inverse(operation, params):
-    inverses = {
-        "NOT": ("NOT", {}),
-        "XOR": ("XOR", params),  # XOR is self-inverse
-        "ROL": ("ROR", params),
-        "ROR": ("ROL", params),
-        "REVERSE": ("REVERSE", {}),
-    }
-    return inverses.get(operation)`}</pre>
-                    </AccordionContent>
-                  </AccordionItem>
-
-                  <AccordionItem value="ex5">
-                    <AccordionTrigger>Example 5: Resource Limit Policy</AccordionTrigger>
-                    <AccordionContent>
-                      <pre className="bg-muted p-4 rounded text-xs overflow-x-auto">{`# Resource Limit Policy
-# Enforces computational resource limits
-
-policy = {
-    "max_execution_time_ms": 10000,
-    "max_memory_bytes": 100 * 1024 * 1024,  # 100MB
-    "max_iterations": 1000,
-    "checkpoint_interval": 100
-}
-
-def check_resources(context):
-    if context.get_execution_time() > policy["max_execution_time_ms"]:
-        return {"valid": False, "error": "Execution time limit exceeded"}
-    
-    if context.get_memory_usage() > policy["max_memory_bytes"]:
-        return {"valid": False, "error": "Memory limit exceeded"}
-    
-    if context.get_iteration_count() > policy["max_iterations"]:
-        return {"valid": False, "error": "Iteration limit exceeded"}
-    
-    # Create checkpoint if needed
-    if context.get_iteration_count() % policy["checkpoint_interval"] == 0:
-        context.create_checkpoint()
-    
-    return {"valid": True}`}</pre>
+    return True, "All checks passed"`}</pre>
                     </AccordionContent>
                   </AccordionItem>
                 </Accordion>
@@ -762,126 +632,37 @@ def check_resources(context):
             <Card>
               <CardHeader>
                 <CardTitle className="text-sm flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4" />
-                  Anomalies Detection Guide
+                  <Activity className="w-4 h-4" />
+                  Custom Anomaly Detection
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <p className="text-sm text-muted-foreground mb-4">
-                  Anomaly detectors identify unusual patterns or structures in binary data. You can create custom detectors in the Anomalies tab.
+                  Define custom anomaly detection functions in Backend → Anomalies tab.
                 </p>
                 
                 <Accordion type="multiple" className="space-y-2">
-                  <AccordionItem value="structure">
-                    <AccordionTrigger>Anomaly Definition Structure</AccordionTrigger>
-                    <AccordionContent>
-                      <pre className="bg-muted p-4 rounded text-xs overflow-x-auto">{`// Anomaly Definition Structure
-{
-  "id": "unique_identifier",
-  "name": "Human Readable Name",
-  "description": "What this anomaly detects",
-  "category": "Pattern|Run|Density|Structure",
-  "severity": "low|medium|high",
-  "minLength": 5,  // Minimum length to consider
-  "enabled": true,
-  "detectFn": "function detect(bits, minLength) { ... }"
-}`}</pre>
-                    </AccordionContent>
-                  </AccordionItem>
-
                   <AccordionItem value="ex1">
-                    <AccordionTrigger>Example 1: Custom Palindrome Detector</AccordionTrigger>
+                    <AccordionTrigger>Detection Function Structure</AccordionTrigger>
                     <AccordionContent>
                       <pre className="bg-muted p-4 rounded text-xs overflow-x-auto">{`function detect(bits, minLength) {
+  // bits: string of 0s and 1s
+  // minLength: minimum length to detect
+  
   const results = [];
   
-  for (let i = 0; i < bits.length; i++) {
-    // Check for palindromes centered at position i
-    let len = 1;
-    while (i - len >= 0 && i + len < bits.length) {
-      if (bits[i - len] !== bits[i + len]) break;
+  // Your detection logic here
+  // Example: find long runs
+  let start = 0, len = 1;
+  for (let i = 1; i < bits.length; i++) {
+    if (bits[i] === bits[i-1]) {
       len++;
-    }
-    
-    if (len * 2 - 1 >= minLength) {
-      results.push({
-        position: i - len + 1,
-        length: len * 2 - 1,
-        type: "odd-palindrome"
-      });
-    }
-  }
-  
-  return results;
-}`}</pre>
-                    </AccordionContent>
-                  </AccordionItem>
-
-                  <AccordionItem value="ex2">
-                    <AccordionTrigger>Example 2: Entropy Spike Detector</AccordionTrigger>
-                    <AccordionContent>
-                      <pre className="bg-muted p-4 rounded text-xs overflow-x-auto">{`function detect(bits, windowSize) {
-  const results = [];
-  const threshold = 0.3; // Entropy change threshold
-  
-  for (let i = windowSize; i < bits.length - windowSize; i++) {
-    const before = bits.substring(i - windowSize, i);
-    const after = bits.substring(i, i + windowSize);
-    
-    const entropyBefore = calcEntropy(before);
-    const entropyAfter = calcEntropy(after);
-    
-    if (Math.abs(entropyAfter - entropyBefore) > threshold) {
-      results.push({
-        position: i,
-        length: windowSize,
-        entropyChange: entropyAfter - entropyBefore
-      });
-    }
-  }
-  
-  return results;
-}
-
-function calcEntropy(bits) {
-  const ones = (bits.match(/1/g) || []).length;
-  const p1 = ones / bits.length;
-  const p0 = 1 - p1;
-  if (p0 === 0 || p1 === 0) return 0;
-  return -(p0 * Math.log2(p0) + p1 * Math.log2(p1));
-}`}</pre>
-                    </AccordionContent>
-                  </AccordionItem>
-
-                  <AccordionItem value="ex3">
-                    <AccordionTrigger>Example 3: Periodic Pattern Detector</AccordionTrigger>
-                    <AccordionContent>
-                      <pre className="bg-muted p-4 rounded text-xs overflow-x-auto">{`function detect(bits, minPeriod) {
-  const results = [];
-  
-  for (let period = minPeriod; period <= 32; period++) {
-    for (let start = 0; start < bits.length - period * 3; start++) {
-      const pattern = bits.substring(start, start + period);
-      let matches = 0;
-      
-      for (let j = start; j < bits.length - period; j += period) {
-        if (bits.substring(j, j + period) === pattern) {
-          matches++;
-        } else {
-          break;
-        }
+    } else {
+      if (len >= minLength) {
+        results.push({ position: start, length: len });
       }
-      
-      if (matches >= 3) {
-        results.push({
-          position: start,
-          length: period * matches,
-          period: period,
-          repetitions: matches,
-          pattern: pattern
-        });
-        start += period * matches - 1; // Skip found region
-      }
+      start = i;
+      len = 1;
     }
   }
   
@@ -900,57 +681,46 @@ function calcEntropy(bits) {
               <CardHeader>
                 <CardTitle className="text-sm flex items-center gap-2">
                   <Cog className="w-4 h-4" />
-                  Operations Guide
+                  Operations Reference
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <p className="text-sm text-muted-foreground mb-4">
-                  Operations are the building blocks that strategies use to transform binary data.
+                  Available operations for use in algorithms.
                 </p>
                 
-                <div className="space-y-4">
-                  <div>
-                    <h4 className="font-medium mb-2">Available Operations</h4>
-                    <div className="grid grid-cols-2 gap-2 text-sm">
-                      <div className="p-2 bg-muted rounded">
-                        <Badge>NOT</Badge> - Inverts all bits
-                      </div>
-                      <div className="p-2 bg-muted rounded">
-                        <Badge>AND</Badge> - Bitwise AND with mask
-                      </div>
-                      <div className="p-2 bg-muted rounded">
-                        <Badge>OR</Badge> - Bitwise OR with mask
-                      </div>
-                      <div className="p-2 bg-muted rounded">
-                        <Badge>XOR</Badge> - Bitwise XOR with mask
-                      </div>
-                      <div className="p-2 bg-muted rounded">
-                        <Badge>SHL</Badge> - Shift left by count
-                      </div>
-                      <div className="p-2 bg-muted rounded">
-                        <Badge>SHR</Badge> - Shift right by count
-                      </div>
-                      <div className="p-2 bg-muted rounded">
-                        <Badge>ROL</Badge> - Rotate left by count
-                      </div>
-                      <div className="p-2 bg-muted rounded">
-                        <Badge>ROR</Badge> - Rotate right by count
-                      </div>
-                    </div>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="p-2 bg-muted rounded">
+                    <Badge variant="outline" className="mb-1">NOT</Badge>
+                    <p className="text-muted-foreground">Invert all bits</p>
                   </div>
-                  
-                  <div>
-                    <h4 className="font-medium mb-2">Adding Custom Operations</h4>
-                    <p className="text-sm text-muted-foreground mb-2">
-                      Use the Operations tab to add custom operations. Each operation needs:
-                    </p>
-                    <ul className="list-disc list-inside text-sm text-muted-foreground space-y-1">
-                      <li>Unique ID (e.g., "CUSTOM_OP")</li>
-                      <li>Display name</li>
-                      <li>Description of what it does</li>
-                      <li>Parameters it accepts</li>
-                      <li>Category for organization</li>
-                    </ul>
+                  <div className="p-2 bg-muted rounded">
+                    <Badge variant="outline" className="mb-1">XOR</Badge>
+                    <p className="text-muted-foreground">XOR with mask</p>
+                  </div>
+                  <div className="p-2 bg-muted rounded">
+                    <Badge variant="outline" className="mb-1">AND</Badge>
+                    <p className="text-muted-foreground">AND with mask</p>
+                  </div>
+                  <div className="p-2 bg-muted rounded">
+                    <Badge variant="outline" className="mb-1">OR</Badge>
+                    <p className="text-muted-foreground">OR with mask</p>
+                  </div>
+                  <div className="p-2 bg-muted rounded">
+                    <Badge variant="outline" className="mb-1">left_shift</Badge>
+                    <p className="text-muted-foreground">Shift bits left</p>
+                  </div>
+                  <div className="p-2 bg-muted rounded">
+                    <Badge variant="outline" className="mb-1">right_shift</Badge>
+                    <p className="text-muted-foreground">Shift bits right</p>
+                  </div>
+                  <div className="p-2 bg-muted rounded">
+                    <Badge variant="outline" className="mb-1">reverse</Badge>
+                    <p className="text-muted-foreground">Reverse bit order</p>
+                  </div>
+                  <div className="p-2 bg-muted rounded">
+                    <Badge variant="outline" className="mb-1">rotate_left</Badge>
+                    <p className="text-muted-foreground">Circular shift left</p>
                   </div>
                 </div>
               </CardContent>
@@ -963,123 +733,36 @@ function calcEntropy(bits) {
               <CardHeader>
                 <CardTitle className="text-sm flex items-center gap-2">
                   <Calculator className="w-4 h-4" />
-                  Metrics Guide
+                  Metrics Reference
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <p className="text-sm text-muted-foreground mb-4">
-                  Metrics measure properties of binary data and are used to evaluate strategy performance.
+                  Available metrics for analysis and scoring.
                 </p>
                 
-                <div className="space-y-4">
-                  <div>
-                    <h4 className="font-medium mb-2">Core Metrics</h4>
-                    <div className="space-y-2 text-sm">
-                      <div className="p-2 bg-muted rounded">
-                        <strong>Entropy</strong>: Measures randomness (0 = completely predictable, 1 = maximum randomness)
-                      </div>
-                      <div className="p-2 bg-muted rounded">
-                        <strong>Hamming Weight</strong>: Count of 1 bits in the data
-                      </div>
-                      <div className="p-2 bg-muted rounded">
-                        <strong>Balance</strong>: Ratio of 1s to 0s (0.5 = perfectly balanced)
-                      </div>
-                      <div className="p-2 bg-muted rounded">
-                        <strong>Transition Count</strong>: Number of bit changes (0→1 or 1→0)
-                      </div>
-                      <div className="p-2 bg-muted rounded">
-                        <strong>Compression Ratio</strong>: How well the data compresses
-                      </div>
-                      <div className="p-2 bg-muted rounded">
-                        <strong>Autocorrelation</strong>: Self-similarity at different offsets
-                      </div>
-                    </div>
+                <div className="space-y-2 text-xs">
+                  <div className="p-2 bg-muted rounded flex justify-between">
+                    <span className="font-medium">entropy</span>
+                    <span className="text-muted-foreground">Shannon entropy (0-1)</span>
                   </div>
-                  
-                  <div>
-                    <h4 className="font-medium mb-2">Adding Custom Metrics</h4>
-                    <p className="text-sm text-muted-foreground">
-                      Use the Metrics tab to add custom metrics with formulas and descriptions.
-                    </p>
+                  <div className="p-2 bg-muted rounded flex justify-between">
+                    <span className="font-medium">balance</span>
+                    <span className="text-muted-foreground">Ratio of 1s to total</span>
+                  </div>
+                  <div className="p-2 bg-muted rounded flex justify-between">
+                    <span className="font-medium">run_count</span>
+                    <span className="text-muted-foreground">Number of consecutive runs</span>
+                  </div>
+                  <div className="p-2 bg-muted rounded flex justify-between">
+                    <span className="font-medium">longest_run</span>
+                    <span className="text-muted-foreground">Longest same-bit sequence</span>
+                  </div>
+                  <div className="p-2 bg-muted rounded flex justify-between">
+                    <span className="font-medium">transitions</span>
+                    <span className="text-muted-foreground">Count of 0↔1 changes</span>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* ML Training Guide */}
-          <TabsContent value="training" className="mt-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm flex items-center gap-2">
-                  <Brain className="w-4 h-4" />
-                  ML Training Guide
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground mb-4">
-                  BSEE supports training neural networks on binary data using TensorFlow.js.
-                </p>
-                
-                <Accordion type="multiple" className="space-y-2">
-                  <AccordionItem value="basics">
-                    <AccordionTrigger>Training Basics</AccordionTrigger>
-                    <AccordionContent>
-                      <div className="space-y-2 text-sm">
-                        <p>1. Navigate to ML Mode from the toolbar</p>
-                        <p>2. Configure training parameters (learning rate, epochs, batch size)</p>
-                        <p>3. Select input features and target metric</p>
-                        <p>4. Start training and monitor progress</p>
-                        <p>5. Export trained model for later use</p>
-                      </div>
-                    </AccordionContent>
-                  </AccordionItem>
-
-                  <AccordionItem value="console">
-                    <AccordionTrigger>TensorFlow.js Console</AccordionTrigger>
-                    <AccordionContent>
-                      <pre className="bg-muted p-4 rounded text-xs overflow-x-auto">{`// Example: Create a simple model
-const model = tf.sequential();
-model.add(tf.layers.dense({units: 32, activation: 'relu', inputShape: [8]}));
-model.add(tf.layers.dense({units: 16, activation: 'relu'}));
-model.add(tf.layers.dense({units: 1, activation: 'sigmoid'}));
-
-model.compile({
-  optimizer: 'adam',
-  loss: 'binaryCrossentropy',
-  metrics: ['accuracy']
-});
-
-// Train on binary data
-const xs = tf.tensor2d(binaryToFeatures(bits));
-const ys = tf.tensor2d(targetValues);
-
-await model.fit(xs, ys, {
-  epochs: 100,
-  callbacks: {
-    onEpochEnd: (epoch, logs) => {
-      log(\`Epoch \${epoch}: loss = \${logs.loss}\`);
-    }
-  }
-});`}</pre>
-                    </AccordionContent>
-                  </AccordionItem>
-
-                  <AccordionItem value="export">
-                    <AccordionTrigger>Model Export/Import</AccordionTrigger>
-                    <AccordionContent>
-                      <pre className="bg-muted p-4 rounded text-xs overflow-x-auto">{`// Export model
-await model.save('downloads://my-model');
-
-// Import model
-const loadedModel = await tf.loadLayersModel('path/to/model.json');
-
-// Use for inference
-const prediction = loadedModel.predict(tf.tensor2d([inputFeatures]));
-console.log(prediction.dataSync());`}</pre>
-                    </AccordionContent>
-                  </AccordionItem>
-                </Accordion>
               </CardContent>
             </Card>
           </TabsContent>
