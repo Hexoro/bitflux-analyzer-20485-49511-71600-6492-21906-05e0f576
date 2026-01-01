@@ -496,7 +496,55 @@ class ResultsManager {
       steps: stepsWithMemoryWindows,
     }, null, 2));
 
+    // Add steps_playback.csv for easy Player verification
+    const playbackLines: string[] = [];
+    playbackLines.push('Step,Operation,Before Length,After Length,Bits Changed,Cost,Duration (ms),Cumulative Hash');
+    
+    result.steps.forEach((step, idx) => {
+      const before = step.fullBeforeBits || step.beforeBits || '';
+      const after = step.fullAfterBits || step.afterBits || '';
+      let bitsChanged = 0;
+      const len = Math.min(before.length, after.length);
+      for (let i = 0; i < len; i++) {
+        if (before[i] !== after[i]) bitsChanged++;
+      }
+      bitsChanged += Math.abs(before.length - after.length);
+      
+      // Simple hash for verification
+      const cumulative = step.cumulativeBits || after;
+      const hash = this.simpleHash(cumulative);
+      
+      playbackLines.push([
+        idx + 1,
+        step.operation,
+        before.length,
+        after.length,
+        bitsChanged,
+        step.cost || 0,
+        step.duration.toFixed(2),
+        hash,
+      ].join(','));
+    });
+    
+    // Add final verification line
+    playbackLines.push('');
+    playbackLines.push(`# Final Bits Hash: ${this.simpleHash(result.finalBits)}`);
+    playbackLines.push(`# Total Steps: ${result.steps.length}`);
+    playbackLines.push(`# Total Cost: ${result.benchmarks.totalCost}`);
+    
+    zip.file('steps_playback.csv', playbackLines.join('\n'));
+
     return await zip.generateAsync({ type: 'blob' });
+  }
+
+  private simpleHash(bits: string): string {
+    let hash = 0;
+    for (let i = 0; i < bits.length; i++) {
+      const char = bits.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32bit integer
+    }
+    return Math.abs(hash).toString(16).padStart(8, '0');
   }
 
   private bitsToHex(bits: string): string {
