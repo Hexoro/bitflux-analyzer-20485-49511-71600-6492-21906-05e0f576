@@ -177,17 +177,21 @@ return generate(length, seed, probability);`);
     if (customPreset) {
       const cfg = customPreset.config;
       setLength(cfg.length);
-      setMode(cfg.mode as any);
+      
+      // Check if it's code-based first
+      if (customPreset.isCodeBased && customPreset.code) {
+        setCustomCode(customPreset.code);
+        setMode('code');
+      } else {
+        setMode(cfg.mode as any);
+      }
+      
       if (cfg.probability !== undefined) setProbability(cfg.probability);
       if (cfg.pattern) setPattern(cfg.pattern);
       if (cfg.noise !== undefined) setNoise(cfg.noise);
       if (cfg.template) setTemplate(cfg.template);
       if (cfg.blockSize) setBlockSize(cfg.blockSize);
       if (cfg.headerPattern) setHeaderPattern(cfg.headerPattern);
-      if ((cfg as any).code) {
-        setCustomCode((cfg as any).code);
-        setMode('code');
-      }
       toast.success(`Applied custom preset: ${customPreset.name}`);
     }
   };
@@ -437,23 +441,99 @@ return generate(length, seed, probability);`);
             </Button>
           </CollapsibleTrigger>
           <CollapsibleContent className="space-y-4 mt-4">
+            {/* Random mode advanced options */}
             {mode === 'random' && (
-              <div className="space-y-2">
-                <Label htmlFor="targetEntropy">Target Entropy (optional)</Label>
-                <Input
-                  id="targetEntropy"
-                  type="number"
-                  min={0}
-                  max={1}
-                  step={0.01}
-                  value={targetEntropy ?? ''}
-                  onChange={(e) => setTargetEntropy(e.target.value ? parseFloat(e.target.value) : null)}
-                  placeholder="0.0 to 1.0"
-                  className="font-mono bg-input border-border"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Override probability to match target entropy
-                </p>
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="targetEntropy">Target Entropy (optional)</Label>
+                  <Input
+                    id="targetEntropy"
+                    type="number"
+                    min={0}
+                    max={1}
+                    step={0.01}
+                    value={targetEntropy ?? ''}
+                    onChange={(e) => setTargetEntropy(e.target.value ? parseFloat(e.target.value) : null)}
+                    placeholder="0.0 to 1.0"
+                    className="font-mono bg-input border-border"
+                  />
+                  <p className="text-xs text-muted-foreground">Generate data with a specific entropy level</p>
+                </div>
+              </>
+            )}
+            
+            {/* Pattern mode advanced options */}
+            {mode === 'pattern' && (
+              <>
+                <div className="space-y-2">
+                  <Label>Pattern Variations</Label>
+                  <div className="grid grid-cols-4 gap-2">
+                    {['1010', '1100', '11110000', '10101010'].map(p => (
+                      <Button
+                        key={p}
+                        variant="outline"
+                        size="sm"
+                        className="font-mono text-xs"
+                        onClick={() => setPattern(p)}
+                      >
+                        {p}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+            
+            {/* Structured mode advanced options */}
+            {mode === 'structured' && (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="blockSize">Block Size</Label>
+                  <Input
+                    id="blockSize"
+                    type="number"
+                    min={1}
+                    max={256}
+                    value={blockSize}
+                    onChange={(e) => setBlockSize(parseInt(e.target.value) || 8)}
+                    className="font-mono bg-input border-border"
+                  />
+                  <p className="text-xs text-muted-foreground">Size of each block in structured templates</p>
+                </div>
+              </>
+            )}
+            
+            {/* File format advanced options */}
+            {mode === 'file-format' && (
+              <>
+                <div className="space-y-2">
+                  <Label>Common Headers</Label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { name: 'All 1s', pattern: '11111111' },
+                      { name: 'All 0s', pattern: '00000000' },
+                      { name: 'Alt', pattern: '10101010' },
+                    ].map(h => (
+                      <Button
+                        key={h.name}
+                        variant="outline"
+                        size="sm"
+                        className="text-xs"
+                        onClick={() => setHeaderPattern(h.pattern)}
+                      >
+                        {h.name}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+            
+            {/* Code mode - no additional options needed */}
+            {mode === 'code' && (
+              <div className="text-xs text-muted-foreground p-3 bg-muted/30 rounded">
+                <p><strong>Tip:</strong> Use the code editor above to write custom generation logic.</p>
+                <p className="mt-1">Variables available: <code>length</code>, <code>seed</code>, <code>probability</code></p>
               </div>
             )}
           </CollapsibleContent>
