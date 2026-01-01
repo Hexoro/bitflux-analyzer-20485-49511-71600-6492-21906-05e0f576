@@ -3,7 +3,7 @@ import { Card } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { ScrollArea } from './ui/scroll-area';
-import { AlertCircle, Filter, Grid, List, RefreshCw } from 'lucide-react';
+import { AlertCircle, Filter, Grid, List } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { anomaliesManager, AnomalyDefinition } from '@/lib/anomaliesManager';
@@ -23,232 +23,6 @@ interface AnomaliesPanelProps {
   onJumpTo: (index: number) => void;
 }
 
-// Helper function to find palindromes
-const findPalindromes = (bits: string, minLength: number = 5): Anomaly[] => {
-  const palindromes: Anomaly[] = [];
-  const seen = new Set<string>();
-  
-  for (let i = 0; i < bits.length; i++) {
-    // Check for odd-length palindromes
-    let len = 1;
-    while (i - len >= 0 && i + len < bits.length && bits[i - len] === bits[i + len]) {
-      len++;
-    }
-    if (len * 2 - 1 >= minLength) {
-      const start = i - len + 1;
-      const palindrome = bits.substring(start, i + len);
-      const key = `${start}-${palindrome.length}`;
-      if (!seen.has(key)) {
-        seen.add(key);
-        palindromes.push({
-          id: `palindrome-${start}`,
-          type: 'Palindrome',
-          position: start,
-          length: palindrome.length,
-          sequence: palindrome,
-          description: `Odd-length palindrome of ${palindrome.length} bits`,
-          severity: palindrome.length > 20 ? 'high' : palindrome.length > 10 ? 'medium' : 'low',
-        });
-      }
-    }
-    
-    // Check for even-length palindromes
-    len = 0;
-    while (i - len >= 0 && i + 1 + len < bits.length && bits[i - len] === bits[i + 1 + len]) {
-      len++;
-    }
-    if (len * 2 >= minLength) {
-      const start = i - len + 1;
-      const palindrome = bits.substring(start, i + len + 1);
-      const key = `${start}-${palindrome.length}`;
-      if (!seen.has(key)) {
-        seen.add(key);
-        palindromes.push({
-          id: `palindrome-${start}-even`,
-          type: 'Palindrome',
-          position: start,
-          length: palindrome.length,
-          sequence: palindrome,
-          description: `Even-length palindrome of ${palindrome.length} bits`,
-          severity: palindrome.length > 20 ? 'high' : palindrome.length > 10 ? 'medium' : 'low',
-        });
-      }
-    }
-  }
-  
-  return palindromes;
-};
-
-// Helper function to find repeating patterns
-const findRepeatingPatterns = (bits: string, minLength: number = 4, minRepeats: number = 3): Anomaly[] => {
-  const patterns: Anomaly[] = [];
-  const seen = new Set<string>();
-  
-  for (let patternLen = minLength; patternLen <= 20; patternLen++) {
-    for (let i = 0; i <= bits.length - patternLen * minRepeats; i++) {
-      const pattern = bits.substring(i, i + patternLen);
-      
-      let repeats = 1;
-      let pos = i + patternLen;
-      while (pos + patternLen <= bits.length && bits.substring(pos, pos + patternLen) === pattern) {
-        repeats++;
-        pos += patternLen;
-      }
-      
-      if (repeats >= minRepeats) {
-        const key = `${i}-${pattern}`;
-        if (!seen.has(key)) {
-          seen.add(key);
-          patterns.push({
-            id: `pattern-${i}`,
-            type: 'Repeating Pattern',
-            position: i,
-            length: patternLen * repeats,
-            sequence: pattern.substring(0, Math.min(20, pattern.length)) + (pattern.length > 20 ? '...' : ''),
-            description: `Pattern "${pattern}" repeated ${repeats} times`,
-            severity: repeats > 5 ? 'high' : repeats > 3 ? 'medium' : 'low',
-          });
-        }
-      }
-    }
-  }
-  
-  return patterns;
-};
-
-// Helper function to find alternating sequences
-const findAlternatingSequences = (bits: string, minLength: number = 8): Anomaly[] => {
-  const alternating: Anomaly[] = [];
-  
-  let start = 0;
-  let length = 1;
-  
-  for (let i = 1; i < bits.length; i++) {
-    if (bits[i] !== bits[i - 1]) {
-      length++;
-    } else {
-      if (length >= minLength) {
-        alternating.push({
-          id: `alternating-${start}`,
-          type: 'Alternating Sequence',
-          position: start,
-          length: length,
-          sequence: bits.substring(start, start + Math.min(20, length)) + (length > 20 ? '...' : ''),
-          description: `Alternating pattern of ${length} bits`,
-          severity: length > 30 ? 'high' : length > 15 ? 'medium' : 'low',
-        });
-      }
-      start = i;
-      length = 1;
-    }
-  }
-  
-  if (length >= minLength) {
-    alternating.push({
-      id: `alternating-${start}`,
-      type: 'Alternating Sequence',
-      position: start,
-      length: length,
-      sequence: bits.substring(start, start + Math.min(20, length)) + (length > 20 ? '...' : ''),
-      description: `Alternating pattern of ${length} bits`,
-      severity: length > 30 ? 'high' : length > 15 ? 'medium' : 'low',
-    });
-  }
-  
-  return alternating;
-};
-
-// Helper function to find long runs
-const findLongRuns = (bits: string, minLength: number = 10): Anomaly[] => {
-  const runs: Anomaly[] = [];
-  
-  let currentChar = bits[0];
-  let start = 0;
-  let length = 1;
-  
-  for (let i = 1; i < bits.length; i++) {
-    if (bits[i] === currentChar) {
-      length++;
-    } else {
-      if (length >= minLength) {
-        runs.push({
-          id: `run-${start}`,
-          type: 'Long Run',
-          position: start,
-          length: length,
-          sequence: currentChar.repeat(Math.min(20, length)) + (length > 20 ? '...' : ''),
-          description: `Run of ${length} consecutive ${currentChar}s`,
-          severity: length > 50 ? 'high' : length > 25 ? 'medium' : 'low',
-        });
-      }
-      currentChar = bits[i];
-      start = i;
-      length = 1;
-    }
-  }
-  
-  if (length >= minLength) {
-    runs.push({
-      id: `run-${start}`,
-      type: 'Long Run',
-      position: start,
-      length: length,
-      sequence: currentChar.repeat(Math.min(20, length)) + (length > 20 ? '...' : ''),
-      description: `Run of ${length} consecutive ${currentChar}s`,
-      severity: length > 50 ? 'high' : length > 25 ? 'medium' : 'low',
-    });
-  }
-  
-  return runs;
-};
-
-// Helper function to find sparse regions (low entropy)
-const findSparseRegions = (bits: string, windowSize: number = 64): Anomaly[] => {
-  const regions: Anomaly[] = [];
-  
-  for (let i = 0; i <= bits.length - windowSize; i += windowSize / 2) {
-    const window = bits.substring(i, i + windowSize);
-    const ones = window.split('1').length - 1;
-    const onesPercent = (ones / windowSize) * 100;
-    
-    // Check for very sparse (< 15% ones) or very dense (> 85% ones)
-    if (onesPercent < 15 || onesPercent > 85) {
-      regions.push({
-        id: `sparse-${i}`,
-        type: 'Sparse Region',
-        position: i,
-        length: windowSize,
-        sequence: window.substring(0, 20) + '...',
-        description: `Region with ${onesPercent.toFixed(1)}% ones (${ones}/${windowSize})`,
-        severity: onesPercent < 5 || onesPercent > 95 ? 'high' : 'medium',
-      });
-      i += windowSize / 2; // Skip ahead to avoid overlaps
-    }
-  }
-  
-  return regions;
-};
-
-// Helper function to find byte boundaries
-const findByteBoundaries = (bits: string): Anomaly[] => {
-  const boundaries: Anomaly[] = [];
-  
-  // Check for misalignment
-  if (bits.length % 8 !== 0) {
-    boundaries.push({
-      id: 'byte-misalignment',
-      type: 'Byte Alignment',
-      position: bits.length - (bits.length % 8),
-      length: bits.length % 8,
-      sequence: bits.substring(bits.length - (bits.length % 8)),
-      description: `Data not byte-aligned (${bits.length % 8} extra bits)`,
-      severity: 'medium',
-    });
-  }
-  
-  return boundaries;
-};
-
 export const AnomaliesPanel = ({ bits, onJumpTo }: AnomaliesPanelProps) => {
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [severityFilter, setSeverityFilter] = useState<string>('all');
@@ -257,57 +31,45 @@ export const AnomaliesPanel = ({ bits, onJumpTo }: AnomaliesPanelProps) => {
   const [maxLength, setMaxLength] = useState<string>('');
   const [minPosition, setMinPosition] = useState<string>('');
   const [maxPosition, setMaxPosition] = useState<string>('');
-  const [useBackendDefinitions, setUseBackendDefinitions] = useState(true);
-  const [, forceUpdate] = useState({});
+  const [definitions, setDefinitions] = useState<AnomalyDefinition[]>([]);
 
   // Subscribe to anomaliesManager changes
   useEffect(() => {
-    const unsubscribe = anomaliesManager.subscribe(() => forceUpdate({}));
+    setDefinitions(anomaliesManager.getEnabledDefinitions());
+    const unsubscribe = anomaliesManager.subscribe(() => {
+      setDefinitions(anomaliesManager.getEnabledDefinitions());
+    });
     return unsubscribe;
   }, []);
 
-  // Use backend definitions when enabled
+  // Use backend definitions only - no built-in fallback
   const anomalies = useMemo(() => {
     if (bits.length === 0) return [];
     
-    if (useBackendDefinitions) {
-      // Use anomaliesManager definitions
-      const enabledDefs = anomaliesManager.getEnabledDefinitions();
-      const results: Anomaly[] = [];
-      
-      for (const def of enabledDefs) {
-        try {
-          const detections = anomaliesManager.executeDetection(def.id, bits);
-          for (const detection of detections) {
-            results.push({
-              id: `${def.id}-${detection.position}`,
-              type: def.name,
-              position: detection.position,
-              length: detection.length,
-              sequence: bits.substring(detection.position, Math.min(detection.position + 20, detection.position + detection.length)) + (detection.length > 20 ? '...' : ''),
-              description: def.description,
-              severity: def.severity,
-            });
-          }
-        } catch (e) {
-          console.error(`Failed to execute anomaly detection ${def.name}:`, e);
+    const results: Anomaly[] = [];
+    
+    for (const def of definitions) {
+      try {
+        const detections = anomaliesManager.executeDetection(def.id, bits);
+        for (let i = 0; i < detections.length; i++) {
+          const detection = detections[i];
+          results.push({
+            id: `${def.id}-${detection.position}-${i}`,
+            type: def.name,
+            position: detection.position,
+            length: detection.length,
+            sequence: bits.substring(detection.position, Math.min(detection.position + 20, detection.position + detection.length)) + (detection.length > 20 ? '...' : ''),
+            description: def.description,
+            severity: def.severity,
+          });
         }
+      } catch (e) {
+        console.error(`Failed to execute anomaly detection ${def.name}:`, e);
       }
-      
-      return results.sort((a, b) => a.position - b.position);
     }
     
-    // Fallback to built-in detection
-    const palindromes = findPalindromes(bits, 5);
-    const patterns = findRepeatingPatterns(bits, 4, 3);
-    const alternating = findAlternatingSequences(bits, 8);
-    const runs = findLongRuns(bits, 10);
-    const sparse = findSparseRegions(bits, 64);
-    const byteAlign = findByteBoundaries(bits);
-    
-    return [...palindromes, ...patterns, ...alternating, ...runs, ...sparse, ...byteAlign]
-      .sort((a, b) => a.position - b.position);
-  }, [bits, useBackendDefinitions]);
+    return results.sort((a, b) => a.position - b.position);
+  }, [bits, definitions]);
   
   const filteredAnomalies = useMemo(() => {
     return anomalies.filter(a => {
@@ -382,7 +144,12 @@ export const AnomaliesPanel = ({ bits, onJumpTo }: AnomaliesPanelProps) => {
       <div className="space-y-4">
         {/* Summary Card */}
         <Card className="p-4 bg-card border-border">
-          <h3 className="text-sm font-semibold text-primary mb-3">Anomaly Detection Summary</h3>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-primary">Anomaly Detection Summary</h3>
+            <span className="text-xs text-muted-foreground">
+              {definitions.length} detectors active
+            </span>
+          </div>
           <div className="grid grid-cols-3 gap-3 text-sm mb-3">
             <div>
               <div className="text-muted-foreground text-xs">Total</div>
@@ -440,16 +207,6 @@ export const AnomaliesPanel = ({ bits, onJumpTo }: AnomaliesPanelProps) => {
             <div className="flex gap-2">
               <Button
                 size="sm"
-                variant={useBackendDefinitions ? 'default' : 'outline'}
-                onClick={() => setUseBackendDefinitions(!useBackendDefinitions)}
-                className="h-7 px-2 text-xs"
-                title={useBackendDefinitions ? 'Using Backend Definitions' : 'Using Built-in Detection'}
-              >
-                <RefreshCw className="w-3 h-3 mr-1" />
-                {useBackendDefinitions ? 'Backend' : 'Built-in'}
-              </Button>
-              <Button
-                size="sm"
                 variant={viewMode === 'cards' ? 'default' : 'outline'}
                 onClick={() => setViewMode('cards')}
                 className="h-7 px-2"
@@ -500,173 +257,157 @@ export const AnomaliesPanel = ({ bits, onJumpTo }: AnomaliesPanelProps) => {
               </div>
             </div>
             
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-4 gap-2">
               <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Min Length</label>
+                <label className="text-xs text-muted-foreground mb-1 block">Min Len</label>
                 <Input
                   type="number"
-                  placeholder="Min"
                   value={minLength}
-                  onChange={(e) => setMinLength(e.target.value)}
+                  onChange={e => setMinLength(e.target.value)}
                   className="h-8 text-xs"
-                />
-              </div>
-              
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Max Length</label>
-                <Input
-                  type="number"
-                  placeholder="Max"
-                  value={maxLength}
-                  onChange={(e) => setMaxLength(e.target.value)}
-                  className="h-8 text-xs"
-                />
-              </div>
-            </div>
-            
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Min Position</label>
-                <Input
-                  type="number"
                   placeholder="Min"
-                  value={minPosition}
-                  onChange={(e) => setMinPosition(e.target.value)}
-                  className="h-8 text-xs"
                 />
               </div>
-              
               <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Max Position</label>
+                <label className="text-xs text-muted-foreground mb-1 block">Max Len</label>
                 <Input
                   type="number"
-                  placeholder="Max"
-                  value={maxPosition}
-                  onChange={(e) => setMaxPosition(e.target.value)}
+                  value={maxLength}
+                  onChange={e => setMaxLength(e.target.value)}
                   className="h-8 text-xs"
+                  placeholder="Max"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Min Pos</label>
+                <Input
+                  type="number"
+                  value={minPosition}
+                  onChange={e => setMinPosition(e.target.value)}
+                  className="h-8 text-xs"
+                  placeholder="Start"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Max Pos</label>
+                <Input
+                  type="number"
+                  value={maxPosition}
+                  onChange={e => setMaxPosition(e.target.value)}
+                  className="h-8 text-xs"
+                  placeholder="End"
                 />
               </div>
             </div>
           </div>
-          
-          {(typeFilter !== 'all' || severityFilter !== 'all' || minLength || maxLength || minPosition || maxPosition) && (
-            <div className="mt-2 text-xs text-muted-foreground">
-              Showing {filteredAnomalies.length} of {anomalies.length} anomalies
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => {
-                  setTypeFilter('all');
-                  setSeverityFilter('all');
-                  setMinLength('');
-                  setMaxLength('');
-                  setMinPosition('');
-                  setMaxPosition('');
-                }}
-                className="h-5 px-2 ml-2 text-xs"
-              >
-                Clear All
-              </Button>
-            </div>
-          )}
         </Card>
-        
-        {/* Anomalies List/Table */}
-        {filteredAnomalies.length === 0 ? (
-          <Card className="p-8 bg-card/50 border-border">
-            <div className="text-center text-muted-foreground">
-              <AlertCircle className="w-8 h-8 mx-auto mb-2 opacity-50" />
-              <p className="text-sm">
-                {anomalies.length === 0 ? 'No anomalies detected' : 'No anomalies match the current filters'}
-              </p>
-              <p className="text-xs mt-1">
-                {anomalies.length === 0 ? 'Load binary data to detect patterns' : 'Try adjusting your filters'}
-              </p>
-            </div>
+
+        {/* No data message */}
+        {bits.length === 0 && (
+          <Card className="p-8 bg-card border-border text-center">
+            <AlertCircle className="w-12 h-12 mx-auto text-muted-foreground mb-3" />
+            <p className="text-muted-foreground">No binary data to analyze</p>
+            <p className="text-xs text-muted-foreground mt-1">Load or generate data to detect anomalies</p>
           </Card>
-        ) : viewMode === 'cards' ? (
-          <div className="space-y-3">
-            {filteredAnomalies.map((anomaly) => (
-              <Card key={anomaly.id} className={`p-4 border-border ${getSeverityBg(anomaly.severity)}`}>
-                <div className="flex justify-between items-start mb-2">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <div className="text-sm font-semibold text-primary">{anomaly.type}</div>
-                      <span className={`text-[10px] uppercase font-bold ${getSeverityColor(anomaly.severity)}`}>
-                        {anomaly.severity}
+        )}
+
+        {/* No anomalies message */}
+        {bits.length > 0 && anomalies.length === 0 && (
+          <Card className="p-8 bg-card border-border text-center">
+            <AlertCircle className="w-12 h-12 mx-auto text-green-500 mb-3" />
+            <p className="text-foreground font-medium">No anomalies detected</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {definitions.length === 0 
+                ? 'No detectors enabled. Enable detectors in Backend Mode → Anomalies tab.'
+                : 'The binary data appears normal according to all active detectors.'}
+            </p>
+          </Card>
+        )}
+
+        {/* Results */}
+        {filteredAnomalies.length > 0 && (
+          <>
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>Showing {filteredAnomalies.length} of {anomalies.length} anomalies</span>
+            </div>
+
+            {viewMode === 'cards' ? (
+              <div className="space-y-2">
+                {filteredAnomalies.map(anomaly => (
+                  <Card 
+                    key={anomaly.id} 
+                    className={`p-3 bg-card border-border hover:border-primary/50 cursor-pointer transition-colors ${getSeverityBg(anomaly.severity)}`}
+                    onClick={() => onJumpTo(anomaly.position)}
+                  >
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <AlertCircle className={`w-4 h-4 ${getSeverityColor(anomaly.severity)}`} />
+                        <span className="font-medium text-sm text-foreground">{anomaly.type}</span>
+                      </div>
+                      <span className={`text-xs font-semibold ${getSeverityColor(anomaly.severity)}`}>
+                        {anomaly.severity.toUpperCase()}
                       </span>
                     </div>
-                    <div className="text-xs text-muted-foreground">{anomaly.description}</div>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => onJumpTo(anomaly.position)}
-                    className="h-6 text-xs"
-                  >
-                    Jump
-                  </Button>
-                </div>
-                
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Position:</span>
-                    <span className="text-foreground font-mono">{anomaly.position}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Length:</span>
-                    <span className="text-foreground font-mono">{anomaly.length} bits</span>
-                  </div>
-                  <div>
-                    <div className="text-muted-foreground mb-1">Sequence:</div>
-                    <div className="text-xs font-mono bg-secondary/30 p-2 rounded break-all">
+                    
+                    <p className="text-xs text-muted-foreground mb-2">{anomaly.description}</p>
+                    
+                    <div className="grid grid-cols-3 gap-2 text-xs">
+                      <div>
+                        <span className="text-muted-foreground">Position: </span>
+                        <span className="font-mono text-foreground">{anomaly.position}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Length: </span>
+                        <span className="font-mono text-foreground">{anomaly.length}</span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-primary cursor-pointer hover:underline">Jump →</span>
+                      </div>
+                    </div>
+                    
+                    <div className="mt-2 p-2 bg-background/50 rounded text-xs font-mono break-all">
                       {anomaly.sequence}
                     </div>
-                  </div>
-                </div>
-              </Card>
-            ))}
-          </div>
-        ) : (
-          <Card className="p-0 bg-card border-border overflow-hidden">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-12">Sev</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead className="text-right">Position</TableHead>
-                  <TableHead className="text-right">Length</TableHead>
-                  <TableHead>Description</TableHead>
-                  <TableHead className="w-20"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredAnomalies.map((anomaly) => (
-                  <TableRow key={anomaly.id}>
-                    <TableCell>
-                      <span className={`text-[10px] uppercase font-bold ${getSeverityColor(anomaly.severity)}`}>
-                        {anomaly.severity[0]}
-                      </span>
-                    </TableCell>
-                    <TableCell className="font-medium text-sm">{anomaly.type}</TableCell>
-                    <TableCell className="text-right font-mono text-xs">{anomaly.position}</TableCell>
-                    <TableCell className="text-right font-mono text-xs">{anomaly.length}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{anomaly.description}</TableCell>
-                    <TableCell>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => onJumpTo(anomaly.position)}
-                        className="h-6 text-xs"
-                      >
-                        Jump
-                      </Button>
-                    </TableCell>
-                  </TableRow>
+                  </Card>
                 ))}
-              </TableBody>
-            </Table>
-          </Card>
+              </div>
+            ) : (
+              <Card className="bg-card border-border overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-[100px]">Type</TableHead>
+                      <TableHead className="w-[80px]">Severity</TableHead>
+                      <TableHead className="w-[80px]">Position</TableHead>
+                      <TableHead className="w-[80px]">Length</TableHead>
+                      <TableHead>Sequence</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredAnomalies.map(anomaly => (
+                      <TableRow 
+                        key={anomaly.id}
+                        className="cursor-pointer hover:bg-muted/50"
+                        onClick={() => onJumpTo(anomaly.position)}
+                      >
+                        <TableCell className="font-medium">{anomaly.type}</TableCell>
+                        <TableCell>
+                          <span className={`text-xs font-semibold ${getSeverityColor(anomaly.severity)}`}>
+                            {anomaly.severity.toUpperCase()}
+                          </span>
+                        </TableCell>
+                        <TableCell className="font-mono">{anomaly.position}</TableCell>
+                        <TableCell className="font-mono">{anomaly.length}</TableCell>
+                        <TableCell className="font-mono text-xs max-w-[200px] truncate">
+                          {anomaly.sequence}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </Card>
+            )}
+          </>
         )}
       </div>
     </ScrollArea>

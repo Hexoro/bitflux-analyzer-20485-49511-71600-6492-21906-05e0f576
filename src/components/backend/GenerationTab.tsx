@@ -1,6 +1,6 @@
 /**
  * Generation Settings Tab for Backend Mode
- * Allows editing default generation presets and settings
+ * Uses customPresetsManager for shared state with GenerateDialog
  */
 
 import { useState, useEffect } from 'react';
@@ -35,6 +35,7 @@ import {
   ChevronDown,
   ChevronRight,
   Save,
+  Code,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { 
@@ -43,15 +44,7 @@ import {
   GenerationConfig,
   QUICK_SIZES,
 } from '@/lib/generationPresets';
-
-const STORAGE_KEY = 'bsee_custom_generation_presets';
-
-interface CustomPreset {
-  id: string;
-  name: string;
-  description: string;
-  config: GenerationConfig;
-}
+import { customPresetsManager, CustomPreset } from '@/lib/customPresetsManager';
 
 export const GenerationTab = () => {
   const [customPresets, setCustomPresets] = useState<CustomPreset[]>([]);
@@ -63,6 +56,8 @@ export const GenerationTab = () => {
     name: string;
     description: string;
     config: GenerationConfig;
+    code?: string;
+    isCodeBased?: boolean;
   }>({
     name: '',
     description: '',
@@ -71,31 +66,17 @@ export const GenerationTab = () => {
       length: 1024,
       probability: 0.5,
     },
+    code: '',
+    isCodeBased: false,
   });
 
   useEffect(() => {
-    loadPresets();
+    setCustomPresets(customPresetsManager.getCustomPresets());
+    const unsubscribe = customPresetsManager.subscribe(() => {
+      setCustomPresets(customPresetsManager.getCustomPresets());
+    });
+    return unsubscribe;
   }, []);
-
-  const loadPresets = () => {
-    try {
-      const data = localStorage.getItem(STORAGE_KEY);
-      if (data) {
-        setCustomPresets(JSON.parse(data));
-      }
-    } catch (e) {
-      console.error('Failed to load custom presets:', e);
-    }
-  };
-
-  const savePresets = (presets: CustomPreset[]) => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(presets));
-      setCustomPresets(presets);
-    } catch (e) {
-      console.error('Failed to save presets:', e);
-    }
-  };
 
   const handleAdd = () => {
     setEditingPreset(null);
@@ -107,6 +88,8 @@ export const GenerationTab = () => {
         length: 1024,
         probability: 0.5,
       },
+      code: '',
+      isCodeBased: false,
     });
     setDialogOpen(true);
   };
@@ -117,6 +100,8 @@ export const GenerationTab = () => {
       name: preset.name,
       description: preset.description,
       config: { ...preset.config },
+      code: preset.code || '',
+      isCodeBased: preset.isCodeBased || false,
     });
     setDialogOpen(true);
   };
@@ -127,34 +112,46 @@ export const GenerationTab = () => {
       return;
     }
 
-    const preset: CustomPreset = {
-      id: editingPreset?.id || `custom_${Date.now()}`,
-      name: form.name,
-      description: form.description,
-      config: form.config,
-    };
+    // Validate code if code-based
+    if (form.isCodeBased && form.code) {
+      try {
+        new Function('length', 'seed', 'probability', form.code);
+      } catch (e) {
+        toast.error(`Invalid code syntax: ${(e as Error).message}`);
+        return;
+      }
+    }
 
-    let newPresets: CustomPreset[];
     if (editingPreset) {
-      newPresets = customPresets.map(p => p.id === editingPreset.id ? preset : p);
+      customPresetsManager.updatePreset(editingPreset.id, {
+        name: form.name,
+        description: form.description,
+        config: form.config,
+        code: form.code,
+        isCodeBased: form.isCodeBased,
+      });
       toast.success('Preset updated');
     } else {
-      newPresets = [...customPresets, preset];
+      customPresetsManager.addPreset({
+        name: form.name,
+        description: form.description,
+        config: form.config,
+        code: form.code,
+        isCodeBased: form.isCodeBased,
+      });
       toast.success('Preset created');
     }
 
-    savePresets(newPresets);
     setDialogOpen(false);
   };
 
   const handleDelete = (id: string) => {
-    const newPresets = customPresets.filter(p => p.id !== id);
-    savePresets(newPresets);
+    customPresetsManager.deletePreset(id);
     toast.success('Preset deleted');
   };
 
   const handleReset = () => {
-    savePresets([]);
+    customPresetsManager.clearPresets();
     toast.success('Custom presets cleared');
   };
 
@@ -193,7 +190,7 @@ export const GenerationTab = () => {
               </div>
             </CardTitle>
             <p className="text-xs text-muted-foreground">
-              Manage generation presets. Built-in presets cannot be edited, but you can create custom ones.
+              Define custom presets that appear in the Generate Dialog. Supports both config-based and code-based generation.
             </p>
           </CardHeader>
           <CardContent>
@@ -265,7 +262,15 @@ export const GenerationTab = () => {
                             <ChevronRight className="w-4 h-4" />
                           )}
                           <div>
-                            <span className="font-medium">{preset.name}</span>
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium">{preset.name}</span>
+                              {preset.isCodeBased && (
+                                <Badge variant="outline" className="text-xs">
+                                  <Code className="w-3 h-3 mr-1" />
+                                  Code
+                                </Badge>
+                              )}
+                            </div>
                             <p className="text-xs text-muted-foreground">{preset.description}</p>
                           </div>
                         </div>
@@ -280,7 +285,7 @@ export const GenerationTab = () => {
                         </div>
                       </div>
                       {expandedPreset === preset.id && (
-                        <div className="px-3 pb-3 pt-1 bg-muted/20 border-t text-xs space-y-1">
+                        <div className="px-3 pb-3 pt-1 bg-muted/20 border-t text-xs space-y-2">
                           <div className="flex justify-between">
                             <span className="text-muted-foreground">Length:</span>
                             <span className="font-mono">{preset.config.length} bits</span>
@@ -289,6 +294,14 @@ export const GenerationTab = () => {
                             <div className="flex justify-between">
                               <span className="text-muted-foreground">Probability:</span>
                               <span className="font-mono">{(preset.config.probability * 100).toFixed(0)}%</span>
+                            </div>
+                          )}
+                          {preset.isCodeBased && preset.code && (
+                            <div className="mt-2">
+                              <span className="text-muted-foreground block mb-1">Code:</span>
+                              <pre className="font-mono text-xs bg-background/50 p-2 rounded max-h-32 overflow-auto">
+                                {preset.code}
+                              </pre>
                             </div>
                           )}
                         </div>
@@ -321,7 +334,7 @@ export const GenerationTab = () => {
 
       {/* Add/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {editingPreset ? 'Edit Preset' : 'Create Preset'}
@@ -435,24 +448,56 @@ export const GenerationTab = () => {
               </div>
             )}
 
-            <div className="space-y-2">
-              <Label>Generation Code (optional - overrides settings above)</Label>
-              <Textarea
-                value={(form as any).code || ''}
-                onChange={(e) => setForm({ ...form, code: e.target.value } as any)}
-                className="font-mono text-xs h-32"
-                placeholder={`function generate(length) {
-  // Return a string of 0s and 1s
-  let bits = '';
-  for (let i = 0; i < length; i++) {
-    bits += Math.random() > 0.5 ? '1' : '0';
-  }
-  return bits;
-}`}
-              />
-              <p className="text-xs text-muted-foreground">
-                Write JavaScript code that generates binary data. Function receives length and returns bit string.
-              </p>
+            {form.config.mode === 'file-format' && (
+              <div className="space-y-2">
+                <Label>Header Pattern (8 bits)</Label>
+                <Input
+                  value={form.config.headerPattern || '11111111'}
+                  onChange={(e) => setForm({ 
+                    ...form, 
+                    config: { ...form.config, headerPattern: e.target.value } 
+                  })}
+                  placeholder="e.g., 11111111"
+                  className="font-mono"
+                  maxLength={8}
+                />
+              </div>
+            )}
+
+            <div className="border-t pt-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <Label>Use Custom Code</Label>
+                <Button
+                  size="sm"
+                  variant={form.isCodeBased ? 'default' : 'outline'}
+                  onClick={() => setForm({ ...form, isCodeBased: !form.isCodeBased })}
+                >
+                  <Code className="w-4 h-4 mr-2" />
+                  {form.isCodeBased ? 'Code Enabled' : 'Enable Code'}
+                </Button>
+              </div>
+              
+              {form.isCodeBased && (
+                <div className="space-y-2">
+                  <Textarea
+                    value={form.code || ''}
+                    onChange={(e) => setForm({ ...form, code: e.target.value })}
+                    className="font-mono text-xs h-40"
+                    placeholder={`// Custom generation function
+// Available: length, seed, probability
+// Must return a string of only 0s and 1s
+
+let result = '';
+for (let i = 0; i < length; i++) {
+  result += Math.random() < probability ? '1' : '0';
+}
+return result;`}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    When enabled, this code overrides config settings. Function receives: length, seed, probability.
+                  </p>
+                </div>
+              )}
             </div>
           </div>
 
