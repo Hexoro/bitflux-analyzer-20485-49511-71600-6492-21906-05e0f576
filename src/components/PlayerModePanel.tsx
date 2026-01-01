@@ -61,6 +61,8 @@ export const PlayerModePanel = ({ onExitPlayer, selectedResultId }: PlayerModePa
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const [reconstructedBits, setReconstructedBits] = useState<string>('');
   const [reconstructedSteps, setReconstructedSteps] = useState<any[]>([]);
+  const [playerFileId, setPlayerFileId] = useState<string | null>(null);
+  const [verificationStatus, setVerificationStatus] = useState<'pending' | 'passed' | 'failed' | 'skipped'>('pending');
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Load results
@@ -82,16 +84,25 @@ export const PlayerModePanel = ({ onExitPlayer, selectedResultId }: PlayerModePa
     }
   }, [selectedResultId, results]);
 
-  // Reconstruct steps when result changes
+  // Reconstruct steps and create temp file when result changes
   useEffect(() => {
     if (!selectedResult) {
       setReconstructedBits('');
       setReconstructedSteps([]);
+      setPlayerFileId(null);
+      setVerificationStatus('pending');
       return;
     }
 
     setCurrentStep(0);
     setIsPlaying(false);
+
+    // Create temp file for playback
+    const tempFileName = `player_${selectedResult.strategyName.replace(/\s+/g, '_')}_${Date.now()}.tmp`;
+    const tempFile = fileSystemManager.createFile(tempFileName, selectedResult.initialBits, 'binary');
+    fileSystemManager.setFileGroup(tempFile.id, 'Player');
+    fileSystemManager.setActiveFile(tempFile.id);
+    setPlayerFileId(tempFile.id);
 
     let currentBits = selectedResult.initialBits;
     const steps: any[] = [];
@@ -103,9 +114,9 @@ export const PlayerModePanel = ({ onExitPlayer, selectedResultId }: PlayerModePa
       let afterBits = currentBits;
       
       // First, try to use the stored full file state
-      if (originalStep.fullAfterBits && originalStep.fullAfterBits.length === currentBits.length) {
+      if (originalStep.fullAfterBits && originalStep.fullAfterBits.length > 0) {
         afterBits = originalStep.fullAfterBits;
-      } else if (originalStep.cumulativeBits && originalStep.cumulativeBits.length === currentBits.length) {
+      } else if (originalStep.cumulativeBits && originalStep.cumulativeBits.length > 0) {
         afterBits = originalStep.cumulativeBits;
       } else {
         // Fall back to executing the operation
@@ -116,11 +127,9 @@ export const PlayerModePanel = ({ onExitPlayer, selectedResultId }: PlayerModePa
             originalStep.params || {}
           );
           if (opResult.success && opResult.bits.length > 0) {
-            // Ensure the result maintains the file length (unless operation changes length)
             afterBits = opResult.bits;
           }
         } catch (e) {
-          // If operation fails, keep the previous bits
           console.warn(`Operation ${originalStep.operation} failed:`, e);
         }
       }
@@ -143,7 +152,37 @@ export const PlayerModePanel = ({ onExitPlayer, selectedResultId }: PlayerModePa
 
     setReconstructedSteps(steps);
     setReconstructedBits(selectedResult.initialBits);
+
+    // Verify reconstruction matches final bits
+    if (currentBits === selectedResult.finalBits) {
+      setVerificationStatus('passed');
+    } else {
+      const mismatches = countMismatches(currentBits, selectedResult.finalBits);
+      if (mismatches === 0) {
+        setVerificationStatus('passed');
+      } else {
+        console.warn(`Replay verification failed: ${mismatches} bits differ`);
+        setVerificationStatus('failed');
+      }
+    }
+
+    return () => {
+      // Cleanup temp file on result change
+      if (tempFile.id) {
+        fileSystemManager.deleteFile(tempFile.id);
+      }
+    };
   }, [selectedResult?.id]);
+
+  // Helper to count mismatching bits
+  const countMismatches = (a: string, b: string): number => {
+    const len = Math.max(a.length, b.length);
+    let count = 0;
+    for (let i = 0; i < len; i++) {
+      if (a[i] !== b[i]) count++;
+    }
+    return count;
+  };
 
   // Playback logic
   useEffect(() => {
@@ -164,19 +203,57 @@ export const PlayerModePanel = ({ onExitPlayer, selectedResultId }: PlayerModePa
     };
   }, [isPlaying, playbackSpeed, reconstructedSteps.length]);
 
-  // Update bits on step change
+  // Update bits on step change and highlight ranges in active file
   useEffect(() => {
     if (!selectedResult || reconstructedSteps.length === 0) return;
 
+    let newBits: string;
+    let highlightRanges: Array<{ start: number; end: number; color: string }> = [];
+
     if (currentStep === 0) {
-      setReconstructedBits(selectedResult.initialBits);
+      newBits = selectedResult.initialBits;
     } else if (currentStep <= reconstructedSteps.length) {
       const step = reconstructedSteps[currentStep - 1] || reconstructedSteps[currentStep];
-      setReconstructedBits(step?.cumulativeBits || selectedResult.initialBits);
+      newBits = step?.cumulativeBits || selectedResult.initialBits;
+      
+      // Add highlight for bit ranges affected by this operation
+      if (step?.bitRanges && step.bitRanges.length > 0) {
+        highlightRanges = step.bitRanges.map((r: any) => ({
+          start: r.start,
+          end: r.end,
+          color: 'rgba(0, 212, 255, 0.3)', // Cyan highlight
+        }));
+      }
+      
+      // Add highlight for memory window
+      if (step?.memoryWindow) {
+        highlightRanges.push({
+          start: step.memoryWindow.start,
+          end: step.memoryWindow.end,
+          color: 'rgba(255, 215, 0, 0.2)', // Gold highlight for memory window
+        });
+      }
+    } else {
+      newBits = selectedResult.finalBits;
     }
-  }, [currentStep, reconstructedSteps, selectedResult]);
+
+    setReconstructedBits(newBits);
+
+    // Update the active file's content and highlights
+    const activeFile = fileSystemManager.getActiveFile();
+    if (activeFile && playerFileId && activeFile.id === playerFileId) {
+      activeFile.state.model.loadBits(newBits, false); // Don't add to history
+      activeFile.state.setExternalHighlightRanges(highlightRanges);
+    }
+  }, [currentStep, reconstructedSteps, selectedResult, playerFileId]);
 
   const handleExitPlayer = () => {
+    // Clear highlights
+    const activeFile = fileSystemManager.getActiveFile();
+    if (activeFile) {
+      activeFile.state.clearExternalHighlightRanges();
+    }
+    
     // Cleanup temp files
     const count = fileSystemManager.clearAllTempFiles();
     if (count > 0) {
@@ -279,6 +356,21 @@ export const PlayerModePanel = ({ onExitPlayer, selectedResultId }: PlayerModePa
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
+                  {/* Verification Status */}
+                  {verificationStatus === 'passed' && (
+                    <Badge variant="default" className="bg-green-500/20 text-green-500 border-green-500/30">
+                      ✓ Verified
+                    </Badge>
+                  )}
+                  {verificationStatus === 'failed' && (
+                    <Badge variant="destructive" className="flex items-center gap-1">
+                      <AlertCircle className="w-3 h-3" />
+                      Replay Mismatch
+                    </Badge>
+                  )}
+                  {verificationStatus === 'pending' && (
+                    <Badge variant="secondary">Verifying...</Badge>
+                  )}
                   <Badge variant="secondary">{reconstructedBits.length} bits</Badge>
                   <Badge variant="outline" className="flex items-center gap-1">
                     <DollarSign className="w-3 h-3" />
