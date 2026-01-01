@@ -163,6 +163,147 @@ const DEFAULT_ANOMALIES: AnomalyDefinition[] = [
   return results;
 }`,
   },
+  // Additional preset anomalies
+  {
+    id: 'zero_block',
+    name: 'Zero Block',
+    description: 'Detects large blocks of consecutive zeros',
+    category: 'Run',
+    severity: 'medium',
+    minLength: 32,
+    enabled: true,
+    detectFn: `function detect(bits, minLength) {
+  const results = [];
+  const regex = new RegExp('0{' + minLength + ',}', 'g');
+  let match;
+  while ((match = regex.exec(bits)) !== null) {
+    results.push({ position: match.index, length: match[0].length });
+  }
+  return results;
+}`,
+  },
+  {
+    id: 'one_block',
+    name: 'One Block',
+    description: 'Detects large blocks of consecutive ones',
+    category: 'Run',
+    severity: 'medium',
+    minLength: 32,
+    enabled: true,
+    detectFn: `function detect(bits, minLength) {
+  const results = [];
+  const regex = new RegExp('1{' + minLength + ',}', 'g');
+  let match;
+  while ((match = regex.exec(bits)) !== null) {
+    results.push({ position: match.index, length: match[0].length });
+  }
+  return results;
+}`,
+  },
+  {
+    id: 'header_signature',
+    name: 'Header Signature',
+    description: 'Detects common file header patterns',
+    category: 'Structure',
+    severity: 'low',
+    minLength: 8,
+    enabled: true,
+    detectFn: `function detect(bits, minLength) {
+  const results = [];
+  // Common signatures (in binary)
+  const signatures = [
+    '11111111110110001010101000010110', // JPEG FF D8
+    '0100011101001001010001100011100', // GIF
+    '1000100101010000010011100100011', // PNG header
+  ];
+  for (const sig of signatures) {
+    const idx = bits.indexOf(sig);
+    if (idx !== -1) {
+      results.push({ position: idx, length: sig.length, type: 'file_header' });
+    }
+  }
+  return results;
+}`,
+  },
+  {
+    id: 'entropy_spike',
+    name: 'Entropy Spike',
+    description: 'Detects sudden changes in local entropy',
+    category: 'Entropy',
+    severity: 'high',
+    minLength: 64,
+    enabled: true,
+    detectFn: `function detect(bits, windowSize) {
+  const results = [];
+  const step = windowSize / 2;
+  let prevEntropy = null;
+  
+  for (let i = 0; i <= bits.length - windowSize; i += step) {
+    const window = bits.substring(i, i + windowSize);
+    const ones = (window.match(/1/g) || []).length;
+    const p1 = ones / windowSize;
+    const p0 = 1 - p1;
+    let entropy = 0;
+    if (p0 > 0) entropy -= p0 * Math.log2(p0);
+    if (p1 > 0) entropy -= p1 * Math.log2(p1);
+    
+    if (prevEntropy !== null && Math.abs(entropy - prevEntropy) > 0.3) {
+      results.push({ position: i, length: windowSize, entropyChange: entropy - prevEntropy });
+    }
+    prevEntropy = entropy;
+  }
+  return results;
+}`,
+  },
+  {
+    id: 'nibble_repeat',
+    name: 'Nibble Repeat',
+    description: 'Detects repeating 4-bit patterns',
+    category: 'Pattern',
+    severity: 'low',
+    minLength: 16,
+    enabled: true,
+    detectFn: `function detect(bits, minLength) {
+  const results = [];
+  for (let i = 0; i <= bits.length - 8; i += 4) {
+    const nibble = bits.substring(i, i + 4);
+    let repeats = 1;
+    let j = i + 4;
+    while (j + 4 <= bits.length && bits.substring(j, j + 4) === nibble) {
+      repeats++;
+      j += 4;
+    }
+    if (repeats >= minLength / 4) {
+      results.push({ position: i, length: repeats * 4, nibble, repeats });
+    }
+  }
+  return results;
+}`,
+  },
+  {
+    id: 'transition_burst',
+    name: 'Transition Burst',
+    description: 'Detects regions with unusually high bit transitions',
+    category: 'Transitions',
+    severity: 'medium',
+    minLength: 32,
+    enabled: true,
+    detectFn: `function detect(bits, windowSize) {
+  const results = [];
+  for (let i = 0; i <= bits.length - windowSize; i += windowSize / 2) {
+    const window = bits.substring(i, i + windowSize);
+    let transitions = 0;
+    for (let j = 1; j < window.length; j++) {
+      if (window[j] !== window[j-1]) transitions++;
+    }
+    const rate = transitions / (windowSize - 1);
+    if (rate > 0.8) { // More than 80% transitions
+      results.push({ position: i, length: windowSize, transitionRate: rate });
+    }
+  }
+  return results;
+}`,
+  },
 ];
 
 class AnomaliesManager {
@@ -278,6 +419,26 @@ class AnomaliesManager {
       console.error(`Error executing anomaly detection "${def.name}":`, e);
       return [];
     }
+  }
+
+  /**
+   * Run all enabled anomaly detections on bits
+   */
+  runAllDetections(bits: string): Array<{ anomalyId: string; anomalyName: string; results: Array<{ position: number; length: number; [key: string]: any }> }> {
+    const allResults: Array<{ anomalyId: string; anomalyName: string; results: Array<{ position: number; length: number; [key: string]: any }> }> = [];
+    
+    for (const def of this.getEnabledDefinitions()) {
+      const results = this.executeDetection(def.id, bits);
+      if (results.length > 0) {
+        allResults.push({
+          anomalyId: def.id,
+          anomalyName: def.name,
+          results,
+        });
+      }
+    }
+    
+    return allResults;
   }
 }
 

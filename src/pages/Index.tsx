@@ -21,7 +21,6 @@ import { FileSystemSidebar } from '@/components/FileSystemSidebar';
 import { Toolbar, AppMode } from '@/components/Toolbar';
 import { AlgorithmPanel } from '@/components/AlgorithmPanel';
 import { BackendPanel } from '@/components/BackendPanel';
-import { MLPanel } from '@/components/MLPanel';
 import { PlayerModePanel } from '@/components/PlayerModePanel';
 import { DataGraphsDialog } from '@/components/DataGraphsDialog';
 import { AudioVisualizerDialog } from '@/components/AudioVisualizerDialog';
@@ -35,6 +34,9 @@ import { toast } from 'sonner';
 import { BitRange } from '@/lib/fileState';
 
 const Index = () => {
+  // Startup test approval state
+  const [testsApproved, setTestsApproved] = useState(false);
+  
   // Use the singleton fileSystemManager instead of creating new instance
   const fileSystem = fileSystemManager;
   const [, forceUpdate] = useState({});
@@ -372,6 +374,15 @@ const Index = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [activeFile, editMode]);
 
+  // Show startup test suite if not approved
+  if (!testsApproved) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-background">
+        <StartupTestSuite onApproved={() => setTestsApproved(true)} />
+      </div>
+    );
+  }
+
   if (!activeFile) {
     return (
       <div className="h-screen flex items-center justify-center bg-background">
@@ -463,139 +474,137 @@ const Index = () => {
         onModeChange={handleModeChange}
       />
 
+      {/* Main Content */}
       <ResizablePanelGroup direction="horizontal" className="flex-1">
+        {/* Left Sidebar - File System */}
         <ResizablePanel defaultSize={15} minSize={10} maxSize={25}>
-          <FileSystemSidebar
-            onFileChange={() => forceUpdate({})}
-          />
+          <FileSystemSidebar />
         </ResizablePanel>
 
-        <ResizableHandle />
+        <ResizableHandle withHandle />
 
+        {/* Center - Binary Viewer */}
         <ResizablePanel defaultSize={45} minSize={30}>
           <BinaryViewer
             ref={viewerRef}
-            model={activeFile.state.model}
+            bits={bits}
             bitsPerRow={bitsPerRow}
             highlightRanges={highlightRanges}
+            selectedRanges={selectedRanges}
             editMode={editMode}
             idealBitIndices={idealBitIndices}
+            onBitChange={(index, value) => {
+              const newBits = bits.substring(0, index) + value + bits.substring(index + 1);
+              activeFile.state.model.loadBits(newBits);
+              activeFile.state.addToHistory(`Set bit ${index} to ${value}`);
+            }}
+            onSelectionChange={(ranges) => activeFile.state.setSelectedRanges(ranges)}
           />
         </ResizablePanel>
 
-        <ResizableHandle />
+        <ResizableHandle withHandle />
 
-        <ResizablePanel defaultSize={40} minSize={20}>
-          {isPlayerMode ? (
+        {/* Right Panel - Mode-dependent */}
+        <ResizablePanel defaultSize={40} minSize={25}>
+          {appMode === 'algorithm' ? (
+            <AlgorithmPanel onEnterPlayer={handleEnterPlayerMode} />
+          ) : appMode === 'backend' ? (
+            <BackendPanel />
+          ) : appMode === 'player' ? (
             <PlayerModePanel 
               onExitPlayer={handleExitPlayerMode} 
               selectedResultId={playerResultId}
             />
-          ) : appMode === 'analysis' ? (
+          ) : (
             <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
-              <TabsList className="w-full justify-start rounded-none border-b">
+              <TabsList className="w-full justify-start rounded-none border-b overflow-x-auto flex-shrink-0">
                 <TabsTrigger value="analysis">Analysis</TabsTrigger>
-                <TabsTrigger value="bitstream">Bitstream</TabsTrigger>
                 <TabsTrigger value="sequences">Sequences</TabsTrigger>
                 <TabsTrigger value="boundaries">Boundaries</TabsTrigger>
                 <TabsTrigger value="partitions">Partitions</TabsTrigger>
-                <TabsTrigger value="anomalies">Anomalies</TabsTrigger>
-                <TabsTrigger value="transformations">Transforms</TabsTrigger>
                 <TabsTrigger value="history">History</TabsTrigger>
+                <TabsTrigger value="transforms">Transforms</TabsTrigger>
+                <TabsTrigger value="anomalies">Anomalies</TabsTrigger>
+                <TabsTrigger value="bitstream">Bitstream</TabsTrigger>
                 <TabsTrigger value="notes">Notes</TabsTrigger>
               </TabsList>
 
               <div className="flex-1 overflow-hidden">
                 <TabsContent value="analysis" className="h-full m-0">
-                  {stats && (
-                    <AnalysisPanel 
-                      stats={stats} 
-                      bits={bits} 
-                      bitsPerRow={bitsPerRow} 
-                      onJumpTo={handleJumpTo}
-                      onIdealityChange={setIdealBitIndices}
-                    />
-                  )}
-                </TabsContent>
-
-                <TabsContent value="bitstream" className="h-full m-0">
-                  <BitstreamAnalysisPanel bits={bits} onJumpTo={handleJumpTo} />
+                  <AnalysisPanel 
+                    bits={bits} 
+                    stats={stats} 
+                    onIdealBitsChange={setIdealBitIndices}
+                  />
                 </TabsContent>
 
                 <TabsContent value="sequences" className="h-full m-0">
-                  <SequencesPanel fileState={activeFile.state} onJumpTo={handleJumpTo} />
+                  <SequencesPanel bits={bits} />
                 </TabsContent>
 
                 <TabsContent value="boundaries" className="h-full m-0">
-                  {stats && activeFile && (
-                    <BoundariesPanel
-                      stats={stats}
-                      bits={bits}
-                      boundaries={boundaries}
-                      partitionManager={activeFile.state.partitionManager}
-                      onJumpTo={handleJumpTo}
-                      onAppendBoundary={handleAppendBoundary}
-                      onInsertBoundary={handleInsertBoundary}
-                      onRemoveBoundary={handleRemoveBoundary}
-                      onToggleHighlight={handleToggleBoundaryHighlight}
-                    />
-                  )}
+                  <BoundariesPanel
+                    boundaries={boundaries}
+                    bits={bits}
+                    onAppendBoundary={handleAppendBoundary}
+                    onInsertBoundary={handleInsertBoundary}
+                    onRemoveBoundary={handleRemoveBoundary}
+                    onToggleHighlight={handleToggleBoundaryHighlight}
+                  />
                 </TabsContent>
 
                 <TabsContent value="partitions" className="h-full m-0">
-                  <PartitionsPanel partitions={partitions} onJumpTo={handleJumpTo} />
-                </TabsContent>
-
-                <TabsContent value="anomalies" className="h-full m-0">
-                  <AnomaliesPanel bits={bits} onJumpTo={handleJumpTo} />
-                </TabsContent>
-
-                <TabsContent value="transformations" className="h-full m-0">
-                  <div className="h-full flex flex-col">
-                    <div className="p-4 border-b">
-                      <BitSelectionDialog
-                        maxBits={bits.length}
-                        onApplySelection={handleApplySelection}
-                        currentSelection={selectedRanges}
-                      />
-                    </div>
-                    <div className="flex-1 overflow-hidden">
-                      <TransformationsPanel
-                        bits={bits}
-                        selectedRanges={selectedRanges}
-                        onTransform={handleTransform}
-                      />
-                    </div>
-                  </div>
+                  <PartitionsPanel partitions={partitions} bits={bits} />
                 </TabsContent>
 
                 <TabsContent value="history" className="h-full m-0">
                   <HistoryPanelNew
                     groups={historyGroups}
-                    onRestoreVersion={handleRestoreVersion}
-                    onRestoreToNewFile={handleRestoreToNewFile}
-                    onCompareVersion={handleCompareVersion}
+                    currentBits={bits}
+                    onRestore={handleRestoreVersion}
+                    onRestoreToNew={handleRestoreToNewFile}
+                    onCompare={handleCompareVersion}
                     onToggleGroup={handleToggleHistoryGroup}
                   />
                 </TabsContent>
 
+                <TabsContent value="transforms" className="h-full m-0">
+                  <TransformationsPanel
+                    bits={bits}
+                    selectedRanges={selectedRanges}
+                    onTransform={handleTransform}
+                    onApplySelection={handleApplySelection}
+                  />
+                </TabsContent>
+
+                <TabsContent value="anomalies" className="h-full m-0">
+                  <AnomaliesPanel bits={bits} />
+                </TabsContent>
+
+                <TabsContent value="bitstream" className="h-full m-0">
+                  <BitstreamAnalysisPanel bits={bits} />
+                </TabsContent>
+
                 <TabsContent value="notes" className="h-full m-0">
-                  <NotesPanel notesManager={activeFile.state.notesManager} onUpdate={() => forceUpdate({})} />
+                  <NotesPanel />
                 </TabsContent>
               </div>
             </Tabs>
-          ) : appMode === 'algorithm' ? (
-            <AlgorithmPanel />
-          ) : appMode === 'ml' ? (
-            <MLPanel />
-          ) : appMode === 'player' ? (
-            <PlayerModePanel onExitPlayer={handleExitPlayerMode} selectedResultId={playerResultId} />
-          ) : (
-            <BackendPanel />
           )}
         </ResizablePanel>
       </ResizablePanelGroup>
 
+      {/* Footer */}
+      <div className="border-t border-border bg-card/50 px-4 py-1.5 text-xs text-muted-foreground flex justify-between">
+        <span>
+          {activeFile?.name} • {bits.length.toLocaleString()} bits • {Math.ceil(bits.length / 8).toLocaleString()} bytes
+        </span>
+        <span>
+          © {currentYear} BSEE • Binary Structural Exploration Engine
+        </span>
+      </div>
+
+      {/* Dialogs */}
       <GenerateDialog
         open={generateDialogOpen}
         onOpenChange={setGenerateDialogOpen}
@@ -605,8 +614,8 @@ const Index = () => {
       <JumpToDialog
         open={jumpDialogOpen}
         onOpenChange={setJumpDialogOpen}
-        onJump={handleJumpTo}
-        maxPosition={bits.length}
+        maxIndex={bits.length - 1}
+        onJumpTo={handleJumpTo}
       />
 
       <ConverterDialog
@@ -615,28 +624,7 @@ const Index = () => {
         onConvert={handleConvert}
       />
 
-      <DataGraphsDialog
-        open={graphsDialogOpen}
-        onOpenChange={setGraphsDialogOpen}
-        binaryData={bits}
-        partitions={partitions}
-      />
-
-      {activeFile && (
-        <AudioVisualizerDialog
-          open={audioDialogOpen}
-          onOpenChange={setAudioDialogOpen}
-          binaryData={bits}
-        />
-      )}
-
-      <PatternHeatmapDialog
-        open={heatmapDialogOpen}
-        onOpenChange={setHeatmapDialogOpen}
-        binaryData={bits}
-      />
-
-      {compareFile && stats && (
+      {compareFile && (
         <ComparisonDialog
           open={compareDialogOpen}
           onOpenChange={setCompareDialogOpen}
@@ -647,19 +635,28 @@ const Index = () => {
         />
       )}
 
+      <DataGraphsDialog
+        open={graphsDialogOpen}
+        onOpenChange={setGraphsDialogOpen}
+        bits={bits}
+      />
+
+      <AudioVisualizerDialog
+        open={audioDialogOpen}
+        onOpenChange={setAudioDialogOpen}
+        bits={bits}
+      />
+
+      <PatternHeatmapDialog
+        open={heatmapDialogOpen}
+        onOpenChange={setHeatmapDialogOpen}
+        bits={bits}
+      />
+
       <JobsDialog
         open={jobsDialogOpen}
         onOpenChange={setJobsDialogOpen}
       />
-
-      {/* Footer */}
-      <div className="bg-muted/30 border-t border-border px-4 py-1 flex items-center justify-between">
-        <StartupTestSuite />
-        <p className="text-xs text-muted-foreground">
-          Made by <span className="font-medium text-foreground">Ahmad Hussain</span> / <span className="font-medium text-foreground">Hexoro</span> © {currentYear}
-        </p>
-        <div className="w-20" /> {/* Spacer for balance */}
-      </div>
     </div>
   );
 };

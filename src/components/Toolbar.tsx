@@ -25,7 +25,7 @@ import {
   Briefcase,
 } from 'lucide-react';
 
-export type AppMode = 'analysis' | 'algorithm' | 'backend' | 'ml' | 'player';
+export type AppMode = 'analysis' | 'algorithm' | 'backend' | 'player';
 
 interface ToolbarProps {
   onLoad: () => void;
@@ -74,7 +74,6 @@ export const Toolbar = ({
     analysis: 'Analysis',
     algorithm: 'Algorithm',
     backend: 'Backend',
-    ml: 'Machine Learning',
     player: 'Player',
   };
   return (
@@ -207,12 +206,6 @@ export const Toolbar = ({
             className={currentMode === 'backend' ? 'bg-accent' : ''}
           >
             Backend Mode
-          </DropdownMenuItem>
-          <DropdownMenuItem 
-            onClick={() => onModeChange('ml')}
-            className={currentMode === 'ml' ? 'bg-accent' : ''}
-          >
-            Machine Learning
           </DropdownMenuItem>
           <DropdownMenuItem 
             onClick={() => onModeChange('player')}
