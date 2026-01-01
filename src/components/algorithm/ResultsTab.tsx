@@ -49,6 +49,7 @@ import {
   GitCompare,
   X,
   Layers,
+  Package,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { resultsManager, ExecutionResultV2 } from '@/lib/resultsManager';
@@ -322,6 +323,22 @@ export const ResultsTab = ({ onSelectResult }: ResultsTabProps) => {
     a.click();
     URL.revokeObjectURL(url);
     toast.success('Full CSV exported with all details');
+  };
+
+  const handleExportZIP = async (result: ExecutionResultV2) => {
+    try {
+      const blob = await resultsManager.exportAsZip(result);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `result_${result.strategyName.replace(/\s+/g, '_')}_${new Date(result.startTime).toISOString().slice(0, 10)}.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success('ZIP exported with CSV, initial data, final data, and step details');
+    } catch (error) {
+      toast.error('Failed to export ZIP');
+      console.error(error);
+    }
   };
 
   const handleExportJSON = (result: ExecutionResultV2) => {
@@ -752,14 +769,22 @@ export const ResultsTab = ({ onSelectResult }: ResultsTabProps) => {
                 </div>
 
                 {/* Export Buttons */}
-                <div className="flex gap-2">
-                  <Button size="sm" variant="outline" className="flex-1" onClick={() => handleExportCSV(selectedResult)}>
+                <div className="grid grid-cols-3 gap-2">
+                  <Button size="sm" variant="default" className="col-span-3" onClick={() => handleExportZIP(selectedResult)}>
                     <Download className="w-3 h-3 mr-1" />
-                    Export CSV
+                    Export ZIP (Full Package)
                   </Button>
-                  <Button size="sm" variant="outline" className="flex-1" onClick={() => handleExportJSON(selectedResult)}>
+                  <Button size="sm" variant="outline" onClick={() => handleExportCSV(selectedResult)}>
                     <Download className="w-3 h-3 mr-1" />
-                    Export JSON
+                    CSV
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => handleExportJSON(selectedResult)}>
+                    <Download className="w-3 h-3 mr-1" />
+                    JSON
+                  </Button>
+                  <Button size="sm" variant="ghost" className="text-destructive" onClick={() => handleDelete(selectedResult.id)}>
+                    <Trash2 className="w-3 h-3 mr-1" />
+                    Delete
                   </Button>
                 </div>
               </CardContent>

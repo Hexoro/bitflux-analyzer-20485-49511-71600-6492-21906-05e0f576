@@ -487,18 +487,11 @@ const Index = () => {
         <ResizablePanel defaultSize={45} minSize={30}>
           <BinaryViewer
             ref={viewerRef}
-            bits={bits}
+            model={activeFile.state.model}
             bitsPerRow={bitsPerRow}
             highlightRanges={highlightRanges}
-            selectedRanges={selectedRanges}
             editMode={editMode}
             idealBitIndices={idealBitIndices}
-            onBitChange={(index, value) => {
-              const newBits = bits.substring(0, index) + value + bits.substring(index + 1);
-              activeFile.state.model.loadBits(newBits);
-              activeFile.state.addToHistory(`Set bit ${index} to ${value}`);
-            }}
-            onSelectionChange={(ranges) => activeFile.state.setSelectedRanges(ranges)}
           />
         </ResizablePanel>
 
@@ -507,7 +500,7 @@ const Index = () => {
         {/* Right Panel - Mode-dependent */}
         <ResizablePanel defaultSize={40} minSize={25}>
           {appMode === 'algorithm' ? (
-            <AlgorithmPanel onEnterPlayer={handleEnterPlayerMode} />
+            <AlgorithmPanel />
           ) : appMode === 'backend' ? (
             <BackendPanel />
           ) : appMode === 'player' ? (
@@ -533,19 +526,24 @@ const Index = () => {
                 <TabsContent value="analysis" className="h-full m-0">
                   <AnalysisPanel 
                     bits={bits} 
-                    stats={stats} 
-                    onIdealBitsChange={setIdealBitIndices}
+                    stats={stats}
+                    bitsPerRow={bitsPerRow}
+                    onJumpTo={handleJumpTo}
+                    onIdealityChange={setIdealBitIndices}
                   />
                 </TabsContent>
 
                 <TabsContent value="sequences" className="h-full m-0">
-                  <SequencesPanel bits={bits} />
+                  <SequencesPanel fileState={activeFile.state} onJumpTo={handleJumpTo} />
                 </TabsContent>
 
                 <TabsContent value="boundaries" className="h-full m-0">
                   <BoundariesPanel
-                    boundaries={boundaries}
                     bits={bits}
+                    stats={stats}
+                    boundaries={boundaries}
+                    partitionManager={activeFile.state.partitionManager}
+                    onJumpTo={handleJumpTo}
                     onAppendBoundary={handleAppendBoundary}
                     onInsertBoundary={handleInsertBoundary}
                     onRemoveBoundary={handleRemoveBoundary}
@@ -554,16 +552,15 @@ const Index = () => {
                 </TabsContent>
 
                 <TabsContent value="partitions" className="h-full m-0">
-                  <PartitionsPanel partitions={partitions} bits={bits} />
+                  <PartitionsPanel partitions={partitions} onJumpTo={handleJumpTo} />
                 </TabsContent>
 
                 <TabsContent value="history" className="h-full m-0">
                   <HistoryPanelNew
                     groups={historyGroups}
-                    currentBits={bits}
-                    onRestore={handleRestoreVersion}
-                    onRestoreToNew={handleRestoreToNewFile}
-                    onCompare={handleCompareVersion}
+                    onRestoreVersion={handleRestoreVersion}
+                    onRestoreToNewFile={handleRestoreToNewFile}
+                    onCompareVersion={handleCompareVersion}
                     onToggleGroup={handleToggleHistoryGroup}
                   />
                 </TabsContent>
@@ -573,20 +570,19 @@ const Index = () => {
                     bits={bits}
                     selectedRanges={selectedRanges}
                     onTransform={handleTransform}
-                    onApplySelection={handleApplySelection}
                   />
                 </TabsContent>
 
                 <TabsContent value="anomalies" className="h-full m-0">
-                  <AnomaliesPanel bits={bits} />
+                  <AnomaliesPanel bits={bits} onJumpTo={handleJumpTo} />
                 </TabsContent>
 
                 <TabsContent value="bitstream" className="h-full m-0">
-                  <BitstreamAnalysisPanel bits={bits} />
+                  <BitstreamAnalysisPanel bits={bits} onJumpTo={handleJumpTo} />
                 </TabsContent>
 
                 <TabsContent value="notes" className="h-full m-0">
-                  <NotesPanel />
+                  <NotesPanel notesManager={activeFile.state.notesManager} />
                 </TabsContent>
               </div>
             </Tabs>
@@ -614,8 +610,8 @@ const Index = () => {
       <JumpToDialog
         open={jumpDialogOpen}
         onOpenChange={setJumpDialogOpen}
-        maxIndex={bits.length - 1}
-        onJumpTo={handleJumpTo}
+        maxPosition={bits.length}
+        onJump={handleJumpTo}
       />
 
       <ConverterDialog
@@ -638,19 +634,20 @@ const Index = () => {
       <DataGraphsDialog
         open={graphsDialogOpen}
         onOpenChange={setGraphsDialogOpen}
-        bits={bits}
+        binaryData={bits}
+        partitions={partitions}
       />
 
       <AudioVisualizerDialog
         open={audioDialogOpen}
         onOpenChange={setAudioDialogOpen}
-        bits={bits}
+        binaryData={bits}
       />
 
       <PatternHeatmapDialog
         open={heatmapDialogOpen}
         onOpenChange={setHeatmapDialogOpen}
-        bits={bits}
+        binaryData={bits}
       />
 
       <JobsDialog
