@@ -496,9 +496,9 @@ class ResultsManager {
       steps: stepsWithMemoryWindows,
     }, null, 2));
 
-    // Add steps_playback.csv for easy Player verification
+    // Add steps_playback.csv with full params for Player verification
     const playbackLines: string[] = [];
-    playbackLines.push('Step,Operation,Before Length,After Length,Bits Changed,Cost,Duration (ms),Cumulative Hash');
+    playbackLines.push('Step,Operation,Parameters (JSON),Bit Range Start,Bit Range End,Before Length,After Length,Bits Changed,Cost,Duration (ms),Cumulative Hash');
     
     result.steps.forEach((step, idx) => {
       const before = step.fullBeforeBits || step.beforeBits || '';
@@ -513,10 +513,20 @@ class ResultsManager {
       // Simple hash for verification
       const cumulative = step.cumulativeBits || after;
       const hash = this.simpleHash(cumulative);
+
+      // Get bit range
+      const rangeStart = step.bitRanges?.[0]?.start ?? 0;
+      const rangeEnd = step.bitRanges?.[0]?.end ?? before.length;
+
+      // Escape JSON params for CSV
+      const paramsJson = JSON.stringify(step.params || {}).replace(/"/g, '""');
       
       playbackLines.push([
         idx + 1,
         step.operation,
+        `"${paramsJson}"`,
+        rangeStart,
+        rangeEnd,
         before.length,
         after.length,
         bitsChanged,
@@ -526,11 +536,13 @@ class ResultsManager {
       ].join(','));
     });
     
-    // Add final verification line
+    // Add final verification info
     playbackLines.push('');
     playbackLines.push(`# Final Bits Hash: ${this.simpleHash(result.finalBits)}`);
+    playbackLines.push(`# Initial Bits Hash: ${this.simpleHash(result.initialBits)}`);
     playbackLines.push(`# Total Steps: ${result.steps.length}`);
     playbackLines.push(`# Total Cost: ${result.benchmarks.totalCost}`);
+    playbackLines.push(`# Expected Final Length: ${result.finalBits.length} bits`);
     
     zip.file('steps_playback.csv', playbackLines.join('\n'));
 

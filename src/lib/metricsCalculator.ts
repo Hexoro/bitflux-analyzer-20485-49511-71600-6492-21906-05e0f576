@@ -171,11 +171,35 @@ export function calculateMetric(metricId: string, bits: string): MetricResult {
       return { success: true, value, metricId };
     }
 
+    // Check if metric has code-based implementation in predefinedManager
+    const metricDef = predefinedManager.getMetric(metricId);
+    if (metricDef?.isCodeBased && metricDef.code) {
+      try {
+        // Execute user-defined JavaScript code
+        const fn = new Function('bits', metricDef.code + '\nreturn calculate(bits);');
+        const value = fn(bits);
+        if (typeof value !== 'number') {
+          return {
+            success: false,
+            value: 0,
+            error: `Metric '${metricId}' code must return a number, got ${typeof value}`,
+            metricId,
+          };
+        }
+        return { success: true, value, metricId };
+      } catch (codeError) {
+        return {
+          success: false,
+          value: 0,
+          error: `Metric '${metricId}' code error: ${(codeError as Error).message}`,
+          metricId,
+        };
+      }
+    }
+
     // Check built-in implementations
     const impl = METRIC_IMPLEMENTATIONS[metricId];
     if (!impl) {
-      // Check if metric exists in predefinedManager but has no implementation
-      const metricDef = predefinedManager.getMetric(metricId);
       if (metricDef) {
         return {
           success: false,

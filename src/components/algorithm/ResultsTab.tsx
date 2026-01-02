@@ -770,10 +770,19 @@ export const ResultsTab = ({ onSelectResult }: ResultsTabProps) => {
 
                 {/* Export Buttons */}
                 <div className="grid grid-cols-3 gap-2">
-                  <Button size="sm" variant="default" className="col-span-3" onClick={() => handleExportZIP(selectedResult)}>
+                  <Button 
+                    size="sm" 
+                    variant="default" 
+                    className="col-span-3" 
+                    onClick={() => handleExportZIP(selectedResult)}
+                    title="ZIP contains: result_report.csv, initial_data.txt, final_data.txt, steps_detail.json, steps_playback.csv"
+                  >
                     <Download className="w-3 h-3 mr-1" />
                     Export ZIP (Full Package)
                   </Button>
+                  <p className="col-span-3 text-xs text-muted-foreground text-center">
+                    Includes CSV report, initial/final data, step details with full params
+                  </p>
                   <Button size="sm" variant="outline" onClick={() => handleExportCSV(selectedResult)}>
                     <Download className="w-3 h-3 mr-1" />
                     CSV

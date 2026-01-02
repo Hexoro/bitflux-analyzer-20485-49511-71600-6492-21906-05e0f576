@@ -12,6 +12,9 @@ export interface PredefinedMetric {
   formula: string;
   unit?: string;
   category?: string;
+  // Code mode - executable JavaScript
+  code?: string;
+  isCodeBased?: boolean;
 }
 
 export interface PredefinedOperation {
@@ -20,6 +23,9 @@ export interface PredefinedOperation {
   description: string;
   parameters?: { name: string; type: string; description: string }[];
   category?: string;
+  // Code mode - executable JavaScript
+  code?: string;
+  isCodeBased?: boolean;
 }
 
 const STORAGE_KEYS = {
