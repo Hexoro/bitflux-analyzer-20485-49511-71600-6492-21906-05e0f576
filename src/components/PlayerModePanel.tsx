@@ -47,6 +47,7 @@ import { calculateAllMetrics } from '@/lib/metricsCalculator';
 import { toast } from 'sonner';
 import { BitDiffView } from './algorithm/BitDiffView';
 import { MetricsTimelineChart } from './algorithm/MetricsTimelineChart';
+import { MaskOverlayView } from './algorithm/MaskOverlayView';
 
 interface PlayerModePanelProps {
   onExitPlayer: () => void;
@@ -511,6 +512,7 @@ export const PlayerModePanel = ({ onExitPlayer, selectedResultId }: PlayerModePa
             <Tabs defaultValue="details" className="h-full flex flex-col">
               <TabsList>
                 <TabsTrigger value="details">Step Details</TabsTrigger>
+                <TabsTrigger value="mask">Mask Overlay</TabsTrigger>
                 <TabsTrigger value="diff">Visual Diff</TabsTrigger>
                 <TabsTrigger value="timeline">Metrics Timeline</TabsTrigger>
                 <TabsTrigger value="data">Binary Data</TabsTrigger>
@@ -657,6 +659,21 @@ export const PlayerModePanel = ({ onExitPlayer, selectedResultId }: PlayerModePa
                   <div className="text-center py-8 text-muted-foreground">
                     <Layers className="w-12 h-12 mx-auto mb-4 opacity-50" />
                     <p>Select a step to view details</p>
+                  </div>
+                )}
+              </TabsContent>
+
+              <TabsContent value="mask" className="flex-1 overflow-auto mt-4">
+                {step ? (
+                  <MaskOverlayView
+                    bits={step.fullAfterBits || step.afterBits || reconstructedBits}
+                    mask={step.params?.mask as string}
+                    bitRanges={step.bitRanges}
+                  />
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Layers className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                    <p>Select a step to view mask overlay</p>
                   </div>
                 )}
               </TabsContent>
