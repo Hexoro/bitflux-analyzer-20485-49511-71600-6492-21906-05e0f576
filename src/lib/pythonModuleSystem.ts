@@ -7,7 +7,8 @@ export interface PythonFile {
   id: string;
   name: string;
   content: string;
-  group: 'scheduler' | 'algorithm' | 'scoring' | 'policies';
+  group: 'scheduler' | 'algorithm' | 'scoring' | 'policies' | 'ai' | 'custom';
+  customGroup?: string; // For user-defined groups
   created: Date;
   modified: Date;
 }
@@ -92,10 +93,13 @@ class PythonModuleSystem {
     }
   }
 
-  // File management
-  addFile(name: string, content: string, group: PythonFile['group']): PythonFile {
-    if (!name.endsWith('.py')) {
-      throw new Error('Only Python (.py) files are allowed');
+  // File management - supports .py and .js files
+  addFile(name: string, content: string, group: PythonFile['group'], customGroup?: string): PythonFile {
+    const validExtensions = ['.py', '.js', '.ts'];
+    const hasValidExt = validExtensions.some(ext => name.endsWith(ext));
+    
+    if (!hasValidExt) {
+      throw new Error('Only Python (.py), JavaScript (.js), and TypeScript (.ts) files are allowed');
     }
 
     // Check if file with same name exists
@@ -104,17 +108,20 @@ class PythonModuleSystem {
       // Update existing file instead
       existing.content = content;
       existing.modified = new Date();
+      existing.group = group;
+      existing.customGroup = customGroup;
       this.saveToStorage();
       this.notifyListeners();
       return existing;
     }
 
-    const id = `py_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const id = `file_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const file: PythonFile = {
       id,
       name,
       content,
       group,
+      customGroup,
       created: new Date(),
       modified: new Date(),
     };
@@ -161,7 +168,7 @@ class PythonModuleSystem {
       .sort((a, b) => b.created.getTime() - a.created.getTime());
   }
 
-  // Strategy management
+  // Strategy management - only scheduler is required, algorithm and scoring recommended
   createStrategy(
     name: string, 
     schedulerFile: string, 
@@ -174,12 +181,14 @@ class PythonModuleSystem {
       throw new Error(`Scheduler file "${schedulerFile}" not found`);
     }
     
-    // Validate at least one of each required type
+    // Algorithm files are recommended but not strictly required
     if (algorithmFiles.length === 0) {
-      throw new Error('At least one algorithm file is required');
+      console.warn('No algorithm files selected - strategy may not perform any transformations');
     }
+    
+    // Scoring files are recommended but not strictly required
     if (scoringFiles.length === 0) {
-      throw new Error('At least one scoring file is required (defines budget)');
+      console.warn('No scoring files selected - using default budget of 1000');
     }
 
     // Check if strategy with same name exists
@@ -219,32 +228,42 @@ class PythonModuleSystem {
       .sort((a, b) => b.created.getTime() - a.created.getTime());
   }
 
-  validateStrategy(id: string): { valid: boolean; errors: string[] } {
+  validateStrategy(id: string): { valid: boolean; errors: string[]; warnings: string[] } {
     const strategy = this.strategies.get(id);
     if (!strategy) {
-      return { valid: false, errors: ['Strategy not found'] };
+      return { valid: false, errors: ['Strategy not found'], warnings: [] };
     }
 
     const errors: string[] = [];
+    const warnings: string[] = [];
     
     // Check scheduler (required)
     if (!this.getFileByName(strategy.schedulerFile)) {
       errors.push(`Scheduler file "${strategy.schedulerFile}" not found`);
     }
     
-    // Check algorithms
+    // Check algorithms (recommended)
     strategy.algorithmFiles.forEach(f => {
       if (!this.getFileByName(f)) {
         errors.push(`Algorithm file "${f}" not found`);
       }
     });
     
-    // Check scoring (required - defines budget)
+    // Warn if no algorithms
+    if (strategy.algorithmFiles.length === 0) {
+      warnings.push('No algorithm files - strategy may not perform transformations');
+    }
+    
+    // Check scoring (recommended but optional)
     strategy.scoringFiles.forEach(f => {
       if (!this.getFileByName(f)) {
         errors.push(`Scoring file "${f}" not found`);
       }
     });
+    
+    if (strategy.scoringFiles.length === 0) {
+      warnings.push('No scoring files - using default budget');
+    }
     
     // Check policies (optional but validate if specified)
     strategy.policyFiles.forEach(f => {
@@ -253,7 +272,18 @@ class PythonModuleSystem {
       }
     });
 
-    return { valid: errors.length === 0, errors };
+    return { valid: errors.length === 0, errors, warnings };
+  }
+
+  // Get all custom groups
+  getCustomGroups(): string[] {
+    const groups = new Set<string>();
+    for (const file of this.files.values()) {
+      if (file.customGroup) {
+        groups.add(file.customGroup);
+      }
+    }
+    return Array.from(groups);
   }
 
   /**

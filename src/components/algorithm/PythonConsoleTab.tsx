@@ -268,11 +268,23 @@ const KeyboardShortcutsDialog = () => (
 export const PythonConsoleTab = () => {
   const [tabs, setTabs] = useState<TerminalTab[]>([{
     id: 'terminal-1',
-    name: 'Terminal 1',
+    name: 'Python',
     entries: [{
       id: 'welcome',
       type: 'info',
       content: '🐍 Python Console - Master Control CLI\nType help() for available commands\n',
+      timestamp: new Date(),
+    }],
+    history: [],
+    historyIndex: -1,
+    code: '',
+  }, {
+    id: 'terminal-js',
+    name: 'JavaScript',
+    entries: [{
+      id: 'welcome-js',
+      type: 'info',
+      content: '📜 JavaScript Console\nAccess: bits, metrics, operations, fileSystemManager\nType help() for commands\n',
       timestamp: new Date(),
     }],
     history: [],
@@ -395,18 +407,67 @@ export const PythonConsoleTab = () => {
       historyIndex: -1,
     }));
 
+    const isJsTerminal = activeTab?.name === 'JavaScript' || activeTab?.id === 'terminal-js';
+
     try {
-      if (!pythonExecutor.isReady()) {
-        addEntry('info', '⏳ Loading Python runtime (first time only)...');
-        await pythonExecutor.loadPyodide();
-      }
+      if (isJsTerminal) {
+        // JavaScript execution
+        const activeFile = fileSystemManager.getActiveFile();
+        const bits = activeFile?.state.model.getBits() || '01010101';
+        
+        // Create a sandboxed context for JS execution
+        const jsContext = {
+          bits,
+          fileSystemManager,
+          pythonModuleSystem,
+          console: {
+            log: (...args: any[]) => addEntry('output', args.map(a => String(a)).join(' ')),
+            error: (...args: any[]) => addEntry('error', args.map(a => String(a)).join(' ')),
+            warn: (...args: any[]) => addEntry('info', args.map(a => String(a)).join(' ')),
+          },
+          help: () => {
+            addEntry('output', `📜 JavaScript Console Commands:
+  bits           - Current file bits (string)
+  bits.length    - Number of bits
+  fileSystemManager.getFiles() - List all files
+  fileSystemManager.getActiveFile() - Get active file
+  pythonModuleSystem.getAllStrategies() - List strategies
+  
+Example:
+  console.log("Bits:", bits.length);
+  const ones = bits.split('').filter(b => b === '1').length;
+  console.log("Ones:", ones, "Zeros:", bits.length - ones);`);
+            return 'See output above';
+          },
+        };
+        
+        try {
+          // Create function with context
+          const fn = new Function(...Object.keys(jsContext), `
+            "use strict";
+            ${code}
+          `);
+          const result = fn(...Object.values(jsContext));
+          if (result !== undefined) {
+            addEntry('output', String(result));
+          }
+          addEntry('success', '✓ JavaScript executed');
+        } catch (jsError) {
+          addEntry('error', `JS Error: ${(jsError as Error).message}`);
+        }
+      } else {
+        // Python execution
+        if (!pythonExecutor.isReady()) {
+          addEntry('info', '⏳ Loading Python runtime (first time only)...');
+          await pythonExecutor.loadPyodide();
+        }
 
-      // Get active file for context
-      const activeFile = fileSystemManager.getActiveFile();
-      const bits = activeFile?.state.model.getBits() || '01010101';
+        // Get active file for context
+        const activeFile = fileSystemManager.getActiveFile();
+        const bits = activeFile?.state.model.getBits() || '01010101';
 
-      // Create enhanced context with CLI commands
-      const enhancedCode = `
+        // Create enhanced context with CLI commands
+        const enhancedCode = `
 # CLI Helper Functions
 def help():
     """Show available commands"""
@@ -458,79 +519,80 @@ def get_results():
 ${code}
 `;
 
-      // Run with full context
-      const result = await pythonExecutor.sandboxTest(enhancedCode, {
-        bits,
-        budget: 1000,
-        metrics: {},
-        operations: ['NOT', 'AND', 'OR', 'XOR', 'NAND', 'NOR', 'XNOR', 'left_shift', 'right_shift', 'rotate_left', 'rotate_right', 'reverse', 'invert']
-      });
+        // Run with full context
+        const result = await pythonExecutor.sandboxTest(enhancedCode, {
+          bits,
+          budget: 1000,
+          metrics: {},
+          operations: ['NOT', 'AND', 'OR', 'XOR', 'NAND', 'NOR', 'XNOR', 'left_shift', 'right_shift', 'rotate_left', 'rotate_right', 'reverse', 'invert']
+        });
 
-      // Process CLI commands from logs
-      for (const log of result.logs) {
-        if (log.startsWith('[FILES]')) {
-          const files = fileSystemManager.getFiles();
-          addEntry('output', `📁 Files (${files.length}):\n${files.map(f => `  ${f.isTemp ? '⏱️' : '📄'} ${f.name} (${f.state.model.getBits().length} bits)`).join('\n')}`);
-        } else if (log.startsWith('[STRATEGIES]')) {
-          const strategies = pythonModuleSystem.getAllStrategies();
-          addEntry('output', `📋 Strategies (${strategies.length}):\n${strategies.map(s => `  - ${s.name}`).join('\n') || '  (none)'}`);
-        } else if (log.startsWith('[RUN_STRATEGY]')) {
-          const stratName = log.replace('[RUN_STRATEGY]', '').trim();
-          const strategies = pythonModuleSystem.getAllStrategies();
-          const strategy = strategies.find(s => s.name.toLowerCase().includes(stratName.toLowerCase()));
-          if (strategy) {
-            const activeFile = fileSystemManager.getActiveFile();
-            if (activeFile) {
-              addEntry('info', `🚀 Running strategy: ${strategy.name}...`);
-              try {
-                const stratResult = await strategyExecutionEngine.executeStrategy(strategy, activeFile.id);
-                addEntry('success', `✅ Strategy completed!\n  Score: ${stratResult.totalScore.toFixed(2)}\n  Operations: ${stratResult.totalOperations}\n  Duration: ${stratResult.totalDuration}ms`);
-              } catch (e) {
-                addEntry('error', `❌ Strategy failed: ${e}`);
+        // Process CLI commands from logs
+        for (const log of result.logs) {
+          if (log.startsWith('[FILES]')) {
+            const files = fileSystemManager.getFiles();
+            addEntry('output', `📁 Files (${files.length}):\n${files.map(f => `  ${f.isTemp ? '⏱️' : '📄'} ${f.name} (${f.state.model.getBits().length} bits)`).join('\n')}`);
+          } else if (log.startsWith('[STRATEGIES]')) {
+            const strategies = pythonModuleSystem.getAllStrategies();
+            addEntry('output', `📋 Strategies (${strategies.length}):\n${strategies.map(s => `  - ${s.name}`).join('\n') || '  (none)'}`);
+          } else if (log.startsWith('[RUN_STRATEGY]')) {
+            const stratName = log.replace('[RUN_STRATEGY]', '').trim();
+            const strategies = pythonModuleSystem.getAllStrategies();
+            const strategy = strategies.find(s => s.name.toLowerCase().includes(stratName.toLowerCase()));
+            if (strategy) {
+              const activeFile = fileSystemManager.getActiveFile();
+              if (activeFile) {
+                addEntry('info', `🚀 Running strategy: ${strategy.name}...`);
+                try {
+                  const stratResult = await strategyExecutionEngine.executeStrategy(strategy, activeFile.id);
+                  addEntry('success', `✅ Strategy completed!\n  Score: ${stratResult.totalScore.toFixed(2)}\n  Operations: ${stratResult.totalOperations}\n  Duration: ${stratResult.totalDuration}ms`);
+                } catch (e) {
+                  addEntry('error', `❌ Strategy failed: ${e}`);
+                }
+              } else {
+                addEntry('error', 'No active file selected');
               }
             } else {
-              addEntry('error', 'No active file selected');
+              addEntry('error', `Strategy "${stratName}" not found`);
             }
+          } else if (log.startsWith('[LOAD_FILE]')) {
+            const fileName = log.replace('[LOAD_FILE]', '').trim();
+            const files = fileSystemManager.getFiles();
+            const file = files.find(f => f.name.toLowerCase().includes(fileName.toLowerCase()));
+            if (file) {
+              fileSystemManager.setActiveFile(file.id);
+              addEntry('success', `📄 Loaded: ${file.name} (${file.state.model.getBits().length} bits)`);
+            } else {
+              addEntry('error', `File "${fileName}" not found`);
+            }
+          } else if (log.startsWith('[CLEANUP_TEMP]')) {
+            const { deleted, remaining } = fileSystemManager.cleanupTempFiles();
+            addEntry('success', `🧹 Cleaned up ${deleted} temp files (${remaining} remaining)`);
+          } else if (log.startsWith('[GET_RESULTS]')) {
+            const { resultsManager } = await import('@/lib/resultsManager');
+            const stats = resultsManager.getStatistics();
+            addEntry('output', `📊 Results: ${stats.totalResults} total, ${stats.bookmarkedCount} bookmarked, ${stats.successRate.toFixed(0)}% success rate`);
+          } else if (log.startsWith('[ERROR]')) {
+            addEntry('error', log);
+          } else if (log.startsWith('[WARN]')) {
+            addEntry('info', log);
           } else {
-            addEntry('error', `Strategy "${stratName}" not found`);
+            addEntry('output', log);
           }
-        } else if (log.startsWith('[LOAD_FILE]')) {
-          const fileName = log.replace('[LOAD_FILE]', '').trim();
-          const files = fileSystemManager.getFiles();
-          const file = files.find(f => f.name.toLowerCase().includes(fileName.toLowerCase()));
-          if (file) {
-            fileSystemManager.setActiveFile(file.id);
-            addEntry('success', `📄 Loaded: ${file.name} (${file.state.model.getBits().length} bits)`);
-          } else {
-            addEntry('error', `File "${fileName}" not found`);
-          }
-        } else if (log.startsWith('[CLEANUP_TEMP]')) {
-          const { deleted, remaining } = fileSystemManager.cleanupTempFiles();
-          addEntry('success', `🧹 Cleaned up ${deleted} temp files (${remaining} remaining)`);
-        } else if (log.startsWith('[GET_RESULTS]')) {
-          const { resultsManager } = await import('@/lib/resultsManager');
-          const stats = resultsManager.getStatistics();
-          addEntry('output', `📊 Results: ${stats.totalResults} total, ${stats.bookmarkedCount} bookmarked, ${stats.successRate.toFixed(0)}% success rate`);
-        } else if (log.startsWith('[ERROR]')) {
-          addEntry('error', log);
-        } else if (log.startsWith('[WARN]')) {
-          addEntry('info', log);
-        } else {
-          addEntry('output', log);
         }
-      }
 
-      // Add output
-      if (result.output !== null && result.output !== undefined && result.output !== 'None') {
-        addEntry('output', String(result.output));
-      }
+        // Add output
+        if (result.output !== null && result.output !== undefined && result.output !== 'None') {
+          addEntry('output', String(result.output));
+        }
 
-      if (result.error) {
-        addEntry('error', result.error);
-      } else if (result.transformations.length > 0) {
-        addEntry('success', `✓ ${result.transformations.length} transformations, ${result.stats.totalBitsChanged} bits changed`);
-      } else {
-        addEntry('info', `✓ Completed in ${result.duration.toFixed(0)}ms`);
+        if (result.error) {
+          addEntry('error', result.error);
+        } else if (result.transformations.length > 0) {
+          addEntry('success', `✓ ${result.transformations.length} transformations, ${result.stats.totalBitsChanged} bits changed`);
+        } else {
+          addEntry('info', `✓ Completed in ${result.duration.toFixed(0)}ms`);
+        }
       }
     } catch (error) {
       addEntry('error', error instanceof Error ? error.message : String(error));
@@ -538,7 +600,7 @@ ${code}
       setIsLoading(false);
       setCode('');
     }
-  }, [activeTab?.code, addEntry, setCode, updateActiveTab]);
+  }, [activeTab?.code, activeTab?.name, activeTab?.id, addEntry, setCode, updateActiveTab]);
 
   // Keyboard shortcuts
   useEffect(() => {

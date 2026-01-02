@@ -17,28 +17,29 @@ export interface LogicGateOperation {
 
 export const LogicGates: LogicGateOperation = {
   AND: (a: string, b: string): string => {
-    const length = Math.min(a.length, b.length);
+    // Extend shorter operand by repeating to match length
+    const extendedB = b.repeat(Math.ceil(a.length / b.length)).substring(0, a.length);
     let result = '';
-    for (let i = 0; i < length; i++) {
-      result += (a[i] === '1' && b[i] === '1') ? '1' : '0';
+    for (let i = 0; i < a.length; i++) {
+      result += (a[i] === '1' && extendedB[i] === '1') ? '1' : '0';
     }
     return result;
   },
 
   OR: (a: string, b: string): string => {
-    const length = Math.min(a.length, b.length);
+    const extendedB = b.repeat(Math.ceil(a.length / b.length)).substring(0, a.length);
     let result = '';
-    for (let i = 0; i < length; i++) {
-      result += (a[i] === '1' || b[i] === '1') ? '1' : '0';
+    for (let i = 0; i < a.length; i++) {
+      result += (a[i] === '1' || extendedB[i] === '1') ? '1' : '0';
     }
     return result;
   },
 
   XOR: (a: string, b: string): string => {
-    const length = Math.min(a.length, b.length);
+    const extendedB = b.repeat(Math.ceil(a.length / b.length)).substring(0, a.length);
     let result = '';
-    for (let i = 0; i < length; i++) {
-      result += a[i] !== b[i] ? '1' : '0';
+    for (let i = 0; i < a.length; i++) {
+      result += a[i] !== extendedB[i] ? '1' : '0';
     }
     return result;
   },

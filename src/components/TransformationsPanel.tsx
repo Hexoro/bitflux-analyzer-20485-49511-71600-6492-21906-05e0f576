@@ -32,6 +32,8 @@ interface TransformationsPanelProps {
 export const TransformationsPanel = ({ bits, selectedRanges, onTransform }: TransformationsPanelProps) => {
   const [operandInput, setOperandInput] = useState('');
   const [shiftAmount, setShiftAmount] = useState('1');
+  const [rangeStart, setRangeStart] = useState('');
+  const [rangeEnd, setRangeEnd] = useState('');
   const [commandInput, setCommandInput] = useState('');
   const [commandResult, setCommandResult] = useState('');
   const [operations, setOperations] = useState<PredefinedOperation[]>([]);
@@ -48,33 +50,31 @@ export const TransformationsPanel = ({ bits, selectedRanges, onTransform }: Tran
 
   const hasData = bits && bits.length > 0;
   const hasSelection = selectedRanges.length > 0;
+  
+  // Get effective range - use manual input, selection, or full range
+  const getEffectiveRange = () => {
+    const start = rangeStart ? parseInt(rangeStart) : (hasSelection ? selectedRanges[0].start : 0);
+    const end = rangeEnd ? parseInt(rangeEnd) : (hasSelection ? selectedRanges[0].end + 1 : bits.length);
+    return { start: Math.max(0, start), end: Math.min(bits.length, end) };
+  };
 
   const applyTransformation = (transformFn: (input: string) => string, description: string) => {
-    if (!hasSelection) {
-      const result = transformFn(bits);
-      onTransform(result, description);
+    const range = getEffectiveRange();
+    
+    // If we have a specific range, only transform that range
+    if (range.start > 0 || range.end < bits.length) {
+      const before = bits.substring(0, range.start);
+      const selected = bits.substring(range.start, range.end);
+      const after = bits.substring(range.end);
+      const transformed = transformFn(selected);
+      const result = before + transformed + after;
+      onTransform(result, `${description} (range ${range.start}-${range.end})`);
       return;
     }
 
-    let result = bits;
-    let offset = 0;
-    const sortedRanges = [...selectedRanges].sort((a, b) => a.start - b.start);
-
-    sortedRanges.forEach((range) => {
-      const adjustedStart = range.start + offset;
-      const adjustedEnd = range.end + offset;
-      const before = result.substring(0, adjustedStart);
-      const selected = result.substring(adjustedStart, adjustedEnd + 1);
-      const after = result.substring(adjustedEnd + 1);
-      const transformed = transformFn(selected);
-      result = before + transformed + after;
-      offset += transformed.length - selected.length;
-    });
-
-    const rangeDesc = sortedRanges.length === 1 
-      ? `range ${sortedRanges[0].start}-${sortedRanges[0].end}`
-      : `${sortedRanges.length} ranges`;
-    onTransform(result, `${description} (${rangeDesc})`);
+    // Transform entire data
+    const result = transformFn(bits);
+    onTransform(result, description);
   };
 
   const executeOperation = (opId: string) => {
@@ -315,6 +315,31 @@ export const TransformationsPanel = ({ bits, selectedRanges, onTransform }: Tran
                   />
                 </div>
               </div>
+              <div className="grid grid-cols-2 gap-4 mt-4">
+                <div className="space-y-2">
+                  <Label className="text-xs">Range Start (optional)</Label>
+                  <Input
+                    type="number"
+                    value={rangeStart}
+                    onChange={(e) => setRangeStart(e.target.value)}
+                    placeholder={hasSelection ? String(selectedRanges[0].start) : "0"}
+                    className="bg-background"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs">Range End (optional)</Label>
+                  <Input
+                    type="number"
+                    value={rangeEnd}
+                    onChange={(e) => setRangeEnd(e.target.value)}
+                    placeholder={hasSelection ? String(selectedRanges[0].end + 1) : String(bits.length)}
+                    className="bg-background"
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                💡 Leave range empty to use selection or full file. Operations will only affect the specified range.
+              </p>
             </CardContent>
           </Card>
 

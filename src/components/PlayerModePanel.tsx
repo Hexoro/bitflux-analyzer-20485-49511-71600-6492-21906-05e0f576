@@ -121,9 +121,10 @@ export const PlayerModePanel = ({ onExitPlayer, selectedResultId }: PlayerModePa
       try {
         // Get bit range if specified
         const bitRange = originalStep.bitRanges?.[0];
+        const initialLength = currentBits.length;
         
         if (bitRange && bitRange.start !== undefined && bitRange.end !== undefined) {
-          // Execute operation on specific range only
+          // Execute operation on specific range only - PRESERVING the rest of the file
           const before = currentBits.slice(0, bitRange.start);
           const target = currentBits.slice(bitRange.start, bitRange.end);
           const after = currentBits.slice(bitRange.end);
@@ -135,10 +136,12 @@ export const PlayerModePanel = ({ onExitPlayer, selectedResultId }: PlayerModePa
           );
           
           if (opResult.success) {
+            // CRITICAL: Preserve file length by using the same range size
+            // The operation result should replace only the target range
             afterBits = before + opResult.bits + after;
           } else {
             executionError = opResult.error;
-            // Fall back to stored bits if available
+            // Fall back to stored bits if available, otherwise keep current
             afterBits = originalStep.fullAfterBits || originalStep.cumulativeBits || currentBits;
           }
         } else {
@@ -156,6 +159,13 @@ export const PlayerModePanel = ({ onExitPlayer, selectedResultId }: PlayerModePa
             // Fall back to stored bits if available
             afterBits = originalStep.fullAfterBits || originalStep.cumulativeBits || currentBits;
           }
+        }
+        
+        // SAFETY: If the operation somehow changed the file length unexpectedly,
+        // prefer the stored afterBits to maintain consistency
+        if (afterBits.length !== initialLength && originalStep.fullAfterBits?.length === initialLength) {
+          console.warn(`Operation ${originalStep.operation} changed length from ${initialLength} to ${afterBits.length}, using stored bits`);
+          afterBits = originalStep.fullAfterBits;
         }
       } catch (e) {
         console.warn(`Operation ${originalStep.operation} failed:`, e);
@@ -533,10 +543,31 @@ export const PlayerModePanel = ({ onExitPlayer, selectedResultId }: PlayerModePa
                               {Object.entries(step.params).map(([key, value]) => (
                                 <div key={key} className="flex justify-between text-sm bg-muted/30 px-2 py-1 rounded">
                                   <span className="text-muted-foreground">{key}:</span>
-                                  <span className="font-mono">{JSON.stringify(value).slice(0, 50)}</span>
+                                  <span className="font-mono text-xs break-all max-w-[200px]">
+                                    {key === 'mask' && typeof value === 'string' && value.length > 32 
+                                      ? `${value.slice(0, 16)}...${value.slice(-16)} (${value.length} bits)`
+                                      : JSON.stringify(value).slice(0, 100)}
+                                  </span>
                                 </div>
                               ))}
                             </div>
+                            {/* Visual Mask Display */}
+                            {step.params.mask && typeof step.params.mask === 'string' && (
+                              <div className="mt-2 p-2 bg-cyan-500/10 border border-cyan-500/30 rounded">
+                                <h6 className="text-xs font-medium text-cyan-400 mb-1">Mask Visualization</h6>
+                                <div className="font-mono text-xs break-all max-h-20 overflow-y-auto">
+                                  {(step.params.mask as string).slice(0, 128).split('').map((bit, i) => (
+                                    <span key={i} className={bit === '1' ? 'text-cyan-400 font-bold' : 'text-muted-foreground'}>
+                                      {bit}
+                                    </span>
+                                  ))}
+                                  {(step.params.mask as string).length > 128 && <span className="text-muted-foreground">...</span>}
+                                </div>
+                                <div className="text-xs text-muted-foreground mt-1">
+                                  Active bits: {((step.params.mask as string).match(/1/g) || []).length} / {(step.params.mask as string).length}
+                                </div>
+                              </div>
+                            )}
                           </div>
                         )}
                         {step.bitRanges && step.bitRanges.length > 0 && (

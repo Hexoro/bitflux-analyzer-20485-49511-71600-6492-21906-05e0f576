@@ -119,13 +119,12 @@ export const StrategyTab = ({ onRunStrategy, isExecuting = false }: StrategyTabP
       toast.error('Select a scheduler file (required)');
       return;
     }
+    // Algorithm and scoring are now optional with warnings
     if (selectedAlgorithms.length === 0) {
-      toast.error('Select at least one algorithm file');
-      return;
+      toast.warning('No algorithm files selected - strategy may not perform transformations');
     }
     if (selectedScoring.length === 0) {
-      toast.error('Select at least one scoring file (defines budget)');
-      return;
+      toast.warning('No scoring files selected - using default budget');
     }
 
     try {
@@ -354,7 +353,7 @@ export const StrategyTab = ({ onRunStrategy, isExecuting = false }: StrategyTabP
               <Button
                 onClick={handleCreateStrategy}
                 className="w-full"
-                disabled={!strategyName || !selectedScheduler || selectedAlgorithms.length === 0 || selectedScoring.length === 0}
+                disabled={!strategyName || !selectedScheduler}
               >
                 <Save className="w-4 h-4 mr-2" />
                 Create Strategy

@@ -155,7 +155,7 @@ export const StartupTestSuite = ({
         setShowDialog(false);
       }
     }}>
-      <DialogContent className="max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
+      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FlaskConical className="w-5 h-5" />
@@ -203,8 +203,9 @@ export const StartupTestSuite = ({
             </Card>
 
             {/* Results by Category - Scrollable */}
-            <ScrollArea className="flex-1 min-h-0">
-              <div className="space-y-2 pr-4">
+            <div className="flex-1 min-h-0 overflow-hidden">
+              <ScrollArea className="h-full">
+                <div className="space-y-2 pr-4">
                 {Object.entries(resultsByCategory).map(([category, tests]) => {
                   const passed = tests.filter(t => t.passed).length;
                   const failed = tests.length - passed;
@@ -269,8 +270,9 @@ export const StartupTestSuite = ({
                     </Card>
                   );
                 })}
-              </div>
-            </ScrollArea>
+                </div>
+              </ScrollArea>
+            </div>
 
             {/* Approval Footer */}
             <DialogFooter className="mt-4 flex-shrink-0 border-t pt-4">
