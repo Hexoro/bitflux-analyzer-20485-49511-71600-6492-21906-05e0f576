@@ -619,18 +619,35 @@ export const PlayerModePanel = ({ onExitPlayer, selectedResultId }: PlayerModePa
                       <CardHeader className="pb-2">
                         <CardTitle className="text-sm flex items-center gap-2">
                           <Activity className="w-4 h-4" />
-                          Metrics
+                          Metrics (Live)
                         </CardTitle>
                       </CardHeader>
                       <CardContent>
                         <ScrollArea className="h-[200px]">
                           <div className="space-y-1">
-                            {step.metrics && Object.entries(step.metrics).slice(0, 12).map(([key, value]) => (
-                              <div key={key} className="flex justify-between text-sm">
-                                <span className="text-muted-foreground">{key}</span>
-                                <span className="font-mono">{typeof value === 'number' ? (value as number).toFixed(4) : String(value)}</span>
-                              </div>
-                            ))}
+                            {step.metrics && Object.entries(step.metrics).slice(0, 12).map(([key, value]) => {
+                              // Calculate change from previous step
+                              const prevStep = currentStep > 0 ? reconstructedSteps[currentStep - 1] : null;
+                              const prevValue = prevStep?.metrics?.[key];
+                              const change = prevValue !== undefined ? (value as number) - (prevValue as number) : null;
+                              
+                              return (
+                                <div key={key} className="flex justify-between items-center text-sm">
+                                  <span className="text-muted-foreground">{key}</span>
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-mono">{typeof value === 'number' ? (value as number).toFixed(4) : String(value)}</span>
+                                    {change !== null && change !== 0 && (
+                                      <Badge 
+                                        variant={change < 0 ? 'default' : 'secondary'} 
+                                        className={`text-xs px-1 ${change < 0 ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}
+                                      >
+                                        {change > 0 ? '+' : ''}{change.toFixed(4)}
+                                      </Badge>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
                           </div>
                         </ScrollArea>
                       </CardContent>
