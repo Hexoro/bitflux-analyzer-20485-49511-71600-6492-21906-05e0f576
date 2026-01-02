@@ -571,15 +571,6 @@ export const ResultsTab = ({ onSelectResult }: ResultsTabProps) => {
                             size="icon"
                             variant="ghost"
                             className="h-7 w-7"
-                            onClick={() => handleOpenInPlayer(result)}
-                            title="Open in Player"
-                          >
-                            <Play className="w-3 h-3" />
-                          </Button>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="h-7 w-7"
                             onClick={() => handleToggleBookmark(result.id)}
                           >
                             {result.bookmarked ? (
@@ -623,9 +614,9 @@ export const ResultsTab = ({ onSelectResult }: ResultsTabProps) => {
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-sm truncate">{selectedResult.strategyName}</CardTitle>
                   <div className="flex items-center gap-1">
-                    <Button size="sm" variant="default" onClick={() => handleOpenInPlayer(selectedResult)}>
-                      <Play className="w-3 h-3 mr-1" />
-                      Open in Player
+                    <Button size="sm" variant="outline" onClick={() => handleExportZIP(selectedResult)}>
+                      <Package className="w-3 h-3 mr-1" />
+                      Export ZIP
                     </Button>
                   </div>
                 </div>
