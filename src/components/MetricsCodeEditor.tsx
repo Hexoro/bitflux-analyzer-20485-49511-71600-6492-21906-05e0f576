@@ -1,5 +1,6 @@
 /**
  * Metrics Code Editor - Write and edit metric formulas with full documentation
+ * Supports both formula documentation mode and executable JavaScript code mode
  */
 
 import { useState, useEffect } from 'react';
@@ -10,6 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Switch } from '@/components/ui/switch';
 import {
   Accordion,
   AccordionContent,
@@ -24,11 +26,14 @@ import {
   Code,
   Info,
   Link,
-  FileText,
+  Play,
   CheckCircle2,
+  XCircle,
+  FileCode,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { predefinedManager, PredefinedMetric } from '@/lib/predefinedManager';
+import { fileSystemManager } from '@/lib/fileSystemManager';
 
 interface MetricReference {
   usedIn: string[];
@@ -36,11 +41,22 @@ interface MetricReference {
   formula: string;
 }
 
+const DEFAULT_METRIC_CODE = `function calculate(bits) {
+  // bits is a string of '0' and '1'
+  // Return a number
+  let ones = 0;
+  for (let i = 0; i < bits.length; i++) {
+    if (bits[i] === '1') ones++;
+  }
+  return ones / bits.length;
+}`;
+
 export const MetricsCodeEditor = () => {
   const [selectedMetric, setSelectedMetric] = useState<PredefinedMetric | null>(null);
   const [editForm, setEditForm] = useState<Partial<PredefinedMetric>>({});
   const [isNew, setIsNew] = useState(false);
   const [, forceUpdate] = useState({});
+  const [testResult, setTestResult] = useState<{ success: boolean; value?: number; error?: string } | null>(null);
 
   useEffect(() => {
     const unsubscribe = predefinedManager.subscribe(() => forceUpdate({}));
@@ -56,7 +72,6 @@ export const MetricsCodeEditor = () => {
     const metric = predefinedManager.getMetric(metricId);
     if (!metric) return { usedIn: [], dependsOn: [], formula: '' };
 
-    // Check where this metric is referenced
     metrics.forEach(m => {
       if (m.id !== metricId && m.formula.includes(metricId)) {
         usedIn.push(m.name);
@@ -66,7 +81,6 @@ export const MetricsCodeEditor = () => {
       }
     });
 
-    // Check if used in strategies
     if (localStorage.getItem('bitwise_strategies')?.includes(metricId)) {
       usedIn.push('Strategy Files');
     }
@@ -78,6 +92,7 @@ export const MetricsCodeEditor = () => {
     setSelectedMetric(metric);
     setEditForm({ ...metric });
     setIsNew(false);
+    setTestResult(null);
   };
 
   const handleNewMetric = () => {
@@ -89,13 +104,26 @@ export const MetricsCodeEditor = () => {
       formula: '',
       unit: '',
       category: 'Custom',
+      isCodeBased: false,
+      code: DEFAULT_METRIC_CODE,
     });
     setIsNew(true);
+    setTestResult(null);
   };
 
   const handleSave = () => {
-    if (!editForm.id || !editForm.name || !editForm.formula) {
-      toast.error('ID, Name, and Formula are required');
+    if (!editForm.id || !editForm.name) {
+      toast.error('ID and Name are required');
+      return;
+    }
+
+    if (!editForm.isCodeBased && !editForm.formula) {
+      toast.error('Formula is required in formula mode');
+      return;
+    }
+
+    if (editForm.isCodeBased && !editForm.code) {
+      toast.error('Code is required in code mode');
       return;
     }
 
@@ -103,9 +131,11 @@ export const MetricsCodeEditor = () => {
       id: editForm.id,
       name: editForm.name,
       description: editForm.description || '',
-      formula: editForm.formula,
+      formula: editForm.formula || '',
       unit: editForm.unit,
       category: editForm.category,
+      isCodeBased: editForm.isCodeBased,
+      code: editForm.isCodeBased ? editForm.code : undefined,
     };
 
     if (isNew) {
@@ -126,6 +156,33 @@ export const MetricsCodeEditor = () => {
       setSelectedMetric(null);
       setEditForm({});
       toast.success('Metric deleted');
+    }
+  };
+
+  const handleTestCode = () => {
+    if (!editForm.code) {
+      setTestResult({ success: false, error: 'No code to test' });
+      return;
+    }
+
+    // Get bits from active file
+    const activeFile = fileSystemManager.getActiveFile();
+    let testBits = '10101010'; // Default test bits
+    if (activeFile?.state?.model) {
+      const modelBits = activeFile.state.model.getBits();
+      testBits = modelBits.slice(0, 1000); // Use first 1000 bits
+    }
+
+    try {
+      const fn = new Function('bits', editForm.code + '\nreturn calculate(bits);');
+      const value = fn(testBits);
+      if (typeof value !== 'number') {
+        setTestResult({ success: false, error: `Must return a number, got ${typeof value}` });
+      } else {
+        setTestResult({ success: true, value });
+      }
+    } catch (error) {
+      setTestResult({ success: false, error: (error as Error).message });
     }
   };
 
@@ -166,16 +223,24 @@ export const MetricsCodeEditor = () => {
                         >
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                              <Calculator className="w-4 h-4 text-purple-500" />
+                              {metric.isCodeBased ? (
+                                <FileCode className="w-4 h-4 text-cyan-500" />
+                              ) : (
+                                <Calculator className="w-4 h-4 text-purple-500" />
+                              )}
                               <span className="font-medium text-sm">{metric.name}</span>
                             </div>
-                            {metric.unit && (
-                              <Badge variant="outline" className="text-xs">{metric.unit}</Badge>
-                            )}
+                            <div className="flex items-center gap-1">
+                              {metric.isCodeBased && (
+                                <Badge variant="secondary" className="text-xs">Code</Badge>
+                              )}
+                              {metric.unit && (
+                                <Badge variant="outline" className="text-xs">{metric.unit}</Badge>
+                              )}
+                            </div>
                           </div>
                           <p className="text-xs text-muted-foreground mt-1">{metric.description}</p>
                           
-                          {/* References */}
                           <div className="flex flex-wrap gap-1 mt-2">
                             {refs.usedIn.length > 0 && (
                               <Badge variant="secondary" className="text-xs">
@@ -202,8 +267,8 @@ export const MetricsCodeEditor = () => {
 
       {/* Right: Code Editor */}
       <div className="flex flex-col">
-        <Card className="flex-1 flex flex-col">
-          <CardHeader className="pb-2">
+        <Card className="flex-1 flex flex-col overflow-hidden">
+          <CardHeader className="pb-2 flex-shrink-0">
             <CardTitle className="flex items-center justify-between text-sm">
               <div className="flex items-center gap-2">
                 <Code className="w-4 h-4" />
@@ -226,7 +291,7 @@ export const MetricsCodeEditor = () => {
               </div>
             </CardTitle>
           </CardHeader>
-          <CardContent className="flex-1 flex flex-col space-y-3">
+          <CardContent className="flex-1 flex flex-col space-y-3 overflow-auto">
             {(selectedMetric || isNew) ? (
               <>
                 <div className="grid grid-cols-2 gap-3">
@@ -281,15 +346,93 @@ export const MetricsCodeEditor = () => {
                   />
                 </div>
 
-                <div className="flex-1 space-y-1">
-                  <Label className="text-xs">Formula (Code)</Label>
-                  <Textarea
-                    value={editForm.formula || ''}
-                    onChange={e => setEditForm({ ...editForm, formula: e.target.value })}
-                    placeholder="-Σ(p(x) * log₂(p(x))) for all symbols x"
-                    className="flex-1 min-h-[100px] font-mono text-sm"
+                {/* Code Mode Toggle */}
+                <div className="flex items-center justify-between p-2 bg-muted/30 rounded border">
+                  <div className="flex items-center gap-2">
+                    <FileCode className="w-4 h-4 text-cyan-500" />
+                    <div>
+                      <Label className="text-sm font-medium">Code Mode</Label>
+                      <p className="text-xs text-muted-foreground">Write executable JavaScript</p>
+                    </div>
+                  </div>
+                  <Switch
+                    checked={editForm.isCodeBased || false}
+                    onCheckedChange={(checked) => {
+                      setEditForm({ 
+                        ...editForm, 
+                        isCodeBased: checked,
+                        code: checked && !editForm.code ? DEFAULT_METRIC_CODE : editForm.code,
+                      });
+                      setTestResult(null);
+                    }}
                   />
                 </div>
+
+                {editForm.isCodeBased ? (
+                  /* Code Editor */
+                  <div className="flex-1 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs">JavaScript Code</Label>
+                      <Button size="sm" variant="outline" onClick={handleTestCode}>
+                        <Play className="w-3 h-3 mr-1" />
+                        Test
+                      </Button>
+                    </div>
+                    <Textarea
+                      value={editForm.code || ''}
+                      onChange={e => {
+                        setEditForm({ ...editForm, code: e.target.value });
+                        setTestResult(null);
+                      }}
+                      placeholder={DEFAULT_METRIC_CODE}
+                      className="flex-1 min-h-[150px] font-mono text-xs"
+                    />
+                    
+                    {/* Test Result */}
+                    {testResult && (
+                      <div className={`p-2 rounded text-xs flex items-center gap-2 ${
+                        testResult.success 
+                          ? 'bg-green-500/10 text-green-500 border border-green-500/30' 
+                          : 'bg-red-500/10 text-red-500 border border-red-500/30'
+                      }`}>
+                        {testResult.success ? (
+                          <>
+                            <CheckCircle2 className="w-4 h-4" />
+                            <span>Result: {testResult.value?.toFixed(6)}</span>
+                          </>
+                        ) : (
+                          <>
+                            <XCircle className="w-4 h-4" />
+                            <span>Error: {testResult.error}</span>
+                          </>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Code Hints */}
+                    <div className="p-2 bg-muted/30 rounded text-xs space-y-1">
+                      <p className="font-medium">Function Signature:</p>
+                      <code className="text-cyan-500">function calculate(bits: string): number</code>
+                      <p className="text-muted-foreground mt-1">
+                        <span className="font-medium">bits</span> - Binary string of '0' and '1'
+                      </p>
+                      <p className="text-muted-foreground">
+                        <span className="font-medium">return</span> - Number (the metric value)
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  /* Formula Editor */
+                  <div className="flex-1 space-y-1">
+                    <Label className="text-xs">Formula (Documentation)</Label>
+                    <Textarea
+                      value={editForm.formula || ''}
+                      onChange={e => setEditForm({ ...editForm, formula: e.target.value })}
+                      placeholder="-Σ(p(x) * log₂(p(x))) for all symbols x"
+                      className="flex-1 min-h-[100px] font-mono text-sm"
+                    />
+                  </div>
+                )}
 
                 {/* Documentation for this metric */}
                 {selectedMetric && (

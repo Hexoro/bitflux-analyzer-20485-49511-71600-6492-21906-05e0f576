@@ -84,7 +84,7 @@ export const PlayerModePanel = ({ onExitPlayer, selectedResultId }: PlayerModePa
     }
   }, [selectedResultId, results]);
 
-  // Reconstruct steps and create temp file when result changes
+  // Reconstruct steps using REAL execution (not stored bits)
   useEffect(() => {
     if (!selectedResult) {
       setReconstructedBits('');
@@ -104,37 +104,75 @@ export const PlayerModePanel = ({ onExitPlayer, selectedResultId }: PlayerModePa
     fileSystemManager.setActiveFile(tempFile.id);
     setPlayerFileId(tempFile.id);
 
+    // REAL EXECUTION MODE: Start from initial bits and execute each operation
     let currentBits = selectedResult.initialBits;
     const steps: any[] = [];
+    let verificationPassed = true;
+    let firstMismatchStep = -1;
 
     for (let i = 0; i < selectedResult.steps.length; i++) {
       const originalStep = selectedResult.steps[i];
       const beforeBits = currentBits;
 
+      // ALWAYS use real operation execution - never use stored bits
       let afterBits = currentBits;
+      let executionError: string | undefined;
       
-      // First, try to use the stored full file state
-      if (originalStep.fullAfterBits && originalStep.fullAfterBits.length > 0) {
-        afterBits = originalStep.fullAfterBits;
-      } else if (originalStep.cumulativeBits && originalStep.cumulativeBits.length > 0) {
-        afterBits = originalStep.cumulativeBits;
-      } else {
-        // Fall back to executing the operation
-        try {
+      try {
+        // Get bit range if specified
+        const bitRange = originalStep.bitRanges?.[0];
+        
+        if (bitRange && bitRange.start !== undefined && bitRange.end !== undefined) {
+          // Execute operation on specific range only
+          const before = currentBits.slice(0, bitRange.start);
+          const target = currentBits.slice(bitRange.start, bitRange.end);
+          const after = currentBits.slice(bitRange.end);
+          
+          const opResult = executeOperation(
+            originalStep.operation,
+            target,
+            originalStep.params || {}
+          );
+          
+          if (opResult.success) {
+            afterBits = before + opResult.bits + after;
+          } else {
+            executionError = opResult.error;
+            // Fall back to stored bits if available
+            afterBits = originalStep.fullAfterBits || originalStep.cumulativeBits || currentBits;
+          }
+        } else {
+          // Execute on entire bit string
           const opResult = executeOperation(
             originalStep.operation,
             currentBits,
             originalStep.params || {}
           );
+          
           if (opResult.success && opResult.bits.length > 0) {
             afterBits = opResult.bits;
+          } else {
+            executionError = opResult.error;
+            // Fall back to stored bits if available
+            afterBits = originalStep.fullAfterBits || originalStep.cumulativeBits || currentBits;
           }
-        } catch (e) {
-          console.warn(`Operation ${originalStep.operation} failed:`, e);
         }
+      } catch (e) {
+        console.warn(`Operation ${originalStep.operation} failed:`, e);
+        executionError = (e as Error).message;
+        afterBits = originalStep.fullAfterBits || originalStep.cumulativeBits || currentBits;
       }
 
+      // Calculate metrics LIVE - don't use stored snapshots
       const metricsResult = calculateAllMetrics(afterBits);
+
+      // Check if this step matches the stored result
+      const storedAfter = originalStep.fullAfterBits || originalStep.cumulativeBits || '';
+      const stepMatches = !storedAfter || afterBits === storedAfter;
+      if (!stepMatches && firstMismatchStep === -1) {
+        firstMismatchStep = i;
+        verificationPassed = false;
+      }
 
       steps.push({
         ...originalStep,
@@ -145,6 +183,9 @@ export const PlayerModePanel = ({ onExitPlayer, selectedResultId }: PlayerModePa
         cost: originalStep.cost || getOperationCost(originalStep.operation),
         cumulativeBits: afterBits,
         bitsLength: afterBits.length,
+        executionError,
+        verified: stepMatches,
+        storedAfterBits: storedAfter,
       });
 
       currentBits = afterBits;
@@ -153,17 +194,14 @@ export const PlayerModePanel = ({ onExitPlayer, selectedResultId }: PlayerModePa
     setReconstructedSteps(steps);
     setReconstructedBits(selectedResult.initialBits);
 
-    // Verify reconstruction matches final bits
-    if (currentBits === selectedResult.finalBits) {
+    // Final verification: compare reconstructed final bits with stored final
+    const finalMatches = currentBits === selectedResult.finalBits;
+    if (finalMatches && verificationPassed) {
       setVerificationStatus('passed');
     } else {
       const mismatches = countMismatches(currentBits, selectedResult.finalBits);
-      if (mismatches === 0) {
-        setVerificationStatus('passed');
-      } else {
-        console.warn(`Replay verification failed: ${mismatches} bits differ`);
-        setVerificationStatus('failed');
-      }
+      console.warn(`Replay verification failed: ${mismatches} bits differ, first mismatch at step ${firstMismatchStep}`);
+      setVerificationStatus('failed');
     }
 
     return () => {

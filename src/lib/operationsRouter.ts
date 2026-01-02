@@ -161,6 +161,33 @@ export function executeOperation(
       return { success: true, bits: result, operationId, params };
     }
 
+    // Check if operation has code-based implementation in predefinedManager
+    if (opDef.isCodeBased && opDef.code) {
+      try {
+        // Execute user-defined JavaScript code
+        const fn = new Function('bits', 'params', opDef.code + '\nreturn execute(bits, params);');
+        const result = fn(bits, params);
+        if (typeof result !== 'string') {
+          return {
+            success: false,
+            bits,
+            error: `Operation '${operationId}' code must return a string, got ${typeof result}`,
+            operationId,
+            params,
+          };
+        }
+        return { success: true, bits: result, operationId, params };
+      } catch (codeError) {
+        return {
+          success: false,
+          bits,
+          error: `Operation '${operationId}' code error: ${(codeError as Error).message}`,
+          operationId,
+          params,
+        };
+      }
+    }
+
     // Check built-in implementations
     const impl = OPERATION_IMPLEMENTATIONS[operationId];
     if (!impl) {

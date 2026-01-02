@@ -1,5 +1,6 @@
 /**
  * Operations Code Editor - Write and edit operation definitions with full documentation
+ * Supports both parameter-only mode and executable JavaScript code mode
  */
 
 import { useState, useEffect } from 'react';
@@ -10,6 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Switch } from '@/components/ui/switch';
 import {
   Accordion,
   AccordionContent,
@@ -25,9 +27,14 @@ import {
   Info,
   Link,
   Variable,
+  Play,
+  CheckCircle2,
+  XCircle,
+  FileCode,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { predefinedManager, PredefinedOperation } from '@/lib/predefinedManager';
+import { fileSystemManager } from '@/lib/fileSystemManager';
 
 interface OperationReference {
   usedIn: string[];
@@ -35,12 +42,27 @@ interface OperationReference {
   policies: string[];
 }
 
+const DEFAULT_OPERATION_CODE = `function execute(bits, params) {
+  // bits is a string of '0' and '1'
+  // params has: mask, count, position, etc.
+  // Return transformed bits string
+  const mask = params.mask || '1'.repeat(bits.length);
+  let result = '';
+  for (let i = 0; i < bits.length; i++) {
+    // XOR example
+    result += bits[i] === mask[i % mask.length] ? '0' : '1';
+  }
+  return result;
+}`;
+
 export const OperationsCodeEditor = () => {
   const [selectedOp, setSelectedOp] = useState<PredefinedOperation | null>(null);
   const [editForm, setEditForm] = useState<Partial<PredefinedOperation>>({});
   const [paramInput, setParamInput] = useState({ name: '', type: '', description: '' });
   const [isNew, setIsNew] = useState(false);
   const [, forceUpdate] = useState({});
+  const [testResult, setTestResult] = useState<{ success: boolean; result?: string; error?: string } | null>(null);
+  const [testParams, setTestParams] = useState<string>('{}');
 
   useEffect(() => {
     const unsubscribe = predefinedManager.subscribe(() => forceUpdate({}));
@@ -54,14 +76,12 @@ export const OperationsCodeEditor = () => {
     const policies: string[] = [];
     let costInScoring: number | undefined;
 
-    // Check strategy files
     try {
       const strategies = localStorage.getItem('bitwise_strategies');
       if (strategies?.includes(opId)) {
         usedIn.push('Strategy Files');
       }
 
-      // Check scoring files for cost
       const scoring = localStorage.getItem('bitwise_scoring_lua');
       if (scoring) {
         const parsed = JSON.parse(scoring);
@@ -73,7 +93,6 @@ export const OperationsCodeEditor = () => {
         }
       }
 
-      // Check policy files
       const policiesData = localStorage.getItem('bitwise_policies');
       if (policiesData) {
         const parsed = JSON.parse(policiesData);
@@ -94,6 +113,7 @@ export const OperationsCodeEditor = () => {
     setSelectedOp(op);
     setEditForm({ ...op });
     setIsNew(false);
+    setTestResult(null);
   };
 
   const handleNewOp = () => {
@@ -104,8 +124,11 @@ export const OperationsCodeEditor = () => {
       description: '',
       parameters: [],
       category: 'Custom',
+      isCodeBased: false,
+      code: DEFAULT_OPERATION_CODE,
     });
     setIsNew(true);
+    setTestResult(null);
   };
 
   const handleAddParam = () => {
@@ -134,12 +157,19 @@ export const OperationsCodeEditor = () => {
       return;
     }
 
+    if (editForm.isCodeBased && !editForm.code) {
+      toast.error('Code is required in code mode');
+      return;
+    }
+
     const op: PredefinedOperation = {
       id: editForm.id,
       name: editForm.name,
       description: editForm.description || '',
       parameters: editForm.parameters || [],
       category: editForm.category,
+      isCodeBased: editForm.isCodeBased,
+      code: editForm.isCodeBased ? editForm.code : undefined,
     };
 
     if (isNew) {
@@ -160,6 +190,41 @@ export const OperationsCodeEditor = () => {
       setSelectedOp(null);
       setEditForm({});
       toast.success('Operation deleted');
+    }
+  };
+
+  const handleTestCode = () => {
+    if (!editForm.code) {
+      setTestResult({ success: false, error: 'No code to test' });
+      return;
+    }
+
+    // Get bits from active file
+    const activeFile = fileSystemManager.getActiveFile();
+    let testBits = '10101010'; // Default test bits
+    if (activeFile?.state?.model) {
+      const modelBits = activeFile.state.model.getBits();
+      testBits = modelBits.slice(0, 100); // Use first 100 bits
+    }
+
+    let params = {};
+    try {
+      params = JSON.parse(testParams);
+    } catch (e) {
+      setTestResult({ success: false, error: 'Invalid JSON params' });
+      return;
+    }
+
+    try {
+      const fn = new Function('bits', 'params', editForm.code + '\nreturn execute(bits, params);');
+      const result = fn(testBits, params);
+      if (typeof result !== 'string') {
+        setTestResult({ success: false, error: `Must return a string, got ${typeof result}` });
+      } else {
+        setTestResult({ success: true, result: result.slice(0, 50) + (result.length > 50 ? '...' : '') });
+      }
+    } catch (error) {
+      setTestResult({ success: false, error: (error as Error).message });
     }
   };
 
@@ -200,18 +265,26 @@ export const OperationsCodeEditor = () => {
                         >
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                              <Badge variant="outline" className="font-mono text-xs">{op.id}</Badge>
+                              {op.isCodeBased ? (
+                                <FileCode className="w-4 h-4 text-cyan-500" />
+                              ) : (
+                                <Badge variant="outline" className="font-mono text-xs">{op.id}</Badge>
+                              )}
                               <span className="text-sm">{op.name}</span>
                             </div>
-                            {refs.costInScoring !== undefined && (
-                              <Badge className="bg-cyan-500/20 text-cyan-500 text-xs">
-                                Cost: {refs.costInScoring}
-                              </Badge>
-                            )}
+                            <div className="flex items-center gap-1">
+                              {op.isCodeBased && (
+                                <Badge variant="secondary" className="text-xs">Code</Badge>
+                              )}
+                              {refs.costInScoring !== undefined && (
+                                <Badge className="bg-cyan-500/20 text-cyan-500 text-xs">
+                                  Cost: {refs.costInScoring}
+                                </Badge>
+                              )}
+                            </div>
                           </div>
                           <p className="text-xs text-muted-foreground mt-1">{op.description}</p>
                           
-                          {/* Parameters */}
                           {op.parameters && op.parameters.length > 0 && (
                             <div className="flex flex-wrap gap-1 mt-1">
                               {op.parameters.map((p, i) => (
@@ -222,7 +295,6 @@ export const OperationsCodeEditor = () => {
                             </div>
                           )}
 
-                          {/* References */}
                           <div className="flex flex-wrap gap-1 mt-2">
                             {refs.usedIn.length > 0 && (
                               <Badge variant="secondary" className="text-xs">
@@ -249,8 +321,8 @@ export const OperationsCodeEditor = () => {
 
       {/* Right: Editor */}
       <div className="flex flex-col">
-        <Card className="flex-1 flex flex-col">
-          <CardHeader className="pb-2">
+        <Card className="flex-1 flex flex-col overflow-hidden">
+          <CardHeader className="pb-2 flex-shrink-0">
             <CardTitle className="flex items-center justify-between text-sm">
               <div className="flex items-center gap-2">
                 <Cog className="w-4 h-4" />
@@ -318,52 +390,143 @@ export const OperationsCodeEditor = () => {
                   />
                 </div>
 
-                {/* Parameters */}
-                <div className="space-y-2">
-                  <Label className="text-xs">Parameters</Label>
-                  
-                  {editForm.parameters && editForm.parameters.length > 0 && (
-                    <div className="space-y-1">
-                      {editForm.parameters.map((p, i) => (
-                        <div key={i} className="flex items-center justify-between p-2 bg-muted/30 rounded text-xs">
-                          <div className="flex items-center gap-2">
-                            <Variable className="w-3 h-3" />
-                            <span className="font-mono">{p.name}</span>
-                            <Badge variant="outline">{p.type}</Badge>
-                            <span className="text-muted-foreground">{p.description}</span>
-                          </div>
-                          <Button size="icon" variant="ghost" className="h-5 w-5" onClick={() => handleRemoveParam(i)}>
-                            <Trash2 className="w-3 h-3" />
-                          </Button>
-                        </div>
-                      ))}
+                {/* Code Mode Toggle */}
+                <div className="flex items-center justify-between p-2 bg-muted/30 rounded border">
+                  <div className="flex items-center gap-2">
+                    <FileCode className="w-4 h-4 text-cyan-500" />
+                    <div>
+                      <Label className="text-sm font-medium">Code Mode</Label>
+                      <p className="text-xs text-muted-foreground">Write executable JavaScript</p>
                     </div>
-                  )}
-
-                  <div className="flex gap-2">
-                    <Input
-                      value={paramInput.name}
-                      onChange={e => setParamInput({ ...paramInput, name: e.target.value })}
-                      placeholder="name"
-                      className="h-7 text-xs flex-1"
-                    />
-                    <Input
-                      value={paramInput.type}
-                      onChange={e => setParamInput({ ...paramInput, type: e.target.value })}
-                      placeholder="type"
-                      className="h-7 text-xs w-20"
-                    />
-                    <Input
-                      value={paramInput.description}
-                      onChange={e => setParamInput({ ...paramInput, description: e.target.value })}
-                      placeholder="description"
-                      className="h-7 text-xs flex-1"
-                    />
-                    <Button size="sm" variant="outline" className="h-7" onClick={handleAddParam}>
-                      <Plus className="w-3 h-3" />
-                    </Button>
                   </div>
+                  <Switch
+                    checked={editForm.isCodeBased || false}
+                    onCheckedChange={(checked) => {
+                      setEditForm({ 
+                        ...editForm, 
+                        isCodeBased: checked,
+                        code: checked && !editForm.code ? DEFAULT_OPERATION_CODE : editForm.code,
+                      });
+                      setTestResult(null);
+                    }}
+                  />
                 </div>
+
+                {editForm.isCodeBased ? (
+                  /* Code Editor */
+                  <div className="flex-1 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs">JavaScript Code</Label>
+                      <Button size="sm" variant="outline" onClick={handleTestCode}>
+                        <Play className="w-3 h-3 mr-1" />
+                        Test
+                      </Button>
+                    </div>
+                    <Textarea
+                      value={editForm.code || ''}
+                      onChange={e => {
+                        setEditForm({ ...editForm, code: e.target.value });
+                        setTestResult(null);
+                      }}
+                      placeholder={DEFAULT_OPERATION_CODE}
+                      className="flex-1 min-h-[120px] font-mono text-xs"
+                    />
+                    
+                    {/* Test Params Input */}
+                    <div className="space-y-1">
+                      <Label className="text-xs">Test Parameters (JSON)</Label>
+                      <Input
+                        value={testParams}
+                        onChange={e => setTestParams(e.target.value)}
+                        placeholder='{"mask": "10101010"}'
+                        className="h-7 text-xs font-mono"
+                      />
+                    </div>
+                    
+                    {/* Test Result */}
+                    {testResult && (
+                      <div className={`p-2 rounded text-xs flex items-center gap-2 ${
+                        testResult.success 
+                          ? 'bg-green-500/10 text-green-500 border border-green-500/30' 
+                          : 'bg-red-500/10 text-red-500 border border-red-500/30'
+                      }`}>
+                        {testResult.success ? (
+                          <>
+                            <CheckCircle2 className="w-4 h-4" />
+                            <span className="font-mono">Result: {testResult.result}</span>
+                          </>
+                        ) : (
+                          <>
+                            <XCircle className="w-4 h-4" />
+                            <span>Error: {testResult.error}</span>
+                          </>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Code Hints */}
+                    <div className="p-2 bg-muted/30 rounded text-xs space-y-1">
+                      <p className="font-medium">Function Signature:</p>
+                      <code className="text-cyan-500">function execute(bits: string, params: object): string</code>
+                      <p className="text-muted-foreground mt-1">
+                        <span className="font-medium">bits</span> - Binary string of '0' and '1'
+                      </p>
+                      <p className="text-muted-foreground">
+                        <span className="font-medium">params</span> - Object with mask, count, position, etc.
+                      </p>
+                      <p className="text-muted-foreground">
+                        <span className="font-medium">return</span> - Transformed binary string
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  /* Parameters Editor */
+                  <div className="space-y-2">
+                    <Label className="text-xs">Parameters</Label>
+                    
+                    {editForm.parameters && editForm.parameters.length > 0 && (
+                      <div className="space-y-1">
+                        {editForm.parameters.map((p, i) => (
+                          <div key={i} className="flex items-center justify-between p-2 bg-muted/30 rounded text-xs">
+                            <div className="flex items-center gap-2">
+                              <Variable className="w-3 h-3" />
+                              <span className="font-mono">{p.name}</span>
+                              <Badge variant="outline">{p.type}</Badge>
+                              <span className="text-muted-foreground">{p.description}</span>
+                            </div>
+                            <Button size="icon" variant="ghost" className="h-5 w-5" onClick={() => handleRemoveParam(i)}>
+                              <Trash2 className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="flex gap-2">
+                      <Input
+                        value={paramInput.name}
+                        onChange={e => setParamInput({ ...paramInput, name: e.target.value })}
+                        placeholder="name"
+                        className="h-7 text-xs flex-1"
+                      />
+                      <Input
+                        value={paramInput.type}
+                        onChange={e => setParamInput({ ...paramInput, type: e.target.value })}
+                        placeholder="type"
+                        className="h-7 text-xs w-20"
+                      />
+                      <Input
+                        value={paramInput.description}
+                        onChange={e => setParamInput({ ...paramInput, description: e.target.value })}
+                        placeholder="description"
+                        className="h-7 text-xs flex-1"
+                      />
+                      <Button size="sm" variant="outline" className="h-7" onClick={handleAddParam}>
+                        <Plus className="w-3 h-3" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
 
                 {/* Documentation */}
                 {selectedOp && (
