@@ -2,6 +2,7 @@
  * Complete Working Example Algorithm Files
  * Scheduler, Algorithm, Scoring, Policy - all work together
  * Budget is defined ONLY in the Scoring file
+ * AI/TensorFlow.js file examples included
  */
 
 // ===== SCHEDULER =====
@@ -509,69 +510,430 @@ def validate_all(initial_size=None, initial_entropy=None, initial_budget=1000):
     return all_passed, results
 
 def execute():
-    """Main policy validation"""
+    """Main policy execution"""
     log("=" * 50)
-    log("POLICY: Validating execution")
+    log("POLICY: Running validation checks")
     
     all_passed, results = validate_all()
     
-    log("")
-    log("Policy Checks:")
-    for r in results:
-        status = "PASS" if r["passed"] else "FAIL"
-        log(f"  [{status}] {r['check']}: {r['message']}")
+    for result in results:
+        status = "✓" if result["passed"] else "✗"
+        log(f"  [{status}] {result['check']}: {result['message']}")
     
     log("")
     if all_passed:
-        log("POLICY RESULT: ALL CHECKS PASSED")
+        log("POLICY: All checks passed")
     else:
-        log("POLICY RESULT: VIOLATIONS DETECTED")
-        violations = [r for r in results if not r["passed"]]
-        log(f"Violations: {len(violations)}")
-    
+        log("POLICY: Some checks failed - review required")
     log("=" * 50)
     
     return {
         "passed": all_passed,
-        "checks": results,
-        "violations": len([r for r in results if not r["passed"]])
+        "results": results
     }
 
-# Run policy check
+# Run policy validation
 result = execute()
-log(f"Policy passed: {result['passed']}")
 `;
 
-/**
- * Load all example files into pythonModuleSystem
+// ===== AI TENSORFLOW.JS EXAMPLE =====
+export const EXAMPLE_AI_TENSORFLOW = `/**
+ * AI Pattern Recognition using TensorFlow.js
+ * Analyzes binary patterns to predict optimal transformations
+ * 
+ * This file runs in the browser with TensorFlow.js
+ * Group: AI
  */
-export function loadExampleAlgorithmFiles(pythonModuleSystem: any): void {
-  // Check if already loaded
-  const existingFiles = pythonModuleSystem.getAllFiles();
-  const hasScheduler = existingFiles.some((f: any) => f.name === 'MasterScheduler.py');
-  
-  if (hasScheduler) {
-    console.log('Example algorithm files already loaded');
-    return;
+
+// TensorFlow.js Pattern Analyzer
+class BinaryPatternAnalyzer {
+  constructor() {
+    this.model = null;
+    this.patternSize = 8;
+    this.historySize = 100;
+    this.patterns = [];
   }
 
-  // Add all files
+  // Convert binary string to tensor-compatible format
+  bitsToTensor(bits) {
+    const normalized = [];
+    for (let i = 0; i < bits.length; i++) {
+      normalized.push(bits[i] === '1' ? 1 : 0);
+    }
+    return normalized;
+  }
+
+  // Extract patterns from binary data
+  extractPatterns(bits) {
+    const patterns = [];
+    for (let i = 0; i <= bits.length - this.patternSize; i++) {
+      const pattern = bits.slice(i, i + this.patternSize);
+      patterns.push(this.bitsToTensor(pattern));
+    }
+    return patterns;
+  }
+
+  // Calculate pattern frequency
+  analyzePatternFrequency(bits) {
+    const freq = {};
+    for (let i = 0; i <= bits.length - this.patternSize; i++) {
+      const pattern = bits.slice(i, i + this.patternSize);
+      freq[pattern] = (freq[pattern] || 0) + 1;
+    }
+    return freq;
+  }
+
+  // Predict next likely pattern
+  predictNextPattern(bits) {
+    const lastPattern = bits.slice(-this.patternSize);
+    const freq = this.analyzePatternFrequency(bits);
+    
+    // Find patterns that commonly follow this pattern
+    let bestNext = null;
+    let bestScore = 0;
+    
+    for (let i = 0; i < bits.length - this.patternSize * 2; i++) {
+      const current = bits.slice(i, i + this.patternSize);
+      if (current === lastPattern) {
+        const next = bits.slice(i + this.patternSize, i + this.patternSize * 2);
+        const score = freq[next] || 0;
+        if (score > bestScore) {
+          bestScore = score;
+          bestNext = next;
+        }
+      }
+    }
+    
+    return { pattern: bestNext, confidence: bestScore };
+  }
+
+  // Suggest operation based on pattern analysis
+  suggestOperation(bits) {
+    const entropy = this.calculateEntropy(bits);
+    const balance = this.calculateBalance(bits);
+    const transitions = this.countTransitions(bits);
+    
+    // Decision logic based on metrics
+    if (entropy > 0.95) {
+      // High entropy - try XOR with repeating pattern
+      return { operation: 'XOR', reason: 'High entropy - apply XOR to reduce' };
+    }
+    if (balance > 0.7) {
+      // Too many 1s - apply AND with alternating mask
+      return { operation: 'AND', reason: 'Too many 1s - mask down' };
+    }
+    if (balance < 0.3) {
+      // Too many 0s - apply OR with sparse mask
+      return { operation: 'OR', reason: 'Too many 0s - fill up' };
+    }
+    if (transitions / bits.length > 0.5) {
+      // High transitions - group with shifts
+      return { operation: 'ROL', reason: 'High transitions - try rotation' };
+    }
+    
+    return { operation: 'NOT', reason: 'Default operation' };
+  }
+
+  // Helper: Calculate entropy
+  calculateEntropy(bits) {
+    if (bits.length === 0) return 0;
+    const ones = (bits.match(/1/g) || []).length;
+    const p1 = ones / bits.length;
+    const p0 = 1 - p1;
+    if (p1 === 0 || p1 === 1) return 0;
+    return -(p1 * Math.log2(p1) + p0 * Math.log2(p0));
+  }
+
+  // Helper: Calculate balance
+  calculateBalance(bits) {
+    if (bits.length === 0) return 0.5;
+    const ones = (bits.match(/1/g) || []).length;
+    return ones / bits.length;
+  }
+
+  // Helper: Count transitions
+  countTransitions(bits) {
+    let count = 0;
+    for (let i = 1; i < bits.length; i++) {
+      if (bits[i] !== bits[i-1]) count++;
+    }
+    return count;
+  }
+
+  // Find optimal segment for transformation
+  findOptimalSegment(bits, segmentSize = 64) {
+    let bestSegment = { start: 0, end: segmentSize, entropy: 1 };
+    
+    for (let i = 0; i <= bits.length - segmentSize; i += 8) {
+      const segment = bits.slice(i, i + segmentSize);
+      const entropy = this.calculateEntropy(segment);
+      if (entropy < bestSegment.entropy) {
+        bestSegment = { start: i, end: i + segmentSize, entropy };
+      }
+    }
+    
+    return bestSegment;
+  }
+
+  // Generate operation sequence recommendation
+  generateSequence(bits, steps = 5) {
+    const sequence = [];
+    let currentBits = bits;
+    
+    for (let i = 0; i < steps; i++) {
+      const suggestion = this.suggestOperation(currentBits);
+      sequence.push(suggestion);
+      
+      // Simulate operation effect
+      if (suggestion.operation === 'NOT') {
+        currentBits = currentBits.split('').map(b => b === '1' ? '0' : '1').join('');
+      }
+      // Add more operation simulations as needed
+    }
+    
+    return sequence;
+  }
+}
+
+// Export for use in strategies
+const analyzer = new BinaryPatternAnalyzer();
+
+// Main execution function
+function execute(bits) {
+  console.log('AI Pattern Analyzer initialized');
+  console.log('Input size:', bits.length, 'bits');
+  
+  const patterns = analyzer.extractPatterns(bits);
+  console.log('Extracted patterns:', patterns.length);
+  
+  const suggestion = analyzer.suggestOperation(bits);
+  console.log('Suggested operation:', suggestion.operation, '-', suggestion.reason);
+  
+  const optimalSegment = analyzer.findOptimalSegment(bits);
+  console.log('Optimal segment:', optimalSegment);
+  
+  const sequence = analyzer.generateSequence(bits, 3);
+  console.log('Recommended sequence:', sequence);
+  
+  return {
+    patterns: patterns.length,
+    suggestion,
+    optimalSegment,
+    sequence
+  };
+}
+
+// For testing
+if (typeof module !== 'undefined') {
+  module.exports = { BinaryPatternAnalyzer, execute };
+}
+`;
+
+// ===== AI NEURAL NETWORK HELPER =====
+export const EXAMPLE_AI_NEURAL = `/**
+ * Neural Network Helper for Binary Analysis
+ * Builds and trains simple models for pattern prediction
+ * 
+ * Group: AI
+ */
+
+// Simple Neural Network Implementation (no TF.js dependency)
+class SimpleNeuralNetwork {
+  constructor(inputSize, hiddenSize, outputSize) {
+    this.inputSize = inputSize;
+    this.hiddenSize = hiddenSize;
+    this.outputSize = outputSize;
+    
+    // Initialize weights with random values
+    this.weightsIH = this.randomMatrix(hiddenSize, inputSize);
+    this.weightsHO = this.randomMatrix(outputSize, hiddenSize);
+    this.biasH = new Array(hiddenSize).fill(0);
+    this.biasO = new Array(outputSize).fill(0);
+    
+    this.learningRate = 0.1;
+  }
+
+  randomMatrix(rows, cols) {
+    const matrix = [];
+    for (let i = 0; i < rows; i++) {
+      matrix[i] = [];
+      for (let j = 0; j < cols; j++) {
+        matrix[i][j] = (Math.random() - 0.5) * 2;
+      }
+    }
+    return matrix;
+  }
+
+  sigmoid(x) {
+    return 1 / (1 + Math.exp(-x));
+  }
+
+  sigmoidDerivative(x) {
+    return x * (1 - x);
+  }
+
+  // Forward pass
+  forward(inputs) {
+    // Hidden layer
+    this.hiddenOutputs = [];
+    for (let i = 0; i < this.hiddenSize; i++) {
+      let sum = this.biasH[i];
+      for (let j = 0; j < this.inputSize; j++) {
+        sum += inputs[j] * this.weightsIH[i][j];
+      }
+      this.hiddenOutputs[i] = this.sigmoid(sum);
+    }
+    
+    // Output layer
+    const outputs = [];
+    for (let i = 0; i < this.outputSize; i++) {
+      let sum = this.biasO[i];
+      for (let j = 0; j < this.hiddenSize; j++) {
+        sum += this.hiddenOutputs[j] * this.weightsHO[i][j];
+      }
+      outputs[i] = this.sigmoid(sum);
+    }
+    
+    return outputs;
+  }
+
+  // Train on a single example
+  train(inputs, targets) {
+    const outputs = this.forward(inputs);
+    
+    // Calculate output errors
+    const outputErrors = [];
+    for (let i = 0; i < this.outputSize; i++) {
+      outputErrors[i] = targets[i] - outputs[i];
+    }
+    
+    // Calculate hidden errors
+    const hiddenErrors = [];
+    for (let i = 0; i < this.hiddenSize; i++) {
+      let error = 0;
+      for (let j = 0; j < this.outputSize; j++) {
+        error += outputErrors[j] * this.weightsHO[j][i];
+      }
+      hiddenErrors[i] = error;
+    }
+    
+    // Update output weights
+    for (let i = 0; i < this.outputSize; i++) {
+      const gradient = outputErrors[i] * this.sigmoidDerivative(outputs[i]);
+      for (let j = 0; j < this.hiddenSize; j++) {
+        this.weightsHO[i][j] += this.learningRate * gradient * this.hiddenOutputs[j];
+      }
+      this.biasO[i] += this.learningRate * gradient;
+    }
+    
+    // Update hidden weights
+    for (let i = 0; i < this.hiddenSize; i++) {
+      const gradient = hiddenErrors[i] * this.sigmoidDerivative(this.hiddenOutputs[i]);
+      for (let j = 0; j < this.inputSize; j++) {
+        this.weightsIH[i][j] += this.learningRate * gradient * inputs[j];
+      }
+      this.biasH[i] += this.learningRate * gradient;
+    }
+    
+    return outputs;
+  }
+
+  // Predict next bit based on pattern
+  predictNextBit(pattern) {
+    const inputs = pattern.split('').map(b => b === '1' ? 1 : 0);
+    const outputs = this.forward(inputs);
+    return outputs[0] > 0.5 ? '1' : '0';
+  }
+}
+
+// Binary Pattern Predictor
+class PatternPredictor {
+  constructor(patternSize = 8) {
+    this.patternSize = patternSize;
+    this.nn = new SimpleNeuralNetwork(patternSize, patternSize * 2, 1);
+    this.trained = false;
+  }
+
+  // Train on binary data
+  train(bits, epochs = 100) {
+    if (bits.length < this.patternSize + 1) return;
+    
+    for (let epoch = 0; epoch < epochs; epoch++) {
+      for (let i = 0; i <= bits.length - this.patternSize - 1; i++) {
+        const pattern = bits.slice(i, i + this.patternSize);
+        const nextBit = bits[i + this.patternSize];
+        
+        const inputs = pattern.split('').map(b => b === '1' ? 1 : 0);
+        const targets = [nextBit === '1' ? 1 : 0];
+        
+        this.nn.train(inputs, targets);
+      }
+    }
+    
+    this.trained = true;
+  }
+
+  // Predict next bit
+  predict(pattern) {
+    if (!this.trained) return '0';
+    return this.nn.predictNextBit(pattern);
+  }
+
+  // Generate continuation
+  generate(seed, length) {
+    let result = seed;
+    for (let i = 0; i < length; i++) {
+      const pattern = result.slice(-this.patternSize);
+      const nextBit = this.predict(pattern);
+      result += nextBit;
+    }
+    return result.slice(seed.length);
+  }
+}
+
+// Export
+const predictor = new PatternPredictor(8);
+
+function execute(bits) {
+  console.log('Neural Network Pattern Predictor');
+  console.log('Training on', bits.length, 'bits...');
+  
+  predictor.train(bits, 50);
+  
+  const testPattern = bits.slice(-8);
+  const prediction = predictor.predict(testPattern);
+  
+  const generated = predictor.generate(testPattern, 16);
+  
+  console.log('Test pattern:', testPattern);
+  console.log('Predicted next bit:', prediction);
+  console.log('Generated continuation:', generated);
+  
+  return { prediction, generated };
+}
+
+if (typeof module !== 'undefined') {
+  module.exports = { SimpleNeuralNetwork, PatternPredictor, execute };
+}
+`;
+
+// Full AI Strategy combining all files
+export const EXAMPLE_AI_STRATEGY = {
+  scheduler: 'MasterScheduler.py',
+  algorithm: 'EntropyReduction.py',
+  scoring: 'PerformanceScoring.py',
+  policy: 'ExecutionPolicy.py',
+  ai: [
+    { name: 'PatternAnalyzer.js', content: EXAMPLE_AI_TENSORFLOW },
+    { name: 'NeuralPredictor.js', content: EXAMPLE_AI_NEURAL }
+  ]
+};
+
+// Helper function to load all example files (for legacy compatibility)
+export const loadExampleAlgorithmFiles = (pythonModuleSystem: any) => {
   pythonModuleSystem.addFile('MasterScheduler.py', EXAMPLE_SCHEDULER, 'scheduler');
   pythonModuleSystem.addFile('EntropyReduction.py', EXAMPLE_ALGORITHM, 'algorithm');
   pythonModuleSystem.addFile('PerformanceScoring.py', EXAMPLE_SCORING, 'scoring');
   pythonModuleSystem.addFile('ExecutionPolicy.py', EXAMPLE_POLICY, 'policies');
+};
 
-  // Create strategy
-  try {
-    pythonModuleSystem.createStrategy(
-      'Complete Analysis Pipeline',
-      'MasterScheduler.py',
-      ['EntropyReduction.py'],
-      ['PerformanceScoring.py'],
-      ['ExecutionPolicy.py']
-    );
-    console.log('Example strategy created');
-  } catch (e) {
-    console.log('Strategy may already exist');
-  }
-}

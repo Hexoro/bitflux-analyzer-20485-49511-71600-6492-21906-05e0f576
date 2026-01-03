@@ -1,6 +1,6 @@
 /**
- * Files Tab - Python file management with groups and editable preview
- * Groups: Scheduler (1 required), Algorithm, Scoring, Policies
+ * Files Tab - Python/JS/TS file management with groups and editable preview
+ * Groups: Scheduler (1 required), Algorithm, Scoring, Policies, AI, Custom
  */
 
 import { useState, useEffect, useRef } from 'react';
@@ -24,6 +24,13 @@ import {
   AccordionTrigger,
 } from '@/components/ui/accordion';
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import {
   Upload,
   FileCode,
   Trash2,
@@ -37,6 +44,9 @@ import {
   Edit2,
   X,
   Plus,
+  Brain,
+  Folder,
+  FolderPlus,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { pythonModuleSystem, PythonFile } from '@/lib/pythonModuleSystem';
@@ -44,7 +54,9 @@ import {
   EXAMPLE_SCHEDULER, 
   EXAMPLE_ALGORITHM, 
   EXAMPLE_SCORING, 
-  EXAMPLE_POLICY 
+  EXAMPLE_POLICY,
+  EXAMPLE_AI_TENSORFLOW,
+  EXAMPLE_AI_NEURAL,
 } from '@/lib/exampleAlgorithmFiles';
 
 interface FilesTabProps {
@@ -55,16 +67,22 @@ export const FilesTab = ({ onFileSelect }: FilesTabProps) => {
   const [files, setFiles] = useState<PythonFile[]>([]);
   const [selectedFile, setSelectedFile] = useState<PythonFile | null>(null);
   const [uploadGroup, setUploadGroup] = useState<PythonFile['group']>('algorithm');
+  const [customGroupName, setCustomGroupName] = useState('');
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState('');
   const [editName, setEditName] = useState('');
   const [sortBy, setSortBy] = useState<'name' | 'date' | 'group'>('group');
+  const [customGroups, setCustomGroups] = useState<string[]>([]);
+  const [newGroupDialogOpen, setNewGroupDialogOpen] = useState(false);
+  const [newGroupName, setNewGroupName] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setFiles(pythonModuleSystem.getAllFiles());
+    setCustomGroups(pythonModuleSystem.getCustomGroups());
     const unsubscribe = pythonModuleSystem.subscribe(() => {
       setFiles(pythonModuleSystem.getAllFiles());
+      setCustomGroups(pythonModuleSystem.getCustomGroups());
     });
     return unsubscribe;
   }, []);
@@ -73,6 +91,13 @@ export const FilesTab = ({ onFileSelect }: FilesTabProps) => {
   const algorithmFiles = files.filter(f => f.group === 'algorithm');
   const scoringFiles = files.filter(f => f.group === 'scoring');
   const policyFiles = files.filter(f => f.group === 'policies');
+  const aiFiles = files.filter(f => f.group === 'ai');
+  const customFiles = files.filter(f => f.group === 'custom');
+
+  // Get files by custom group
+  const getFilesByCustomGroup = (groupName: string) => {
+    return files.filter(f => f.group === 'custom' && f.customGroup === groupName);
+  };
 
   const sortedFiles = (fileList: PythonFile[]) => {
     switch (sortBy) {
@@ -94,15 +119,19 @@ export const FilesTab = ({ onFileSelect }: FilesTabProps) => {
     if (!uploadedFiles) return;
 
     for (const file of Array.from(uploadedFiles)) {
-      if (!file.name.endsWith('.py')) {
-        toast.error(`${file.name}: Only Python (.py) files are allowed`);
+      const validExtensions = ['.py', '.js', '.ts'];
+      const hasValidExt = validExtensions.some(ext => file.name.endsWith(ext));
+      
+      if (!hasValidExt) {
+        toast.error(`${file.name}: Only Python (.py), JavaScript (.js), and TypeScript (.ts) files are allowed`);
         continue;
       }
 
       try {
         const content = await file.text();
-        pythonModuleSystem.addFile(file.name, content, uploadGroup);
-        toast.success(`${file.name} uploaded to ${uploadGroup}`);
+        const customGroup = uploadGroup === 'custom' ? customGroupName : undefined;
+        pythonModuleSystem.addFile(file.name, content, uploadGroup, customGroup);
+        toast.success(`${file.name} uploaded to ${uploadGroup}${customGroup ? ` (${customGroup})` : ''}`);
       } catch (error) {
         toast.error(`Failed to read ${file.name}`);
       }
@@ -166,12 +195,36 @@ export const FilesTab = ({ onFileSelect }: FilesTabProps) => {
     toast.success('Example strategy files added');
   };
 
+  const handleAddAIExampleFiles = () => {
+    pythonModuleSystem.addFile('PatternAnalyzer.js', EXAMPLE_AI_TENSORFLOW, 'ai');
+    pythonModuleSystem.addFile('NeuralPredictor.js', EXAMPLE_AI_NEURAL, 'ai');
+    toast.success('AI example files added (TensorFlow.js)');
+  };
+
+  const handleCreateCustomGroup = () => {
+    if (!newGroupName.trim()) {
+      toast.error('Group name is required');
+      return;
+    }
+    if (customGroups.includes(newGroupName.trim())) {
+      toast.error('Group already exists');
+      return;
+    }
+    setCustomGroupName(newGroupName.trim());
+    setNewGroupDialogOpen(false);
+    setNewGroupName('');
+    toast.success(`Custom group "${newGroupName.trim()}" ready - upload files to use it`);
+  };
+
   const getGroupIcon = (group: PythonFile['group']) => {
     switch (group) {
       case 'scheduler': return <Clock className="w-4 h-4 text-purple-500" />;
       case 'algorithm': return <Code className="w-4 h-4 text-primary" />;
       case 'scoring': return <Calculator className="w-4 h-4 text-yellow-500" />;
       case 'policies': return <Shield className="w-4 h-4 text-green-500" />;
+      case 'ai': return <Brain className="w-4 h-4 text-cyan-500" />;
+      case 'custom': return <Folder className="w-4 h-4 text-orange-500" />;
+      default: return <FileCode className="w-4 h-4" />;
     }
   };
 
@@ -189,11 +242,12 @@ export const FilesTab = ({ onFileSelect }: FilesTabProps) => {
             onClick={() => handleSelect(file)}
           >
             <div className="flex items-center gap-3">
-              <FileCode className="w-4 h-4 text-yellow-500" />
+              <FileCode className={`w-4 h-4 ${file.name.endsWith('.py') ? 'text-yellow-500' : 'text-cyan-500'}`} />
               <div>
                 <p className="font-medium font-mono text-sm">{file.name}</p>
                 <p className="text-xs text-muted-foreground">
                   {file.content.length} chars • {new Date(file.modified).toLocaleDateString()}
+                  {file.customGroup && <span className="ml-2 text-orange-400">[{file.customGroup}]</span>}
                 </p>
               </div>
             </div>
@@ -229,12 +283,12 @@ export const FilesTab = ({ onFileSelect }: FilesTabProps) => {
 
   return (
     <div className="h-full flex gap-4 p-4">
-      {/* Hidden file input - multiple allowed */}
+      {/* Hidden file input - multiple allowed, accepts .py, .js, .ts */}
       <input
         type="file"
         ref={fileInputRef}
         onChange={handleFileChange}
-        accept=".py"
+        accept=".py,.js,.ts"
         multiple
         className="hidden"
       />
@@ -274,17 +328,71 @@ export const FilesTab = ({ onFileSelect }: FilesTabProps) => {
                       Policies
                     </div>
                   </SelectItem>
+                  <SelectItem value="ai">
+                    <div className="flex items-center gap-2">
+                      <Brain className="w-4 h-4" />
+                      AI
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="custom">
+                    <div className="flex items-center gap-2">
+                      <Folder className="w-4 h-4" />
+                      Custom
+                    </div>
+                  </SelectItem>
                 </SelectContent>
               </Select>
+              
+              {uploadGroup === 'custom' && (
+                <Select value={customGroupName} onValueChange={setCustomGroupName}>
+                  <SelectTrigger className="w-32">
+                    <SelectValue placeholder="Sub-group" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {customGroups.map(g => (
+                      <SelectItem key={g} value={g}>{g}</SelectItem>
+                    ))}
+                    {customGroups.length === 0 && (
+                      <SelectItem value="" disabled>No groups yet</SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+              )}
+              
               <Button onClick={handleUpload} className="flex-1">
                 <Upload className="w-4 h-4 mr-2" />
-                Upload Python Files
+                Upload Files
               </Button>
             </div>
 
-            {/* Sort Control */}
+            {/* Custom Group Creation */}
             <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">Sort by:</span>
+              <Dialog open={newGroupDialogOpen} onOpenChange={setNewGroupDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button size="sm" variant="outline" className="h-7 text-xs">
+                    <FolderPlus className="w-3 h-3 mr-1" />
+                    New Group
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Create Custom Group</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <Input
+                      value={newGroupName}
+                      onChange={(e) => setNewGroupName(e.target.value)}
+                      placeholder="Group name (e.g., Utilities, Models)"
+                    />
+                    <Button onClick={handleCreateCustomGroup} className="w-full">
+                      Create Group
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
+
+              {/* Sort Control */}
+              <span className="text-xs text-muted-foreground ml-auto">Sort by:</span>
               <Select value={sortBy} onValueChange={(v) => setSortBy(v as typeof sortBy)}>
                 <SelectTrigger className="w-24 h-7 text-xs">
                   <SelectValue />
@@ -297,12 +405,16 @@ export const FilesTab = ({ onFileSelect }: FilesTabProps) => {
               </Select>
             </div>
 
-            {/* Example Strategy */}
+            {/* Example Files */}
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs text-muted-foreground">Add examples:</span>
               <Button size="sm" variant="outline" className="h-7 text-xs" onClick={handleAddExampleFiles}>
                 <Plus className="w-3 h-3 mr-1" />
-                Complete Strategy
+                Python Strategy
+              </Button>
+              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={handleAddAIExampleFiles}>
+                <Brain className="w-3 h-3 mr-1" />
+                AI/TensorFlow
               </Button>
             </div>
           </CardContent>
@@ -310,7 +422,7 @@ export const FilesTab = ({ onFileSelect }: FilesTabProps) => {
 
         {/* File Groups */}
         <ScrollArea className="flex-1">
-          <Accordion type="multiple" defaultValue={['scheduler', 'algorithm', 'scoring', 'policies']}>
+          <Accordion type="multiple" defaultValue={['scheduler', 'algorithm', 'scoring', 'policies', 'ai']}>
             <AccordionItem value="scheduler">
               <AccordionTrigger className="py-3">
                 <div className="flex items-center gap-2">
@@ -366,6 +478,53 @@ export const FilesTab = ({ onFileSelect }: FilesTabProps) => {
                 <FileList files={policyFiles} group="policies" />
               </AccordionContent>
             </AccordionItem>
+
+            <AccordionItem value="ai">
+              <AccordionTrigger className="py-3">
+                <div className="flex items-center gap-2">
+                  {getGroupIcon('ai')}
+                  <span>AI / TensorFlow</span>
+                  <Badge variant="secondary" className="ml-2">{aiFiles.length}</Badge>
+                  <Badge variant="outline" className="text-xs bg-cyan-500/10 text-cyan-400">JS/TS</Badge>
+                </div>
+              </AccordionTrigger>
+              <AccordionContent>
+                <FileList files={aiFiles} group="ai" />
+              </AccordionContent>
+            </AccordionItem>
+
+            {/* Custom Groups */}
+            {customGroups.length > 0 && customGroups.map(groupName => (
+              <AccordionItem key={groupName} value={`custom-${groupName}`}>
+                <AccordionTrigger className="py-3">
+                  <div className="flex items-center gap-2">
+                    <Folder className="w-4 h-4 text-orange-500" />
+                    <span>{groupName}</span>
+                    <Badge variant="secondary" className="ml-2">{getFilesByCustomGroup(groupName).length}</Badge>
+                    <Badge variant="outline" className="text-xs bg-orange-500/10 text-orange-400">Custom</Badge>
+                  </div>
+                </AccordionTrigger>
+                <AccordionContent>
+                  <FileList files={getFilesByCustomGroup(groupName)} group="custom" />
+                </AccordionContent>
+              </AccordionItem>
+            ))}
+
+            {/* Ungrouped Custom Files */}
+            {customFiles.filter(f => !f.customGroup).length > 0 && (
+              <AccordionItem value="custom-ungrouped">
+                <AccordionTrigger className="py-3">
+                  <div className="flex items-center gap-2">
+                    {getGroupIcon('custom')}
+                    <span>Custom (Ungrouped)</span>
+                    <Badge variant="secondary" className="ml-2">{customFiles.filter(f => !f.customGroup).length}</Badge>
+                  </div>
+                </AccordionTrigger>
+                <AccordionContent>
+                  <FileList files={customFiles.filter(f => !f.customGroup)} group="custom" />
+                </AccordionContent>
+              </AccordionItem>
+            )}
           </Accordion>
         </ScrollArea>
       </div>
@@ -406,6 +565,9 @@ export const FilesTab = ({ onFileSelect }: FilesTabProps) => {
             <div className="h-full flex flex-col">
               <div className="flex items-center gap-2 mb-2">
                 <Badge variant="outline">{selectedFile.group}</Badge>
+                {selectedFile.customGroup && (
+                  <Badge variant="secondary">{selectedFile.customGroup}</Badge>
+                )}
                 {isEditing && (
                   <Input
                     value={editName}
@@ -422,7 +584,7 @@ export const FilesTab = ({ onFileSelect }: FilesTabProps) => {
                   value={editContent}
                   onChange={(e) => setEditContent(e.target.value)}
                   className="flex-1 font-mono text-sm resize-none"
-                  placeholder="Python code..."
+                  placeholder="Code..."
                 />
               ) : (
                 <ScrollArea className="flex-1 border rounded-lg">
@@ -437,7 +599,7 @@ export const FilesTab = ({ onFileSelect }: FilesTabProps) => {
               <div className="text-center">
                 <FolderOpen className="w-12 h-12 mx-auto mb-4 opacity-50" />
                 <p>Select a file to preview</p>
-                <p className="text-xs mt-2">Click Edit to modify the file</p>
+                <p className="text-xs mt-2">Supports .py, .js, .ts files</p>
               </div>
             </div>
           )}
