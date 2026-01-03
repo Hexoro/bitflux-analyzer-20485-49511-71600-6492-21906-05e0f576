@@ -55,38 +55,44 @@ const DEFAULT_OPERATION_CODE = `function execute(bits, params) {
   return result;
 }`;
 
-// Built-in operation code snippets for display
+// Built-in operation code snippets for display - ALL operations
 const BUILTIN_OPERATION_CODE: Record<string, string> = {
+  // Logic Gates
   'NOT': `function execute(bits, params) {
   return bits.split('').map(bit => bit === '0' ? '1' : '0').join('');
 }`,
   'AND': `function execute(bits, params) {
   const mask = params.mask || '1'.repeat(bits.length);
-  const extendedMask = mask.repeat(Math.ceil(bits.length / mask.length)).slice(0, bits.length);
-  let result = '';
-  for (let i = 0; i < bits.length; i++) {
-    result += (bits[i] === '1' && extendedMask[i] === '1') ? '1' : '0';
-  }
-  return result;
+  const ext = mask.repeat(Math.ceil(bits.length / mask.length)).slice(0, bits.length);
+  return bits.split('').map((b, i) => (b === '1' && ext[i] === '1') ? '1' : '0').join('');
 }`,
   'OR': `function execute(bits, params) {
   const mask = params.mask || '0'.repeat(bits.length);
-  const extendedMask = mask.repeat(Math.ceil(bits.length / mask.length)).slice(0, bits.length);
-  let result = '';
-  for (let i = 0; i < bits.length; i++) {
-    result += (bits[i] === '1' || extendedMask[i] === '1') ? '1' : '0';
-  }
-  return result;
+  const ext = mask.repeat(Math.ceil(bits.length / mask.length)).slice(0, bits.length);
+  return bits.split('').map((b, i) => (b === '1' || ext[i] === '1') ? '1' : '0').join('');
 }`,
   'XOR': `function execute(bits, params) {
   const mask = params.mask || '1'.repeat(bits.length);
-  const extendedMask = mask.repeat(Math.ceil(bits.length / mask.length)).slice(0, bits.length);
-  let result = '';
-  for (let i = 0; i < bits.length; i++) {
-    result += bits[i] !== extendedMask[i] ? '1' : '0';
-  }
-  return result;
+  const ext = mask.repeat(Math.ceil(bits.length / mask.length)).slice(0, bits.length);
+  return bits.split('').map((b, i) => b !== ext[i] ? '1' : '0').join('');
 }`,
+  'NAND': `function execute(bits, params) {
+  const mask = params.mask || '1'.repeat(bits.length);
+  const ext = mask.repeat(Math.ceil(bits.length / mask.length)).slice(0, bits.length);
+  return bits.split('').map((b, i) => (b === '1' && ext[i] === '1') ? '0' : '1').join('');
+}`,
+  'NOR': `function execute(bits, params) {
+  const mask = params.mask || '0'.repeat(bits.length);
+  const ext = mask.repeat(Math.ceil(bits.length / mask.length)).slice(0, bits.length);
+  return bits.split('').map((b, i) => (b === '1' || ext[i] === '1') ? '0' : '1').join('');
+}`,
+  'XNOR': `function execute(bits, params) {
+  const mask = params.mask || '1'.repeat(bits.length);
+  const ext = mask.repeat(Math.ceil(bits.length / mask.length)).slice(0, bits.length);
+  return bits.split('').map((b, i) => b === ext[i] ? '1' : '0').join('');
+}`,
+  
+  // Shifts
   'SHL': `function execute(bits, params) {
   const amount = params.count || 1;
   if (amount >= bits.length) return '0'.repeat(bits.length);
@@ -97,6 +103,20 @@ const BUILTIN_OPERATION_CODE: Record<string, string> = {
   if (amount >= bits.length) return '0'.repeat(bits.length);
   return '0'.repeat(amount) + bits.substring(0, bits.length - amount);
 }`,
+  'ASHL': `function execute(bits, params) {
+  const amount = params.count || 1;
+  const sign = bits[0];
+  if (amount >= bits.length) return sign.repeat(bits.length);
+  return bits.substring(amount) + '0'.repeat(amount);
+}`,
+  'ASHR': `function execute(bits, params) {
+  const amount = params.count || 1;
+  const sign = bits[0];
+  if (amount >= bits.length) return sign.repeat(bits.length);
+  return sign.repeat(amount) + bits.substring(0, bits.length - amount);
+}`,
+  
+  // Rotations
   'ROL': `function execute(bits, params) {
   const amount = (params.count || 1) % bits.length;
   if (amount === 0) return bits;
@@ -107,8 +127,136 @@ const BUILTIN_OPERATION_CODE: Record<string, string> = {
   if (amount === 0) return bits;
   return bits.substring(bits.length - amount) + bits.substring(0, bits.length - amount);
 }`,
+  
+  // Bit Manipulation
   'REVERSE': `function execute(bits, params) {
   return bits.split('').reverse().join('');
+}`,
+  'TRUNCATE': `function execute(bits, params) {
+  const count = params.count || bits.length;
+  return bits.slice(0, count);
+}`,
+  'APPEND': `function execute(bits, params) {
+  return bits + (params.bits || '');
+}`,
+  'INSERT': `function execute(bits, params) {
+  const pos = params.position || 0;
+  const insert = params.bits || '';
+  return bits.slice(0, pos) + insert + bits.slice(pos);
+}`,
+  'DELETE': `function execute(bits, params) {
+  const start = params.start || 0;
+  const count = params.count || 1;
+  return bits.slice(0, start) + bits.slice(start + count);
+}`,
+  'REPLACE': `function execute(bits, params) {
+  const start = params.start || 0;
+  const replace = params.bits || '';
+  return bits.slice(0, start) + replace + bits.slice(start + replace.length);
+}`,
+  'MOVE': `function execute(bits, params) {
+  const src = params.source || 0;
+  const count = params.count || 1;
+  const dest = params.dest || 0;
+  const segment = bits.slice(src, src + count);
+  const without = bits.slice(0, src) + bits.slice(src + count);
+  return without.slice(0, dest) + segment + without.slice(dest);
+}`,
+  
+  // Packing & Alignment
+  'PAD': `function execute(bits, params) {
+  const alignment = params.alignment || 8;
+  const padWith = params.value === '1' ? '1' : '0';
+  const remainder = bits.length % alignment;
+  if (remainder === 0) return bits;
+  return bits + padWith.repeat(alignment - remainder);
+}`,
+  'PAD_LEFT': `function execute(bits, params) {
+  const count = params.count || bits.length + 8;
+  const padWith = params.value === '1' ? '1' : '0';
+  if (bits.length >= count) return bits;
+  return padWith.repeat(count - bits.length) + bits;
+}`,
+  'PAD_RIGHT': `function execute(bits, params) {
+  const count = params.count || bits.length + 8;
+  const padWith = params.value === '1' ? '1' : '0';
+  if (bits.length >= count) return bits;
+  return bits + padWith.repeat(count - bits.length);
+}`,
+  
+  // Encoding
+  'GRAY': `function execute(bits, params) {
+  if (params.direction === 'decode') {
+    let result = bits[0];
+    for (let i = 1; i < bits.length; i++) {
+      result += result[i-1] === bits[i] ? '0' : '1';
+    }
+    return result;
+  }
+  // Encode: binary to gray
+  let result = bits[0];
+  for (let i = 1; i < bits.length; i++) {
+    result += bits[i-1] === bits[i] ? '0' : '1';
+  }
+  return result;
+}`,
+  'ENDIAN': `function execute(bits, params) {
+  const byteSize = 8;
+  const bytes = [];
+  for (let i = 0; i < bits.length; i += byteSize) {
+    bytes.push(bits.slice(i, i + byteSize));
+  }
+  return bytes.reverse().join('');
+}`,
+  
+  // Arithmetic
+  'ADD': `function execute(bits, params) {
+  const value = params.value || '1';
+  let carry = 0;
+  let result = '';
+  const a = bits.padStart(Math.max(bits.length, value.length), '0');
+  const b = value.padStart(a.length, '0');
+  for (let i = a.length - 1; i >= 0; i--) {
+    const sum = parseInt(a[i]) + parseInt(b[i]) + carry;
+    result = (sum % 2) + result;
+    carry = Math.floor(sum / 2);
+  }
+  return result.slice(-bits.length);
+}`,
+  'SUB': `function execute(bits, params) {
+  const value = params.value || '1';
+  // Two's complement subtraction
+  const inverted = value.split('').map(b => b === '0' ? '1' : '0').join('');
+  let carry = 1;
+  let twoComp = '';
+  for (let i = inverted.length - 1; i >= 0; i--) {
+    const sum = parseInt(inverted[i]) + carry;
+    twoComp = (sum % 2) + twoComp;
+    carry = Math.floor(sum / 2);
+  }
+  // Now add bits + twoComp
+  let result = '';
+  carry = 0;
+  const a = bits.padStart(Math.max(bits.length, twoComp.length), '0');
+  const b = twoComp.padStart(a.length, '0');
+  for (let i = a.length - 1; i >= 0; i--) {
+    const sum = parseInt(a[i]) + parseInt(b[i]) + carry;
+    result = (sum % 2) + result;
+    carry = Math.floor(sum / 2);
+  }
+  return result.slice(-bits.length);
+}`,
+  
+  // Advanced
+  'SWAP': `function execute(bits, params) {
+  const mid = Math.floor(bits.length / 2);
+  const start1 = params.start || 0;
+  const end1 = params.end || mid;
+  const start2 = end1;
+  const end2 = Math.min(end1 + (end1 - start1), bits.length);
+  const seg1 = bits.slice(start1, end1);
+  const seg2 = bits.slice(start2, end2);
+  return bits.slice(0, start1) + seg2 + bits.slice(end1, start2) + seg1 + bits.slice(end2);
 }`,
 };
 

@@ -39,10 +39,12 @@ export interface PlayerState {
 
 const STORAGE_KEY = 'bitwise_python_files_v2';
 const STRATEGY_KEY = 'bitwise_strategies_v3';
+const CUSTOM_GROUPS_KEY = 'bitwise_custom_groups';
 
 class PythonModuleSystem {
   private files: Map<string, PythonFile> = new Map();
   private strategies: Map<string, StrategyConfig> = new Map();
+  private customGroups: Set<string> = new Set();
   private listeners: Set<() => void> = new Set();
   private playerState: PlayerState = {
     isPlaying: false,
@@ -66,6 +68,10 @@ class PythonModuleSystem {
             created: new Date(f.created),
             modified: new Date(f.modified),
           });
+          // Also register any custom groups from files
+          if (f.customGroup) {
+            this.customGroups.add(f.customGroup);
+          }
         });
       }
 
@@ -79,6 +85,13 @@ class PythonModuleSystem {
           });
         });
       }
+
+      // Load custom groups
+      const groupsData = localStorage.getItem(CUSTOM_GROUPS_KEY);
+      if (groupsData) {
+        const parsed = JSON.parse(groupsData);
+        parsed.forEach((g: string) => this.customGroups.add(g));
+      }
     } catch (error) {
       console.error('Failed to load Python files:', error);
     }
@@ -88,6 +101,7 @@ class PythonModuleSystem {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(Array.from(this.files.values())));
       localStorage.setItem(STRATEGY_KEY, JSON.stringify(Array.from(this.strategies.values())));
+      localStorage.setItem(CUSTOM_GROUPS_KEY, JSON.stringify(Array.from(this.customGroups)));
     } catch (error) {
       console.error('Failed to save Python files:', error);
     }
@@ -275,15 +289,33 @@ class PythonModuleSystem {
     return { valid: errors.length === 0, errors, warnings };
   }
 
-  // Get all custom groups
+  // Register a custom group (persists even without files)
+  registerCustomGroup(groupName: string): void {
+    if (groupName && !this.customGroups.has(groupName)) {
+      this.customGroups.add(groupName);
+      this.saveToStorage();
+      this.notifyListeners();
+    }
+  }
+
+  // Unregister a custom group
+  unregisterCustomGroup(groupName: string): void {
+    if (this.customGroups.has(groupName)) {
+      this.customGroups.delete(groupName);
+      this.saveToStorage();
+      this.notifyListeners();
+    }
+  }
+
+  // Get all custom groups (registered + from files)
   getCustomGroups(): string[] {
-    const groups = new Set<string>();
+    const groups = new Set<string>(this.customGroups);
     for (const file of this.files.values()) {
       if (file.customGroup) {
         groups.add(file.customGroup);
       }
     }
-    return Array.from(groups);
+    return Array.from(groups).sort();
   }
 
   /**

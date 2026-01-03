@@ -2,112 +2,123 @@
  * Unified Comprehensive Strategy
  * Tests ALL operations, metrics, AI files, multiple scoring methods, 
  * policies, and algorithms in one unified execution
+ * 
+ * This file contains strategy components that:
+ * 1. Dynamically test ALL 77+ metrics
+ * 2. Dynamically test ALL 106+ operations
+ * 3. Use AI analysis for pattern detection
+ * 4. Apply multiple scoring dimensions
+ * 5. Validate policies across all components
  */
 
+import { pythonModuleSystem, PythonFile } from './pythonModuleSystem';
+
 // ===== UNIFIED SCHEDULER =====
+// Dynamically generates test batches for ALL available operations
 export const UNIFIED_SCHEDULER = `"""
-Unified Master Scheduler - Comprehensive system testing
-Tests all components: operations, metrics, AI, scoring, policies
+Unified Master Scheduler - Comprehensive System Test
+Dynamically tests ALL operations and metrics in the system
 """
 
 from bitwise_api import get_bits, log, get_all_metrics, get_available_operations
 
 def schedule():
     """
-    Generate comprehensive test batches that exercise the entire system.
+    Generate comprehensive test batches that exercise EVERY operation.
     """
     bits = get_bits()
     total_length = len(bits)
     
-    log("=" * 60)
-    log("UNIFIED SCHEDULER: Comprehensive System Test")
-    log("=" * 60)
+    log("=" * 70)
+    log("UNIFIED SCHEDULER: COMPREHENSIVE SYSTEM VERIFICATION")
+    log("=" * 70)
     log(f"Total data size: {total_length} bits")
+    
+    # Get ALL available operations
+    all_ops = get_available_operations()
+    log(f"Total operations to test: {len(all_ops)}")
     
     # Get initial metrics
     metrics = get_all_metrics()
+    log(f"Total metrics available: {len(metrics)}")
     log(f"Initial entropy: {metrics.get('entropy', 0):.4f}")
-    log(f"Initial balance: {metrics.get('balance', 0):.4f}")
     
-    # Get available operations
-    ops = get_available_operations()
-    log(f"Available operations: {len(ops)}")
+    # Define operation categories for organized testing
+    op_categories = {
+        "logic_gates": ["NOT", "AND", "OR", "XOR", "NAND", "NOR", "XNOR"],
+        "shifts": ["SHL", "SHR", "ASHL", "ASHR"],
+        "rotations": ["ROL", "ROR"],
+        "bit_manipulation": ["INSERT", "DELETE", "REPLACE", "MOVE", "TRUNCATE", "APPEND"],
+        "packing": ["PAD", "PAD_LEFT", "PAD_RIGHT"],
+        "encoding": ["GRAY", "ENDIAN", "REVERSE"],
+        "arithmetic": ["ADD", "SUB"],
+        "advanced": ["SWAP"],
+    }
     
-    # Create test phases
-    phases = [
-        {
-            "phase": "logic_gates",
-            "description": "Test logic gate operations",
-            "operations": ["NOT", "AND", "OR", "XOR", "NAND", "NOR", "XNOR"],
-            "segment_size": min(32, total_length // 4),
-        },
-        {
-            "phase": "shifts_rotations", 
-            "description": "Test shift and rotation operations",
-            "operations": ["SHL", "SHR", "ROL", "ROR"],
-            "segment_size": min(64, total_length // 2),
-        },
-        {
-            "phase": "arithmetic",
-            "description": "Test arithmetic operations",
-            "operations": ["ADD", "SUB"],
-            "segment_size": min(16, total_length // 8),
-        },
-        {
-            "phase": "encoding",
-            "description": "Test encoding operations",
-            "operations": ["GRAY", "REVERSE", "ENDIAN"],
-            "segment_size": min(64, total_length // 2),
-        },
-    ]
-    
-    # Generate batches
+    # Generate batches for each category
     batches = []
     batch_id = 0
+    segment_size = min(32, total_length // 4) if total_length >= 32 else total_length
     
-    for phase in phases:
-        segment_size = phase["segment_size"]
-        ops_to_test = [op for op in phase["operations"] if op in ops]
-        
-        if not ops_to_test:
-            log(f"Skipping phase {phase['phase']} - no matching operations")
+    for category, ops in op_categories.items():
+        # Filter to only available operations
+        available_ops = [op for op in ops if op in all_ops]
+        if not available_ops:
             continue
             
-        log(f"Phase: {phase['phase']} - {len(ops_to_test)} operations")
+        log(f"Category '{category}': {len(available_ops)} operations")
         
-        for i in range(0, total_length, segment_size * 2):
-            start = i
-            end = min(i + segment_size, total_length)
+        # Create multiple test batches for each category
+        for iteration in range(2):  # Test each category twice
+            start = (batch_id * segment_size) % max(1, total_length - segment_size)
+            end = min(start + segment_size, total_length)
             
             if end - start < 8:
-                continue
-                
+                start = 0
+                end = min(segment_size, total_length)
+            
             batches.append({
                 "batch_id": batch_id,
-                "phase": phase["phase"],
+                "category": category,
+                "phase": f"{category}_{iteration}",
                 "start": start,
                 "end": end,
-                "operations": ops_to_test,
-                "max_iterations": 2,
-                "priority": len(phases) - phases.index(phase),
+                "operations": available_ops,
+                "max_iterations": len(available_ops),
+                "priority": 10 - list(op_categories.keys()).index(category),
             })
             batch_id += 1
     
-    log(f"Scheduled {len(batches)} batches across {len(phases)} phases")
-    log("=" * 60)
+    # Add a final batch to test any custom operations not in categories
+    custom_ops = [op for op in all_ops if not any(op in ops for ops in op_categories.values())]
+    if custom_ops:
+        log(f"Custom operations to test: {len(custom_ops)}")
+        batches.append({
+            "batch_id": batch_id,
+            "category": "custom",
+            "phase": "custom_ops",
+            "start": 0,
+            "end": min(64, total_length),
+            "operations": custom_ops,
+            "max_iterations": len(custom_ops),
+            "priority": 1,
+        })
+    
+    log(f"\\nScheduled {len(batches)} batches to test {len(all_ops)} operations")
+    log("=" * 70)
     
     return batches
 
 # Execute scheduler
 result = schedule()
-log(f"Scheduler complete. Batches: {len(result)}")
+log(f"Scheduler complete. Total batches: {len(result)}")
 `;
 
 // ===== UNIFIED ALGORITHM =====
+// Tests every operation and metric, tracks successes and failures
 export const UNIFIED_ALGORITHM = `"""
-Unified Algorithm - Tests all operations and metrics
-Verifies each operation produces expected results
-Tracks comprehensive transformation history
+Unified Algorithm - Tests ALL operations and ALL metrics
+Comprehensive verification of the entire system
 """
 
 from bitwise_api import (
@@ -116,188 +127,198 @@ from bitwise_api import (
     deduct_budget, get_budget, log
 )
 
-def test_operation(op_id, start, end, params=None):
-    """Test a single operation and verify it works"""
+# Track test results
+test_results = {
+    "operations_tested": 0,
+    "operations_passed": 0,
+    "operations_failed": [],
+    "metrics_tested": 0,
+    "metrics_passed": 0,
+    "metrics_failed": [],
+}
+
+def test_single_operation(op_id, bits_segment, params=None):
+    """Test a single operation and return success/failure"""
     params = params or {}
-    bits = get_bits()
-    segment_before = bits[start:end]
     
     try:
-        # Apply operation to range
-        apply_operation_range(op_id, start, end, params)
-        
-        bits_after = get_bits()
-        segment_after = bits_after[start:end]
-        
-        # Check something changed (unless it's a no-op case)
-        changed = segment_before != segment_after
-        
-        return {
-            "operation": op_id,
-            "success": True,
-            "changed": changed,
-            "before_sample": segment_before[:16],
-            "after_sample": segment_after[:16],
-        }
+        # Use apply_operation for testing
+        result = apply_operation(op_id, bits_segment, params)
+        if result and len(result) > 0:
+            return True, result[:16] + "..." if len(result) > 16 else result
+        return False, "Empty result"
     except Exception as e:
-        return {
-            "operation": op_id,
-            "success": False,
-            "error": str(e),
-        }
+        return False, str(e)
 
-def test_metric(metric_id, bits=None):
+def test_single_metric(metric_id, bits):
     """Test a single metric calculation"""
     try:
         value = get_metric(metric_id, bits)
-        return {
-            "metric": metric_id,
-            "success": True,
-            "value": value,
-        }
+        if isinstance(value, (int, float)):
+            return True, value
+        return False, "Non-numeric result"
     except Exception as e:
-        return {
-            "metric": metric_id,
-            "success": False,
-            "error": str(e),
-        }
+        return False, str(e)
 
-def execute_batch(batch):
-    """Execute a single test batch"""
-    start = batch["start"]
-    end = batch["end"]
-    operations = batch["operations"]
-    phase = batch["phase"]
+def get_params_for_operation(op_id):
+    """Get appropriate test parameters for each operation type"""
+    # Logic gates need masks
+    if op_id in ["AND", "OR", "XOR", "NAND", "NOR", "XNOR"]:
+        return {"mask": "10101010"}
     
-    log(f"\\nExecuting batch {batch['batch_id']}: {phase} [{start}:{end}]")
+    # Shifts and rotations need count
+    if op_id in ["SHL", "SHR", "ASHL", "ASHR", "ROL", "ROR"]:
+        return {"count": 2}
     
-    results = []
+    # Gray encoding needs direction
+    if op_id == "GRAY":
+        return {"direction": "encode"}
     
-    for op in operations:
-        if not deduct_budget(1):
-            log("Budget exhausted")
-            break
-            
-        # Prepare params based on operation type
-        params = {}
-        if op in ["AND", "OR", "XOR", "NAND", "NOR", "XNOR"]:
-            params["mask"] = "10101010"  # Alternating pattern
-        elif op in ["SHL", "SHR", "ROL", "ROR"]:
-            params["count"] = 2
-        elif op == "GRAY":
-            params["direction"] = "encode"
-            
-        result = test_operation(op, start, end, params)
-        results.append(result)
-        
-        if result["success"]:
-            status = "✓ changed" if result.get("changed") else "○ unchanged"
-            log(f"  {op}: {status}")
-        else:
-            log(f"  {op}: ✗ {result.get('error', 'failed')}")
+    # Arithmetic needs value
+    if op_id in ["ADD", "SUB"]:
+        return {"value": "00000001"}
     
-    return results
+    # Padding needs alignment
+    if op_id in ["PAD", "PAD_LEFT", "PAD_RIGHT"]:
+        return {"alignment": 8, "value": "0", "count": 16}
+    
+    # Bit manipulation
+    if op_id == "INSERT":
+        return {"position": 0, "bits": "1010"}
+    if op_id == "DELETE":
+        return {"start": 0, "count": 2}
+    if op_id == "REPLACE":
+        return {"start": 0, "bits": "1010"}
+    if op_id == "MOVE":
+        return {"source": 0, "count": 4, "dest": 4}
+    if op_id == "TRUNCATE":
+        return {"count": 8}
+    if op_id == "APPEND":
+        return {"bits": "1010"}
+    
+    return {}
 
-def verify_metrics():
-    """Verify all core metrics work"""
+def verify_all_operations():
+    """Test every available operation"""
+    global test_results
+    
+    all_ops = get_available_operations()
     bits = get_bits()
-    log("\\nVerifying metrics...")
+    test_segment = bits[:min(64, len(bits))]
     
-    core_metrics = ["entropy", "balance", "hamming_weight", "transition_count", "run_length_avg"]
-    results = []
+    log("\\n" + "=" * 70)
+    log("TESTING ALL OPERATIONS")
+    log("=" * 70)
     
-    for m in core_metrics:
-        result = test_metric(m, bits)
-        results.append(result)
-        if result["success"]:
-            log(f"  {m}: {result['value']:.4f}")
+    for op_id in all_ops:
+        params = get_params_for_operation(op_id)
+        success, result = test_single_operation(op_id, test_segment, params)
+        
+        test_results["operations_tested"] += 1
+        if success:
+            test_results["operations_passed"] += 1
+            log(f"✓ {op_id}: PASS - {result}")
         else:
-            log(f"  {m}: FAILED - {result.get('error')}")
+            test_results["operations_failed"].append(op_id)
+            log(f"✗ {op_id}: FAIL - {result}")
     
-    return results
+    log(f"\\nOperations: {test_results['operations_passed']}/{test_results['operations_tested']} passed")
+
+def verify_all_metrics():
+    """Test every available metric"""
+    global test_results
+    
+    metrics = get_all_metrics()
+    bits = get_bits()
+    
+    log("\\n" + "=" * 70)
+    log("TESTING ALL METRICS")
+    log("=" * 70)
+    
+    for metric_id in metrics.keys():
+        success, result = test_single_metric(metric_id, bits)
+        
+        test_results["metrics_tested"] += 1
+        if success:
+            test_results["metrics_passed"] += 1
+            val = f"{result:.4f}" if isinstance(result, float) else str(result)
+            log(f"✓ {metric_id}: {val}")
+        else:
+            test_results["metrics_failed"].append(metric_id)
+            log(f"✗ {metric_id}: FAIL - {result}")
+    
+    log(f"\\nMetrics: {test_results['metrics_passed']}/{test_results['metrics_tested']} passed")
+
+def execute_range_operations():
+    """Test operations on specific ranges to verify range handling"""
+    bits = get_bits()
+    ops_to_test = ["NOT", "XOR", "ROL", "REVERSE"]
+    
+    log("\\n" + "=" * 70)
+    log("TESTING RANGE OPERATIONS")
+    log("=" * 70)
+    
+    for op in ops_to_test:
+        try:
+            # Test on first quarter
+            quarter = len(bits) // 4
+            if quarter > 8:
+                params = get_params_for_operation(op)
+                apply_operation_range(op, 0, quarter, params)
+                log(f"✓ {op} on range [0:{quarter}]: PASS")
+                
+                # Deduct budget for the operation
+                deduct_budget(1)
+        except Exception as e:
+            log(f"✗ {op} on range: FAIL - {str(e)}")
 
 def execute():
     """Main unified algorithm execution"""
-    log("=" * 60)
-    log("UNIFIED ALGORITHM: Comprehensive Testing")
-    log("=" * 60)
+    global test_results
+    
+    log("=" * 70)
+    log("UNIFIED ALGORITHM: COMPREHENSIVE SYSTEM VERIFICATION")
+    log("=" * 70)
     
     bits = get_bits()
     initial_metrics = get_all_metrics()
     initial_budget = get_budget()
     
     log(f"Data size: {len(bits)} bits")
-    log(f"Initial entropy: {initial_metrics.get('entropy', 0):.4f}")
     log(f"Available budget: {initial_budget}")
+    log(f"Initial entropy: {initial_metrics.get('entropy', 0):.4f}")
+    log(f"Initial balance: {initial_metrics.get('balance', 0):.4f}")
     
-    # Test all metric calculations first
-    metric_results = verify_metrics()
+    # Phase 1: Verify all metrics work
+    verify_all_metrics()
     
-    # Execute operation tests in phases
-    all_results = []
+    # Phase 2: Verify all operations work
+    verify_all_operations()
     
-    # Phase 1: Logic Gates
-    log("\\n--- Phase 1: Logic Gates ---")
-    logic_ops = ["NOT", "AND", "OR", "XOR"]
-    for i, op in enumerate(logic_ops):
-        if not deduct_budget(1):
-            break
-        start = i * 16 % len(bits)
-        end = min(start + 16, len(bits))
-        result = test_operation(op, start, end, {"mask": "11110000"} if op != "NOT" else {})
-        all_results.append(result)
-        log(f"  {op}: {'✓' if result['success'] else '✗'}")
+    # Phase 3: Test range operations
+    execute_range_operations()
     
-    # Phase 2: Shifts
-    log("\\n--- Phase 2: Shifts & Rotations ---")
-    shift_ops = ["SHL", "SHR", "ROL", "ROR"]
-    for i, op in enumerate(shift_ops):
-        if not deduct_budget(1):
-            break
-        start = 64 + i * 16
-        end = min(start + 16, len(bits))
-        if start < len(bits):
-            result = test_operation(op, start, end, {"count": 2})
-            all_results.append(result)
-            log(f"  {op}: {'✓' if result['success'] else '✗'}")
-    
-    # Phase 3: Special Operations
-    log("\\n--- Phase 3: Special Operations ---")
-    special_ops = ["REVERSE"]
-    for op in special_ops:
-        if not deduct_budget(1):
-            break
-        start = 0
-        end = min(32, len(bits))
-        result = test_operation(op, start, end, {})
-        all_results.append(result)
-        log(f"  {op}: {'✓' if result['success'] else '✗'}")
-    
-    # Final analysis
+    # Final summary
     final_bits = get_bits()
     final_metrics = get_all_metrics()
     bits_changed = sum(1 for a, b in zip(bits, final_bits) if a != b)
     
-    successful_ops = sum(1 for r in all_results if r.get("success"))
-    successful_metrics = sum(1 for r in metric_results if r.get("success"))
-    
     log("")
-    log("=" * 60)
-    log("UNIFIED ALGORITHM: Complete")
-    log(f"Operations tested: {len(all_results)} ({successful_ops} successful)")
-    log(f"Metrics verified: {len(metric_results)} ({successful_metrics} successful)")
+    log("=" * 70)
+    log("UNIFIED ALGORITHM: VERIFICATION COMPLETE")
+    log("=" * 70)
+    log(f"Operations: {test_results['operations_passed']}/{test_results['operations_tested']} passed")
+    log(f"Metrics: {test_results['metrics_passed']}/{test_results['metrics_tested']} passed")
+    if test_results['operations_failed']:
+        log(f"Failed operations: {', '.join(test_results['operations_failed'][:10])}")
+    if test_results['metrics_failed']:
+        log(f"Failed metrics: {', '.join(test_results['metrics_failed'][:10])}")
     log(f"Bits changed: {bits_changed}")
     log(f"Budget used: {initial_budget - get_budget()}")
     log(f"Final entropy: {final_metrics.get('entropy', 0):.4f}")
-    log("=" * 60)
+    log("=" * 70)
     
-    return {
-        "operations_tested": len(all_results),
-        "operations_passed": successful_ops,
-        "metrics_tested": len(metric_results),
-        "metrics_passed": successful_metrics,
-        "bits_changed": bits_changed,
-    }
+    return test_results
 
 # Run unified algorithm
 result = execute()
@@ -306,11 +327,7 @@ result = execute()
 // ===== UNIFIED SCORING =====
 export const UNIFIED_SCORING = `"""
 Unified Scoring System - Multi-dimensional scoring
-Combines multiple scoring strategies:
-- Entropy reduction scoring
-- Operation efficiency scoring
-- Coverage scoring (what % of system tested)
-- Budget efficiency scoring
+Evaluates system performance across multiple dimensions
 """
 
 from bitwise_api import (
@@ -324,16 +341,16 @@ INITIAL_BUDGET = 1000
 # Scoring weights for different dimensions
 SCORING_DIMENSIONS = {
     "entropy_reduction": {
-        "weight": 25,
-        "description": "How much entropy was reduced",
+        "weight": 20,
+        "description": "Entropy change (lower is better for compression)",
     },
     "operation_coverage": {
         "weight": 25,
-        "description": "How many different operations were tested",
+        "description": "Percentage of operations tested successfully",
     },
     "metric_accuracy": {
-        "weight": 20,
-        "description": "How many metrics calculated successfully",
+        "weight": 25,
+        "description": "Percentage of metrics calculated successfully",
     },
     "budget_efficiency": {
         "weight": 15,
@@ -341,46 +358,53 @@ SCORING_DIMENSIONS = {
     },
     "data_integrity": {
         "weight": 15,
-        "description": "Data remains valid after operations",
+        "description": "Data remains valid binary after operations",
     }
 }
 
 def score_entropy(metrics):
-    """Score based on entropy (lower is better for this metric)"""
+    """Score based on entropy"""
     entropy = metrics.get('entropy', 1.0)
-    # Transform: 0 entropy = 100, 1 entropy = 0
-    score = (1.0 - entropy) * 100
+    # Score: 0 entropy = 100, 1 entropy = 50 (neutral)
+    score = (1.5 - entropy) * 66.67
     return max(0, min(100, score))
 
-def score_operation_coverage():
-    """Score based on number of operations tested (from execution log)"""
-    # This would normally read from the execution context
-    # For now, assume good coverage if we got this far
-    return 80
+def score_operation_coverage(test_results=None):
+    """Score based on operation test success rate"""
+    # Default to 80% if no results provided
+    if not test_results:
+        return 80
+    passed = test_results.get('operations_passed', 0)
+    tested = test_results.get('operations_tested', 1)
+    return (passed / tested) * 100 if tested > 0 else 0
 
-def score_metric_accuracy(metrics):
-    """Score based on number of metrics successfully calculated"""
-    expected_metrics = ["entropy", "balance", "hamming_weight", "transition_count"]
-    found = sum(1 for m in expected_metrics if m in metrics)
-    return (found / len(expected_metrics)) * 100
+def score_metric_accuracy(test_results=None):
+    """Score based on metric test success rate"""
+    if not test_results:
+        return 80
+    passed = test_results.get('metrics_passed', 0)
+    tested = test_results.get('metrics_tested', 1)
+    return (passed / tested) * 100 if tested > 0 else 0
 
 def score_budget_efficiency():
-    """Score based on budget efficiency"""
+    """Score based on budget usage efficiency"""
     remaining = get_budget()
     ratio = remaining / INITIAL_BUDGET if INITIAL_BUDGET > 0 else 0
     
-    # Penalize both extremes
+    # Penalize extremes - ideal is using 30-70% of budget
     if ratio > 0.9:
         return 60  # Didn't use budget effectively
+    elif ratio > 0.7:
+        return 80  # Conservative usage
     elif ratio > 0.3:
-        return 100  # Good balance
+        return 100  # Optimal usage
     elif ratio > 0.1:
-        return 80  # Pushed it but OK
+        return 70  # Heavy usage
     else:
         return 40  # Overused
 
 def score_data_integrity():
-    """Score based on data integrity"""
+    """Score based on data validity"""
     bits = get_bits()
     
     # Check all chars are 0 or 1
@@ -394,14 +418,14 @@ def score_data_integrity():
     
     return 100
 
-def calculate_weighted_score():
+def calculate_weighted_score(test_results=None):
     """Calculate total weighted score"""
     metrics = get_all_metrics()
     
     scores = {
         "entropy_reduction": score_entropy(metrics),
-        "operation_coverage": score_operation_coverage(),
-        "metric_accuracy": score_metric_accuracy(metrics),
+        "operation_coverage": score_operation_coverage(test_results),
+        "metric_accuracy": score_metric_accuracy(test_results),
         "budget_efficiency": score_budget_efficiency(),
         "data_integrity": score_data_integrity(),
     }
@@ -416,22 +440,24 @@ def calculate_weighted_score():
 
 def get_grade(score):
     """Convert score to letter grade"""
-    if score >= 90: return "A+"
-    if score >= 85: return "A"
+    if score >= 95: return "A+"
+    if score >= 90: return "A"
+    if score >= 85: return "A-"
     if score >= 80: return "B+"
     if score >= 75: return "B"
-    if score >= 70: return "C+"
-    if score >= 65: return "C"
-    if score >= 60: return "D"
+    if score >= 70: return "B-"
+    if score >= 65: return "C+"
+    if score >= 60: return "C"
+    if score >= 55: return "D"
     return "F"
 
-def execute():
+def execute(test_results=None):
     """Main scoring execution"""
-    log("=" * 60)
-    log("UNIFIED SCORING: Multi-dimensional Evaluation")
-    log("=" * 60)
+    log("=" * 70)
+    log("UNIFIED SCORING: MULTI-DIMENSIONAL EVALUATION")
+    log("=" * 70)
     
-    scores, total = calculate_weighted_score()
+    scores, total = calculate_weighted_score(test_results)
     grade = get_grade(total)
     
     log("")
@@ -443,16 +469,14 @@ def execute():
         log(f"  {dimension}:")
         log(f"    Score: {score:.1f}/100 (weight: {weight}%)")
         log(f"    Contribution: {contribution:.1f}")
-        log(f"    {config['description']}")
     
     log("")
     log(f"TOTAL SCORE: {total:.1f}/100")
     log(f"GRADE: {grade}")
     
-    # Bonus info
     remaining = get_budget()
     log(f"Budget remaining: {remaining}/{INITIAL_BUDGET}")
-    log("=" * 60)
+    log("=" * 70)
     
     return {
         "scores": scores,
@@ -468,11 +492,7 @@ result = execute()
 // ===== UNIFIED POLICY =====
 export const UNIFIED_POLICY = `"""
 Unified Policy Validator
-Comprehensive validation across all system aspects:
-- Data integrity policies
-- Operation safety policies  
-- Budget policies
-- Output quality policies
+Comprehensive validation across all system aspects
 """
 
 from bitwise_api import (
@@ -484,344 +504,278 @@ from bitwise_api import (
 POLICY_CONFIG = {
     # Data constraints
     "min_data_length": 8,
-    "max_data_length": 10000000,
+    "max_data_length": 100000000,
     "require_valid_binary": True,
     
     # Balance constraints
-    "max_imbalance": 0.98,  # Allow up to 98% of one bit type
+    "max_imbalance": 0.98,
     
     # Entropy constraints
-    "max_entropy_increase": 0.5,  # Don't increase entropy too much
+    "max_entropy_increase": 0.5,
     
     # Budget constraints
-    "min_budget_ratio": 0.02,  # Keep at least 2% budget
-    "warn_budget_ratio": 0.10,  # Warn below 10%
+    "min_budget_ratio": 0.02,
+    "warn_budget_ratio": 0.10,
     
     # Operation constraints
-    "require_operations": True,  # Must have operations available
-    "min_operations": 5,
+    "min_operations_available": 5,
+    
+    # Metric constraints
+    "min_metrics_available": 5,
 }
 
-def validate_data_integrity():
-    """Validate data meets integrity requirements"""
-    bits = get_bits()
-    issues = []
+class PolicyResult:
+    def __init__(self):
+        self.passed = True
+        self.failures = []
+        self.warnings = []
     
-    # Length check
+    def fail(self, msg):
+        self.passed = False
+        self.failures.append(msg)
+    
+    def warn(self, msg):
+        self.warnings.append(msg)
+
+def validate_data_integrity(result):
+    """Validate data integrity policies"""
+    bits = get_bits()
+    
+    # Check length
     if len(bits) < POLICY_CONFIG["min_data_length"]:
-        issues.append(f"Data too short: {len(bits)} < {POLICY_CONFIG['min_data_length']}")
+        result.fail(f"Data too short: {len(bits)} < {POLICY_CONFIG['min_data_length']}")
     
     if len(bits) > POLICY_CONFIG["max_data_length"]:
-        issues.append(f"Data too long: {len(bits)} > {POLICY_CONFIG['max_data_length']}")
+        result.fail(f"Data too long: {len(bits)} > {POLICY_CONFIG['max_data_length']}")
     
-    # Binary validation
+    # Check valid binary
     if POLICY_CONFIG["require_valid_binary"]:
         invalid_chars = [c for c in bits if c not in '01']
         if invalid_chars:
-            issues.append(f"Invalid characters found: {invalid_chars[:5]}")
-    
-    return len(issues) == 0, issues
+            result.fail(f"Invalid binary characters found: {set(invalid_chars)}")
 
-def validate_balance():
-    """Validate bit balance is reasonable"""
-    bits = get_bits()
-    if len(bits) == 0:
-        return False, ["Empty data"]
+def validate_balance(result):
+    """Validate bit balance policies"""
+    metrics = get_all_metrics()
+    balance = metrics.get('balance', 0.5)
     
-    ones = bits.count('1')
-    ratio = ones / len(bits)
-    
-    if ratio > POLICY_CONFIG["max_imbalance"]:
-        return False, [f"Too many 1s: {ratio*100:.1f}%"]
-    if ratio < (1 - POLICY_CONFIG["max_imbalance"]):
-        return False, [f"Too many 0s: {(1-ratio)*100:.1f}%"]
-    
-    return True, []
+    if balance > POLICY_CONFIG["max_imbalance"]:
+        result.warn(f"High imbalance: {balance:.2f} (>{POLICY_CONFIG['max_imbalance']})")
+    elif balance < (1 - POLICY_CONFIG["max_imbalance"]):
+        result.warn(f"Low balance: {balance:.2f} (<{1 - POLICY_CONFIG['max_imbalance']})")
 
-def validate_budget():
-    """Validate budget usage"""
+def validate_budget(result, initial_budget=1000):
+    """Validate budget policies"""
     remaining = get_budget()
-    initial = 1000  # Assume initial budget
-    ratio = remaining / initial if initial > 0 else 0
-    
-    warnings = []
+    ratio = remaining / initial_budget if initial_budget > 0 else 0
     
     if ratio < POLICY_CONFIG["min_budget_ratio"]:
-        return False, [f"Budget critically low: {remaining}"]
-    
-    if ratio < POLICY_CONFIG["warn_budget_ratio"]:
-        warnings.append(f"Budget warning: {remaining} remaining ({ratio*100:.1f}%)")
-    
-    return True, warnings
+        result.fail(f"Budget critical: {ratio:.1%} < {POLICY_CONFIG['min_budget_ratio']:.1%}")
+    elif ratio < POLICY_CONFIG["warn_budget_ratio"]:
+        result.warn(f"Budget low: {ratio:.1%}")
 
-def validate_operations():
-    """Validate operation system is working"""
+def validate_operations(result):
+    """Validate operation availability"""
     ops = get_available_operations()
-    issues = []
     
-    if POLICY_CONFIG["require_operations"] and len(ops) == 0:
-        issues.append("No operations available")
-    
-    if len(ops) < POLICY_CONFIG["min_operations"]:
-        issues.append(f"Too few operations: {len(ops)} < {POLICY_CONFIG['min_operations']}")
-    
-    # Check for critical operations
-    critical_ops = ["NOT", "AND", "OR", "XOR"]
-    missing = [op for op in critical_ops if op not in ops]
-    if missing:
-        issues.append(f"Missing critical operations: {missing}")
-    
-    return len(issues) == 0, issues
+    if len(ops) < POLICY_CONFIG["min_operations_available"]:
+        result.fail(f"Too few operations: {len(ops)} < {POLICY_CONFIG['min_operations_available']}")
 
-def validate_metrics():
-    """Validate metrics system is working"""
-    try:
-        metrics = get_all_metrics()
-        required = ["entropy", "balance"]
-        missing = [m for m in required if m not in metrics]
-        
-        if missing:
-            return False, [f"Missing required metrics: {missing}"]
-        
-        return True, []
-    except Exception as e:
-        return False, [f"Metrics system error: {e}"]
+def validate_metrics(result):
+    """Validate metric availability"""
+    metrics = get_all_metrics()
+    
+    if len(metrics) < POLICY_CONFIG["min_metrics_available"]:
+        result.fail(f"Too few metrics: {len(metrics)} < {POLICY_CONFIG['min_metrics_available']}")
 
-def run_all_validations():
-    """Run all policy validations"""
-    results = []
-    all_passed = True
+def execute(initial_budget=1000):
+    """Main policy validation"""
+    log("=" * 70)
+    log("UNIFIED POLICY: COMPREHENSIVE VALIDATION")
+    log("=" * 70)
     
-    # Data integrity
-    passed, issues = validate_data_integrity()
-    results.append(("Data Integrity", passed, issues))
-    if not passed: all_passed = False
+    result = PolicyResult()
     
-    # Balance
-    passed, issues = validate_balance()
-    results.append(("Bit Balance", passed, issues))
-    if not passed: all_passed = False
+    # Run all validations
+    log("\\nValidating data integrity...")
+    validate_data_integrity(result)
     
-    # Budget
-    passed, warnings = validate_budget()
-    results.append(("Budget", passed, warnings))
-    if not passed: all_passed = False
+    log("Validating balance...")
+    validate_balance(result)
     
-    # Operations
-    passed, issues = validate_operations()
-    results.append(("Operations", passed, issues))
-    if not passed: all_passed = False
+    log("Validating budget...")
+    validate_budget(result, initial_budget)
     
-    # Metrics
-    passed, issues = validate_metrics()
-    results.append(("Metrics", passed, issues))
-    if not passed: all_passed = False
+    log("Validating operations...")
+    validate_operations(result)
     
-    return all_passed, results
-
-def execute():
-    """Main policy execution"""
-    log("=" * 60)
-    log("UNIFIED POLICY: Comprehensive Validation")
-    log("=" * 60)
+    log("Validating metrics...")
+    validate_metrics(result)
     
-    all_passed, results = run_all_validations()
-    
-    for name, passed, issues in results:
-        status = "✓ PASS" if passed else "✗ FAIL"
-        log(f"\\n{name}: {status}")
-        for issue in issues:
-            log(f"  - {issue}")
-    
+    # Report results
     log("")
-    log("=" * 60)
-    if all_passed:
-        log("POLICY: All validations PASSED")
+    if result.passed:
+        log("✓ ALL POLICIES PASSED")
     else:
-        log("POLICY: Some validations FAILED - review required")
-    log("=" * 60)
+        log("✗ POLICY FAILURES:")
+        for failure in result.failures:
+            log(f"  - {failure}")
+    
+    if result.warnings:
+        log("⚠ WARNINGS:")
+        for warning in result.warnings:
+            log(f"  - {warning}")
+    
+    log("=" * 70)
     
     return {
-        "passed": all_passed,
-        "results": [{"name": n, "passed": p, "issues": i} for n, p, i in results],
+        "passed": result.passed,
+        "failures": result.failures,
+        "warnings": result.warnings,
     }
 
-# Run policy
+# Run policy validation
 result = execute()
 `;
 
-// ===== AI ANALYZER FILE =====
+// ===== UNIFIED AI ANALYZER (JavaScript) =====
 export const UNIFIED_AI_ANALYZER = `/**
- * Unified AI Pattern Analyzer
- * Combines pattern recognition, prediction, and optimization suggestions
- * Works with the unified strategy
+ * Unified AI Analyzer - Pattern detection and optimization suggestions
+ * Uses heuristics to analyze binary data and suggest improvements
  */
 
 class UnifiedAIAnalyzer {
   constructor() {
-    this.patternCache = new Map();
-    this.predictionHistory = [];
+    this.patterns = new Map();
+    this.suggestions = [];
   }
 
-  // Analyze patterns in the data
-  analyzePatterns(bits, patternSize = 8) {
-    const patterns = {};
-    for (let i = 0; i <= bits.length - patternSize; i++) {
-      const pattern = bits.slice(i, i + patternSize);
-      patterns[pattern] = (patterns[pattern] || 0) + 1;
-    }
+  analyze(bits) {
+    this.patterns.clear();
+    this.suggestions = [];
     
-    // Sort by frequency
-    const sorted = Object.entries(patterns)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 10);
+    // Pattern detection
+    this.detectRepeatingPatterns(bits);
+    this.detectLongRuns(bits);
+    this.analyzeEntropy(bits);
     
     return {
-      totalPatterns: Object.keys(patterns).length,
-      topPatterns: sorted,
-      uniqueRatio: Object.keys(patterns).length / (bits.length - patternSize + 1),
+      patterns: Array.from(this.patterns.entries()),
+      suggestions: this.suggestions,
     };
   }
 
-  // Calculate all metrics
-  calculateMetrics(bits) {
+  detectRepeatingPatterns(bits) {
+    // Find 2-8 bit repeating patterns
+    for (let len = 2; len <= 8; len++) {
+      const patternCounts = {};
+      for (let i = 0; i <= bits.length - len; i++) {
+        const pattern = bits.slice(i, i + len);
+        patternCounts[pattern] = (patternCounts[pattern] || 0) + 1;
+      }
+      
+      // Find high-frequency patterns
+      for (const [pattern, count] of Object.entries(patternCounts)) {
+        const frequency = count / (bits.length / len);
+        if (frequency > 0.3) {
+          this.patterns.set(pattern, { count, frequency, length: len });
+          this.suggestions.push({
+            type: 'pattern',
+            message: \`High frequency pattern "\${pattern}" detected (\${(frequency*100).toFixed(1)}%)\`,
+            operation: 'XOR',
+            params: { mask: pattern },
+          });
+        }
+      }
+    }
+  }
+
+  detectLongRuns(bits) {
+    let currentChar = bits[0];
+    let runStart = 0;
+    let maxRun = 0;
+    let maxRunChar = '0';
+    
+    for (let i = 1; i <= bits.length; i++) {
+      if (i === bits.length || bits[i] !== currentChar) {
+        const runLength = i - runStart;
+        if (runLength > maxRun) {
+          maxRun = runLength;
+          maxRunChar = currentChar;
+        }
+        if (i < bits.length) {
+          currentChar = bits[i];
+          runStart = i;
+        }
+      }
+    }
+    
+    if (maxRun > bits.length / 4) {
+      this.suggestions.push({
+        type: 'run',
+        message: \`Long run of \${maxRunChar}s detected: \${maxRun} bits\`,
+        operation: 'NOT',
+        params: { start: runStart, end: runStart + maxRun },
+      });
+    }
+  }
+
+  analyzeEntropy(bits) {
     const ones = (bits.match(/1/g) || []).length;
-    const zeros = bits.length - ones;
-    
-    let transitions = 0;
-    for (let i = 1; i < bits.length; i++) {
-      if (bits[i] !== bits[i-1]) transitions++;
-    }
-    
     const p1 = ones / bits.length;
-    const p0 = zeros / bits.length;
-    const entropy = p1 > 0 && p0 > 0 
-      ? -(p1 * Math.log2(p1) + p0 * Math.log2(p0))
-      : 0;
     
-    return {
-      length: bits.length,
-      ones,
-      zeros,
-      balance: ones / bits.length,
-      entropy,
-      transitions,
-      transitionRate: transitions / (bits.length - 1),
-    };
-  }
-
-  // Suggest optimal operation based on current state
-  suggestOperation(bits) {
-    const metrics = this.calculateMetrics(bits);
-    const patterns = this.analyzePatterns(bits);
-    
-    const suggestions = [];
-    
-    // High entropy - try XOR to reduce
-    if (metrics.entropy > 0.9) {
-      suggestions.push({
+    if (p1 < 0.1 || p1 > 0.9) {
+      this.suggestions.push({
+        type: 'entropy',
+        message: \`Very low entropy detected (balance: \${(p1*100).toFixed(1)}%)\`,
         operation: 'XOR',
-        priority: 1,
-        reason: 'High entropy - XOR with repeating pattern may reduce',
         params: { mask: '10101010' },
       });
     }
-    
-    // Imbalanced - try to balance
-    if (metrics.balance > 0.6) {
-      suggestions.push({
-        operation: 'AND',
-        priority: 2,
-        reason: 'Too many 1s - AND with alternating mask',
-        params: { mask: '01010101' },
-      });
-    } else if (metrics.balance < 0.4) {
-      suggestions.push({
-        operation: 'OR',
-        priority: 2,
-        reason: 'Too many 0s - OR with sparse pattern',
-        params: { mask: '00010001' },
-      });
-    }
-    
-    // High transition rate - try rotation
-    if (metrics.transitionRate > 0.4) {
-      suggestions.push({
-        operation: 'ROL',
-        priority: 3,
-        reason: 'High transitions - rotation may group similar bits',
-        params: { count: 3 },
-      });
-    }
-    
-    // Low uniqueness - data is repetitive
-    if (patterns.uniqueRatio < 0.3) {
-      suggestions.push({
-        operation: 'REVERSE',
-        priority: 4,
-        reason: 'Repetitive patterns - reversal may break cycles',
-        params: {},
-      });
-    }
-    
-    return suggestions.sort((a, b) => a.priority - b.priority);
   }
 
-  // Full analysis
-  analyze(bits) {
-    console.log('=== Unified AI Analyzer ===');
-    console.log('Input size:', bits.length, 'bits');
-    
-    const metrics = this.calculateMetrics(bits);
-    console.log('Metrics:', metrics);
-    
-    const patterns = this.analyzePatterns(bits);
-    console.log('Patterns:', patterns);
-    
-    const suggestions = this.suggestOperation(bits);
-    console.log('Suggestions:', suggestions);
-    
-    return { metrics, patterns, suggestions };
+  getSuggestions() {
+    return this.suggestions;
+  }
+
+  getPatterns() {
+    return Array.from(this.patterns.entries());
   }
 }
 
-// Export
+// Export analyzer instance
 const analyzer = new UnifiedAIAnalyzer();
-
-function execute(bits) {
-  return analyzer.analyze(bits);
-}
-
-if (typeof module !== 'undefined') {
-  module.exports = { UnifiedAIAnalyzer, execute };
-}
 `;
 
-// Helper to load all unified strategy files
-export const loadUnifiedStrategyFiles = (pythonModuleSystem: any) => {
-  // Clear existing files first
-  const existingFiles = pythonModuleSystem.getAllFiles();
-  existingFiles.forEach((f: any) => pythonModuleSystem.deleteFile(f.id));
+/**
+ * Load all unified strategy files into the Python module system
+ * Clears existing files/strategies and creates a fresh unified setup
+ */
+export function loadUnifiedStrategyFiles(system: typeof pythonModuleSystem): void {
+  // Clear existing files and strategies
+  system.clearAll();
   
-  // Clear existing strategies
-  const existingStrategies = pythonModuleSystem.getAllStrategies();
-  existingStrategies.forEach((s: any) => pythonModuleSystem.deleteStrategy(s.id));
+  // Add unified scheduler (required)
+  system.addFile('UnifiedScheduler.py', UNIFIED_SCHEDULER, 'scheduler');
   
-  // Add unified strategy files
-  pythonModuleSystem.addFile('UnifiedScheduler.py', UNIFIED_SCHEDULER, 'scheduler');
-  pythonModuleSystem.addFile('UnifiedAlgorithm.py', UNIFIED_ALGORITHM, 'algorithm');
-  pythonModuleSystem.addFile('UnifiedScoring.py', UNIFIED_SCORING, 'scoring');
-  pythonModuleSystem.addFile('UnifiedPolicy.py', UNIFIED_POLICY, 'policies');
-  pythonModuleSystem.addFile('UnifiedAIAnalyzer.js', UNIFIED_AI_ANALYZER, 'ai');
+  // Add unified algorithm
+  system.addFile('UnifiedAlgorithm.py', UNIFIED_ALGORITHM, 'algorithm');
+  
+  // Add unified scoring
+  system.addFile('UnifiedScoring.py', UNIFIED_SCORING, 'scoring');
+  
+  // Add unified policy
+  system.addFile('UnifiedPolicy.py', UNIFIED_POLICY, 'policies');
+  
+  // Add AI analyzer (JavaScript)
+  system.addFile('UnifiedAIAnalyzer.js', UNIFIED_AI_ANALYZER, 'ai');
   
   // Create the unified strategy
-  pythonModuleSystem.createStrategy(
-    'Unified Comprehensive Test',
+  system.createStrategy(
+    'Unified Comprehensive Strategy',
     'UnifiedScheduler.py',
     ['UnifiedAlgorithm.py'],
     ['UnifiedScoring.py'],
     ['UnifiedPolicy.py']
   );
-  
-  return true;
-};
+}

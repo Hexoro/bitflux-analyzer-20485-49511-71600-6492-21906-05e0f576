@@ -599,6 +599,133 @@ class TestSuite {
       return typeof UNIFIED_AI_ANALYZER === 'string' && UNIFIED_AI_ANALYZER.includes('UnifiedAIAnalyzer');
     });
 
+    // ============= METRIC VERIFICATION TESTS WITH KNOWN VALUES =============
+    this.register('MetricVerification: entropy of alternating pattern', 'MetricVerification', async () => {
+      const { calculateMetric } = await import('./metricsCalculator');
+      const result = calculateMetric('entropy', '10101010');
+      // Perfect alternating pattern has maximum entropy = 1.0
+      return result.success && result.value !== undefined && Math.abs(result.value - 1.0) < 0.01;
+    });
+
+    this.register('MetricVerification: entropy of all zeros', 'MetricVerification', async () => {
+      const { calculateMetric } = await import('./metricsCalculator');
+      const result = calculateMetric('entropy', '00000000');
+      // All same bits = zero entropy
+      return result.success && result.value !== undefined && result.value === 0;
+    });
+
+    this.register('MetricVerification: entropy of all ones', 'MetricVerification', async () => {
+      const { calculateMetric } = await import('./metricsCalculator');
+      const result = calculateMetric('entropy', '11111111');
+      // All same bits = zero entropy
+      return result.success && result.value !== undefined && result.value === 0;
+    });
+
+    this.register('MetricVerification: balance of 50/50', 'MetricVerification', async () => {
+      const { calculateMetric } = await import('./metricsCalculator');
+      const result = calculateMetric('balance', '11110000');
+      // 4 ones, 4 zeros = 0.5 balance
+      return result.success && result.value !== undefined && result.value === 0.5;
+    });
+
+    this.register('MetricVerification: balance of all ones', 'MetricVerification', async () => {
+      const { calculateMetric } = await import('./metricsCalculator');
+      const result = calculateMetric('balance', '11111111');
+      return result.success && result.value !== undefined && result.value === 1.0;
+    });
+
+    this.register('MetricVerification: balance of all zeros', 'MetricVerification', async () => {
+      const { calculateMetric } = await import('./metricsCalculator');
+      const result = calculateMetric('balance', '00000000');
+      return result.success && result.value !== undefined && result.value === 0;
+    });
+
+    this.register('MetricVerification: hamming weight of 11110000', 'MetricVerification', async () => {
+      const { calculateMetric } = await import('./metricsCalculator');
+      const result = calculateMetric('hamming_weight', '11110000');
+      return result.success && result.value !== undefined && result.value === 4;
+    });
+
+    this.register('MetricVerification: hamming weight of all ones', 'MetricVerification', async () => {
+      const { calculateMetric } = await import('./metricsCalculator');
+      const result = calculateMetric('hamming_weight', '11111111');
+      return result.success && result.value !== undefined && result.value === 8;
+    });
+
+    this.register('MetricVerification: transition count of alternating', 'MetricVerification', async () => {
+      const { calculateMetric } = await import('./metricsCalculator');
+      const result = calculateMetric('transition_count', '10101010');
+      // 7 transitions in alternating 8-bit pattern
+      return result.success && result.value !== undefined && result.value === 7;
+    });
+
+    this.register('MetricVerification: transition count of no transitions', 'MetricVerification', async () => {
+      const { calculateMetric } = await import('./metricsCalculator');
+      const result = calculateMetric('transition_count', '00000000');
+      return result.success && result.value !== undefined && result.value === 0;
+    });
+
+    // ============= OPERATION VERIFICATION TESTS WITH KNOWN VALUES =============
+    this.register('OperationVerification: NOT inverts all bits', 'OperationVerification', async () => {
+      const { executeOperation } = await import('./operationsRouter');
+      const result = executeOperation('NOT', '11110000', {});
+      return result.success && result.bits === '00001111';
+    });
+
+    this.register('OperationVerification: AND with mask', 'OperationVerification', async () => {
+      const { executeOperation } = await import('./operationsRouter');
+      const result = executeOperation('AND', '11111111', { mask: '10101010' });
+      return result.success && result.bits === '10101010';
+    });
+
+    this.register('OperationVerification: OR with mask', 'OperationVerification', async () => {
+      const { executeOperation } = await import('./operationsRouter');
+      const result = executeOperation('OR', '00000000', { mask: '10101010' });
+      return result.success && result.bits === '10101010';
+    });
+
+    this.register('OperationVerification: XOR with same = zeros', 'OperationVerification', async () => {
+      const { executeOperation } = await import('./operationsRouter');
+      const result = executeOperation('XOR', '10101010', { mask: '10101010' });
+      return result.success && result.bits === '00000000';
+    });
+
+    this.register('OperationVerification: SHL by 2', 'OperationVerification', async () => {
+      const { executeOperation } = await import('./operationsRouter');
+      const result = executeOperation('SHL', '11110000', { count: 2 });
+      return result.success && result.bits === '11000000';
+    });
+
+    this.register('OperationVerification: SHR by 2', 'OperationVerification', async () => {
+      const { executeOperation } = await import('./operationsRouter');
+      const result = executeOperation('SHR', '11110000', { count: 2 });
+      return result.success && result.bits === '00111100';
+    });
+
+    this.register('OperationVerification: ROL by 1', 'OperationVerification', async () => {
+      const { executeOperation } = await import('./operationsRouter');
+      const result = executeOperation('ROL', '10000001', { count: 1 });
+      return result.success && result.bits === '00000011';
+    });
+
+    this.register('OperationVerification: ROR by 1', 'OperationVerification', async () => {
+      const { executeOperation } = await import('./operationsRouter');
+      const result = executeOperation('ROR', '10000001', { count: 1 });
+      return result.success && result.bits === '11000000';
+    });
+
+    this.register('OperationVerification: REVERSE bits', 'OperationVerification', async () => {
+      const { executeOperation } = await import('./operationsRouter');
+      const result = executeOperation('REVERSE', '10000001', {});
+      return result.success && result.bits === '10000001'; // Palindrome stays same
+    });
+
+    this.register('OperationVerification: REVERSE non-palindrome', 'OperationVerification', async () => {
+      const { executeOperation } = await import('./operationsRouter');
+      const result = executeOperation('REVERSE', '11110000', {});
+      return result.success && result.bits === '00001111';
+    });
+
     // ============= METRICS CALCULATOR CODE EXECUTION TESTS =============
     this.register('MetricsCalculator: Code-based metric execution', 'CodeExecution', async () => {
       const { calculateMetric } = await import('./metricsCalculator');

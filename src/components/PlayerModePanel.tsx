@@ -577,26 +577,89 @@ export const PlayerModePanel = ({ onExitPlayer, selectedResultId }: PlayerModePa
                                 </div>
                               ))}
                             </div>
-                            {/* Visual Mask Display */}
-                            {step.params.mask && typeof step.params.mask === 'string' && (
-                              <div className="mt-2 p-2 bg-cyan-500/10 border border-cyan-500/30 rounded">
-                                <h6 className="text-xs font-medium text-cyan-400 mb-1">Mask Visualization</h6>
-                                <div className="font-mono text-xs break-all max-h-20 overflow-y-auto">
-                                  {(step.params.mask as string).slice(0, 128).split('').map((bit, i) => (
-                                    <span key={i} className={bit === '1' ? 'text-cyan-400 font-bold' : 'text-muted-foreground'}>
-                                      {bit}
-                                    </span>
-                                  ))}
-                                  {(step.params.mask as string).length > 128 && <span className="text-muted-foreground">...</span>}
-                                </div>
-                                <div className="text-xs text-muted-foreground mt-1">
-                                  Active bits: {((step.params.mask as string).match(/1/g) || []).length} / {(step.params.mask as string).length}
-                                </div>
-                              </div>
-                            )}
                           </div>
                         )}
-              {step.bitRanges && step.bitRanges.length > 0 && (
+
+                        {/* === OPERAND VISUALIZATION === */}
+                        {step.bitRanges && step.bitRanges.length > 0 && (
+                          <div className="mt-3 p-3 bg-gradient-to-r from-cyan-500/10 to-purple-500/10 border border-cyan-500/30 rounded-lg">
+                            <h5 className="text-xs font-medium text-cyan-400 mb-2 flex items-center gap-1">
+                              <Layers className="w-3 h-3" />
+                              Operation Details: {step.operation} on Range
+                            </h5>
+                            
+                            {(() => {
+                              const range = step.bitRanges[0];
+                              const sourceBits = step.fullBeforeBits?.slice(range.start, range.end) || '';
+                              const resultBits = step.fullAfterBits?.slice(range.start, range.end) || '';
+                              const maskBits = step.params?.mask as string;
+                              const extendedMask = maskBits ? 
+                                maskBits.repeat(Math.ceil(sourceBits.length / maskBits.length)).slice(0, sourceBits.length) : '';
+                              
+                              return (
+                                <div className="space-y-2 font-mono text-xs">
+                                  {/* Source Bits */}
+                                  <div className="flex items-start gap-2">
+                                    <span className="text-muted-foreground w-20 shrink-0">Source:</span>
+                                    <div className="break-all bg-muted/30 px-2 py-1 rounded flex-1">
+                                      <span className="text-yellow-400">
+                                        {sourceBits.slice(0, 64)}
+                                        {sourceBits.length > 64 && <span className="text-muted-foreground">... ({sourceBits.length} bits)</span>}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  
+                                  {/* Operand/Mask (if applicable) */}
+                                  {extendedMask && (
+                                    <div className="flex items-start gap-2">
+                                      <span className="text-muted-foreground w-20 shrink-0">{step.operation}:</span>
+                                      <div className="break-all bg-muted/30 px-2 py-1 rounded flex-1">
+                                        <span className="text-cyan-400">
+                                          {extendedMask.slice(0, 64)}
+                                          {extendedMask.length > 64 && <span className="text-muted-foreground">... ({extendedMask.length} bits)</span>}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  )}
+                                  
+                                  {/* Divider line for operation */}
+                                  <div className="flex items-center gap-2 text-muted-foreground">
+                                    <span className="w-20 shrink-0"></span>
+                                    <div className="flex-1 border-t border-dashed border-muted-foreground/30"></div>
+                                    <span className="text-xs px-2">{step.operation}</span>
+                                    <div className="flex-1 border-t border-dashed border-muted-foreground/30"></div>
+                                  </div>
+                                  
+                                  {/* Result Bits */}
+                                  <div className="flex items-start gap-2">
+                                    <span className="text-muted-foreground w-20 shrink-0">Result:</span>
+                                    <div className="break-all bg-muted/30 px-2 py-1 rounded flex-1">
+                                      <span className="text-green-400">
+                                        {resultBits.slice(0, 64)}
+                                        {resultBits.length > 64 && <span className="text-muted-foreground">... ({resultBits.length} bits)</span>}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  
+                                  {/* Changed bits indicator */}
+                                  {sourceBits && resultBits && (
+                                    <div className="flex items-center gap-2 mt-1">
+                                      <span className="text-muted-foreground w-20 shrink-0">Changed:</span>
+                                      <span className={`${sourceBits !== resultBits ? 'text-orange-400' : 'text-muted-foreground'}`}>
+                                        {sourceBits !== resultBits 
+                                          ? `${Array.from(sourceBits).filter((b, i) => b !== resultBits[i]).length} bits different`
+                                          : 'No change'}
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })()}
+                          </div>
+                        )}
+
+                        {/* Bit Ranges Summary */}
+                        {step.bitRanges && step.bitRanges.length > 0 && (
                           <div className="mt-3">
                             <h5 className="text-xs font-medium text-muted-foreground mb-1">Bit Ranges (0-indexed, exclusive end)</h5>
                             <div className="flex flex-wrap gap-1">
@@ -608,6 +671,25 @@ export const PlayerModePanel = ({ onExitPlayer, selectedResultId }: PlayerModePa
                             </div>
                           </div>
                         )}
+
+                        {/* Visual Mask Display (legacy) */}
+                        {step.params?.mask && typeof step.params.mask === 'string' && !step.bitRanges?.length && (
+                          <div className="mt-2 p-2 bg-cyan-500/10 border border-cyan-500/30 rounded">
+                            <h6 className="text-xs font-medium text-cyan-400 mb-1">Mask Pattern</h6>
+                            <div className="font-mono text-xs break-all max-h-20 overflow-y-auto">
+                              {(step.params.mask as string).slice(0, 128).split('').map((bit, i) => (
+                                <span key={i} className={bit === '1' ? 'text-cyan-400 font-bold' : 'text-muted-foreground'}>
+                                  {bit}
+                                </span>
+                              ))}
+                              {(step.params.mask as string).length > 128 && <span className="text-muted-foreground">...</span>}
+                            </div>
+                            <div className="text-xs text-muted-foreground mt-1">
+                              Active bits: {((step.params.mask as string).match(/1/g) || []).length} / {(step.params.mask as string).length}
+                            </div>
+                          </div>
+                        )}
+
                         {/* Memory Window Display */}
                         <div className="mt-3 p-2 bg-accent/10 rounded border border-accent/30">
                           <h5 className="text-xs font-medium text-accent mb-1 flex items-center gap-1">
