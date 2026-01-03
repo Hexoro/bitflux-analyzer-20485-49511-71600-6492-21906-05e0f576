@@ -51,6 +51,50 @@ const DEFAULT_METRIC_CODE = `function calculate(bits) {
   return ones / bits.length;
 }`;
 
+// Built-in metric code snippets for display
+const BUILTIN_METRIC_CODE: Record<string, string> = {
+  'entropy': `function calculate(bits) {
+  if (bits.length === 0) return 0;
+  const ones = (bits.match(/1/g) || []).length;
+  const p1 = ones / bits.length;
+  const p0 = 1 - p1;
+  if (p1 === 0 || p1 === 1) return 0;
+  return -(p1 * Math.log2(p1) + p0 * Math.log2(p0));
+}`,
+  'balance': `function calculate(bits) {
+  if (bits.length === 0) return 0.5;
+  const ones = (bits.match(/1/g) || []).length;
+  return ones / bits.length;
+}`,
+  'hamming_weight': `function calculate(bits) {
+  return (bits.match(/1/g) || []).length;
+}`,
+  'transition_count': `function calculate(bits) {
+  let transitions = 0;
+  for (let i = 1; i < bits.length; i++) {
+    if (bits[i] !== bits[i-1]) transitions++;
+  }
+  return transitions;
+}`,
+  'run_length_avg': `function calculate(bits) {
+  if (bits.length === 0) return 0;
+  let runs = 1;
+  for (let i = 1; i < bits.length; i++) {
+    if (bits[i] !== bits[i-1]) runs++;
+  }
+  return bits.length / runs;
+}`,
+  'compression_ratio': `function calculate(bits) {
+  // Simple LZ-style compression estimate
+  const patterns = new Set();
+  for (let i = 0; i <= bits.length - 8; i++) {
+    patterns.add(bits.slice(i, i + 8));
+  }
+  const uniqueRatio = patterns.size / (bits.length / 8);
+  return 1 / uniqueRatio;
+}`,
+};
+
 export const MetricsCodeEditor = () => {
   const [selectedMetric, setSelectedMetric] = useState<PredefinedMetric | null>(null);
   const [editForm, setEditForm] = useState<Partial<PredefinedMetric>>({});
@@ -434,6 +478,61 @@ export const MetricsCodeEditor = () => {
                   </div>
                 )}
 
+                {/* Show built-in code for non-code-based metrics */}
+                {!editForm.isCodeBased && selectedMetric && BUILTIN_METRIC_CODE[selectedMetric.id] && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs">Built-in Implementation (Read-only)</Label>
+                      <Button 
+                        size="sm" 
+                        variant="outline" 
+                        onClick={() => {
+                          // Test built-in metric
+                          const activeFile = fileSystemManager.getActiveFile();
+                          let testBits = '10101010';
+                          if (activeFile?.state?.model) {
+                            testBits = activeFile.state.model.getBits().slice(0, 1000);
+                          }
+                          try {
+                            const fn = new Function('bits', BUILTIN_METRIC_CODE[selectedMetric.id] + '\nreturn calculate(bits);');
+                            const value = fn(testBits);
+                            setTestResult({ success: true, value });
+                          } catch (e) {
+                            setTestResult({ success: false, error: (e as Error).message });
+                          }
+                        }}
+                      >
+                        <Play className="w-3 h-3 mr-1" />
+                        Test
+                      </Button>
+                    </div>
+                    <pre className="p-2 bg-muted/30 rounded text-xs font-mono overflow-auto max-h-32 whitespace-pre-wrap">
+                      {BUILTIN_METRIC_CODE[selectedMetric.id]}
+                    </pre>
+                    
+                    {/* Test Result */}
+                    {testResult && (
+                      <div className={`p-2 rounded text-xs flex items-center gap-2 ${
+                        testResult.success 
+                          ? 'bg-green-500/10 text-green-500 border border-green-500/30' 
+                          : 'bg-red-500/10 text-red-500 border border-red-500/30'
+                      }`}>
+                        {testResult.success ? (
+                          <>
+                            <CheckCircle2 className="w-4 h-4" />
+                            <span>Result: {testResult.value?.toFixed(6)}</span>
+                          </>
+                        ) : (
+                          <>
+                            <XCircle className="w-4 h-4" />
+                            <span>Error: {testResult.error}</span>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* Documentation for this metric */}
                 {selectedMetric && (
                   <div className="p-2 bg-muted/30 rounded text-xs space-y-1">
@@ -445,6 +544,9 @@ export const MetricsCodeEditor = () => {
                     <p><span className="text-muted-foreground">Returns:</span> number{selectedMetric.unit ? ` (${selectedMetric.unit})` : ''}</p>
                     {getMetricReferences(selectedMetric.id).usedIn.length > 0 && (
                       <p><span className="text-muted-foreground">Used in:</span> {getMetricReferences(selectedMetric.id).usedIn.join(', ')}</p>
+                    )}
+                    {selectedMetric.isCodeBased && (
+                      <p className="text-yellow-500 font-medium mt-2">⚡ Custom code takes priority over built-in implementation</p>
                     )}
                   </div>
                 )}

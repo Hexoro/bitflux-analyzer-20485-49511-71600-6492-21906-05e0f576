@@ -55,6 +55,63 @@ const DEFAULT_OPERATION_CODE = `function execute(bits, params) {
   return result;
 }`;
 
+// Built-in operation code snippets for display
+const BUILTIN_OPERATION_CODE: Record<string, string> = {
+  'NOT': `function execute(bits, params) {
+  return bits.split('').map(bit => bit === '0' ? '1' : '0').join('');
+}`,
+  'AND': `function execute(bits, params) {
+  const mask = params.mask || '1'.repeat(bits.length);
+  const extendedMask = mask.repeat(Math.ceil(bits.length / mask.length)).slice(0, bits.length);
+  let result = '';
+  for (let i = 0; i < bits.length; i++) {
+    result += (bits[i] === '1' && extendedMask[i] === '1') ? '1' : '0';
+  }
+  return result;
+}`,
+  'OR': `function execute(bits, params) {
+  const mask = params.mask || '0'.repeat(bits.length);
+  const extendedMask = mask.repeat(Math.ceil(bits.length / mask.length)).slice(0, bits.length);
+  let result = '';
+  for (let i = 0; i < bits.length; i++) {
+    result += (bits[i] === '1' || extendedMask[i] === '1') ? '1' : '0';
+  }
+  return result;
+}`,
+  'XOR': `function execute(bits, params) {
+  const mask = params.mask || '1'.repeat(bits.length);
+  const extendedMask = mask.repeat(Math.ceil(bits.length / mask.length)).slice(0, bits.length);
+  let result = '';
+  for (let i = 0; i < bits.length; i++) {
+    result += bits[i] !== extendedMask[i] ? '1' : '0';
+  }
+  return result;
+}`,
+  'SHL': `function execute(bits, params) {
+  const amount = params.count || 1;
+  if (amount >= bits.length) return '0'.repeat(bits.length);
+  return bits.substring(amount) + '0'.repeat(amount);
+}`,
+  'SHR': `function execute(bits, params) {
+  const amount = params.count || 1;
+  if (amount >= bits.length) return '0'.repeat(bits.length);
+  return '0'.repeat(amount) + bits.substring(0, bits.length - amount);
+}`,
+  'ROL': `function execute(bits, params) {
+  const amount = (params.count || 1) % bits.length;
+  if (amount === 0) return bits;
+  return bits.substring(amount) + bits.substring(0, amount);
+}`,
+  'ROR': `function execute(bits, params) {
+  const amount = (params.count || 1) % bits.length;
+  if (amount === 0) return bits;
+  return bits.substring(bits.length - amount) + bits.substring(0, bits.length - amount);
+}`,
+  'REVERSE': `function execute(bits, params) {
+  return bits.split('').reverse().join('');
+}`,
+};
+
 export const OperationsCodeEditor = () => {
   const [selectedOp, setSelectedOp] = useState<PredefinedOperation | null>(null);
   const [editForm, setEditForm] = useState<Partial<PredefinedOperation>>({});
@@ -528,6 +585,63 @@ export const OperationsCodeEditor = () => {
                   </div>
                 )}
 
+                {/* Show built-in code for non-code-based operations */}
+                {!editForm.isCodeBased && selectedOp && BUILTIN_OPERATION_CODE[selectedOp.id] && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs">Built-in Implementation (Read-only)</Label>
+                      <Button 
+                        size="sm" 
+                        variant="outline" 
+                        onClick={() => {
+                          // Test built-in operation
+                          const activeFile = fileSystemManager.getActiveFile();
+                          let testBits = '10101010';
+                          if (activeFile?.state?.model) {
+                            testBits = activeFile.state.model.getBits().slice(0, 100);
+                          }
+                          let params = {};
+                          try { params = JSON.parse(testParams); } catch {}
+                          try {
+                            const fn = new Function('bits', 'params', BUILTIN_OPERATION_CODE[selectedOp.id] + '\nreturn execute(bits, params);');
+                            const result = fn(testBits, params);
+                            setTestResult({ success: true, result: result.slice(0, 50) + (result.length > 50 ? '...' : '') });
+                          } catch (e) {
+                            setTestResult({ success: false, error: (e as Error).message });
+                          }
+                        }}
+                      >
+                        <Play className="w-3 h-3 mr-1" />
+                        Test
+                      </Button>
+                    </div>
+                    <pre className="p-2 bg-muted/30 rounded text-xs font-mono overflow-auto max-h-32 whitespace-pre-wrap">
+                      {BUILTIN_OPERATION_CODE[selectedOp.id]}
+                    </pre>
+                    
+                    {/* Test Result */}
+                    {testResult && (
+                      <div className={`p-2 rounded text-xs flex items-center gap-2 ${
+                        testResult.success 
+                          ? 'bg-green-500/10 text-green-500 border border-green-500/30' 
+                          : 'bg-red-500/10 text-red-500 border border-red-500/30'
+                      }`}>
+                        {testResult.success ? (
+                          <>
+                            <CheckCircle2 className="w-4 h-4" />
+                            <span className="font-mono">Result: {testResult.result}</span>
+                          </>
+                        ) : (
+                          <>
+                            <XCircle className="w-4 h-4" />
+                            <span>Error: {testResult.error}</span>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* Documentation */}
                 {selectedOp && (
                   <div className="p-2 bg-muted/30 rounded text-xs space-y-1">
@@ -545,6 +659,9 @@ export const OperationsCodeEditor = () => {
                     </p>
                     <p><span className="text-muted-foreground">Check allowed:</span> <code className="text-cyan-500">is_operation_allowed("{selectedOp.id}")</code></p>
                     <p><span className="text-muted-foreground">Get cost:</span> <code className="text-cyan-500">get_cost("{selectedOp.id}")</code></p>
+                    {selectedOp.isCodeBased && (
+                      <p className="text-yellow-500 font-medium mt-2">⚡ Custom code takes priority over built-in implementation</p>
+                    )}
                   </div>
                 )}
               </>

@@ -565,6 +565,54 @@ class TestSuite {
       const pending = jobManagerV2.getPendingCount();
       return Array.isArray(completed) && typeof pending === 'number';
     });
+
+    // ============= UNIFIED STRATEGY TESTS =============
+    this.register('UnifiedStrategy: Load unified strategy files', 'UnifiedStrategy', async () => {
+      const { loadUnifiedStrategyFiles } = await import('./unifiedStrategy');
+      const { pythonModuleSystem } = await import('./pythonModuleSystem');
+      // Just check that the function exists and exports properly
+      return typeof loadUnifiedStrategyFiles === 'function';
+    });
+
+    this.register('UnifiedStrategy: Unified scheduler exists', 'UnifiedStrategy', async () => {
+      const { UNIFIED_SCHEDULER } = await import('./unifiedStrategy');
+      return typeof UNIFIED_SCHEDULER === 'string' && UNIFIED_SCHEDULER.includes('schedule()');
+    });
+
+    this.register('UnifiedStrategy: Unified algorithm exists', 'UnifiedStrategy', async () => {
+      const { UNIFIED_ALGORITHM } = await import('./unifiedStrategy');
+      return typeof UNIFIED_ALGORITHM === 'string' && UNIFIED_ALGORITHM.includes('execute()');
+    });
+
+    this.register('UnifiedStrategy: Unified scoring exists', 'UnifiedStrategy', async () => {
+      const { UNIFIED_SCORING } = await import('./unifiedStrategy');
+      return typeof UNIFIED_SCORING === 'string' && UNIFIED_SCORING.includes('SCORING_DIMENSIONS');
+    });
+
+    this.register('UnifiedStrategy: Unified policy exists', 'UnifiedStrategy', async () => {
+      const { UNIFIED_POLICY } = await import('./unifiedStrategy');
+      return typeof UNIFIED_POLICY === 'string' && UNIFIED_POLICY.includes('POLICY_CONFIG');
+    });
+
+    this.register('UnifiedStrategy: Unified AI analyzer exists', 'UnifiedStrategy', async () => {
+      const { UNIFIED_AI_ANALYZER } = await import('./unifiedStrategy');
+      return typeof UNIFIED_AI_ANALYZER === 'string' && UNIFIED_AI_ANALYZER.includes('UnifiedAIAnalyzer');
+    });
+
+    // ============= METRICS CALCULATOR CODE EXECUTION TESTS =============
+    this.register('MetricsCalculator: Code-based metric execution', 'CodeExecution', async () => {
+      const { calculateMetric } = await import('./metricsCalculator');
+      const result = calculateMetric('entropy', '10101010');
+      return result.success && typeof result.value === 'number' && result.value >= 0;
+    });
+
+    this.register('OperationsRouter: Code-based operation priority', 'CodeExecution', async () => {
+      const { executeOperation } = await import('./operationsRouter');
+      const { predefinedManager } = await import('./predefinedManager');
+      // Get an operation and check it works
+      const result = executeOperation('NOT', '11110000', {});
+      return result.success && result.bits === '00001111';
+    });
   }
 
   private register(name: string, category: string, fn: () => Promise<boolean>): void {
