@@ -326,22 +326,28 @@ export function unregisterMetric(metricId: string): void {
  * Get all available metric IDs (only those with implementations)
  */
 export function getAvailableMetrics(): string[] {
-  return [...new Set([...Object.keys(METRIC_IMPLEMENTATIONS), ...customMetrics.keys()])];
+  const dbCodeBased = predefinedManager
+    .getAllMetrics()
+    .filter((m) => !!(m.isCodeBased && m.code))
+    .map((m) => m.id);
+
+  return [...new Set([...Object.keys(METRIC_IMPLEMENTATIONS), ...customMetrics.keys(), ...dbCodeBased])];
 }
 
 /**
  * Get all defined metrics (may not have implementations)
  */
 export function getAllDefinedMetrics(): string[] {
-  const dbMetrics = predefinedManager.getAllMetrics().map(m => m.id);
+  const dbMetrics = predefinedManager.getAllMetrics().map((m) => m.id);
   return [...new Set([...dbMetrics, ...Object.keys(METRIC_IMPLEMENTATIONS)])];
 }
 
 /**
- * Check if metric has implementation
+ * Check if metric has implementation (built-in, code-based, or registered)
  */
 export function hasImplementation(metricId: string): boolean {
-  return !!METRIC_IMPLEMENTATIONS[metricId] || customMetrics.has(metricId);
+  const metricDef = predefinedManager.getMetric(metricId);
+  return !!METRIC_IMPLEMENTATIONS[metricId] || customMetrics.has(metricId) || !!(metricDef?.isCodeBased && metricDef.code);
 }
 
 /**
