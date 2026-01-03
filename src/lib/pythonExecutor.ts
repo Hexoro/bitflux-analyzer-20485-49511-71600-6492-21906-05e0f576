@@ -273,11 +273,8 @@ except SyntaxError as e:
               // Get metrics snapshot after operation (using current full bits)
               const metricsResult = calculateAllMetrics(currentBits);
               
-              // Store the actual mask used for XOR/AND/OR operations
-              const actualParams = { ...params };
-              if (['XOR', 'AND', 'OR', 'NAND', 'NOR', 'XNOR'].includes(opName) && !params?.mask) {
-                actualParams.mask = `[auto-generated ${targetBits.length}-bit mask]`;
-              }
+              // Persist the *actual* params used by the router (critical for exact Player replay)
+              const actualParams = result.params;
               
               transformations.push({
                 operation: opName,
@@ -322,11 +319,11 @@ except SyntaxError as e:
               // Get metrics snapshot after operation
               const metricsResult = calculateAllMetrics(currentBits);
               
-              transformations.push({
-                operation: opName,
-                params: { ...params, range: { start, end } },
-                fullBeforeBits,
-                fullAfterBits: newBits,
+               transformations.push({
+                 operation: opName,
+                 params: { ...result.params, range: { start, end } },
+                 fullBeforeBits,
+                 fullAfterBits: newBits,
                 beforeBits: targetBits,
                 afterBits: result.bits,
                 bitRanges: [{ start, end }],
