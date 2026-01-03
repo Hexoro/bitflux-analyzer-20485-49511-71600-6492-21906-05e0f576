@@ -47,6 +47,7 @@ import {
   Brain,
   Folder,
   FolderPlus,
+  Zap,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { pythonModuleSystem, PythonFile } from '@/lib/pythonModuleSystem';
@@ -58,6 +59,7 @@ import {
   EXAMPLE_AI_TENSORFLOW,
   EXAMPLE_AI_NEURAL,
 } from '@/lib/exampleAlgorithmFiles';
+import { loadUnifiedStrategyFiles } from '@/lib/unifiedStrategy';
 
 interface FilesTabProps {
   onFileSelect?: (file: PythonFile | null) => void;
@@ -129,7 +131,17 @@ export const FilesTab = ({ onFileSelect }: FilesTabProps) => {
 
       try {
         const content = await file.text();
-        const customGroup = uploadGroup === 'custom' ? customGroupName : undefined;
+        // For AI and custom groups, handle customGroup properly
+        let customGroup: string | undefined = undefined;
+        
+        if (uploadGroup === 'custom') {
+          if (!customGroupName) {
+            toast.error(`${file.name}: Please select or create a custom group first`);
+            continue;
+          }
+          customGroup = customGroupName;
+        }
+        
         pythonModuleSystem.addFile(file.name, content, uploadGroup, customGroup);
         toast.success(`${file.name} uploaded to ${uploadGroup}${customGroup ? ` (${customGroup})` : ''}`);
       } catch (error) {
@@ -415,6 +427,18 @@ export const FilesTab = ({ onFileSelect }: FilesTabProps) => {
               <Button size="sm" variant="outline" className="h-7 text-xs" onClick={handleAddAIExampleFiles}>
                 <Brain className="w-3 h-3 mr-1" />
                 AI/TensorFlow
+              </Button>
+              <Button 
+                size="sm" 
+                variant="default" 
+                className="h-7 text-xs bg-primary"
+                onClick={() => {
+                  loadUnifiedStrategyFiles(pythonModuleSystem);
+                  toast.success('Unified Strategy loaded - tests all operations, metrics, AI, scoring, policies');
+                }}
+              >
+                <Zap className="w-3 h-3 mr-1" />
+                Unified Strategy
               </Button>
             </div>
           </CardContent>

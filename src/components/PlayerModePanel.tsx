@@ -206,22 +206,35 @@ export const PlayerModePanel = ({ onExitPlayer, selectedResultId }: PlayerModePa
     setReconstructedBits(selectedResult.initialBits);
 
     // Final verification: compare reconstructed final bits with stored final
-    // Allow small differences due to operation implementation variations
+    // EXACT MATCH REQUIRED - no tolerance
     const finalMatches = currentBits === selectedResult.finalBits;
-    const mismatches = countMismatches(currentBits, selectedResult.finalBits);
-    const mismatchRatio = selectedResult.finalBits.length > 0 
-      ? mismatches / selectedResult.finalBits.length 
-      : 0;
     
-    // Allow up to 1% mismatch as tolerance for implementation differences
-    if (finalMatches || (mismatchRatio < 0.01 && verificationPassed)) {
-      setVerificationStatus('passed');
-    } else if (mismatchRatio < 0.05) {
-      // Minor differences - still show as passed but log warning
-      console.warn(`Replay has minor differences: ${mismatches} bits (${(mismatchRatio * 100).toFixed(2)}%)`);
+    if (finalMatches && verificationPassed) {
       setVerificationStatus('passed');
     } else {
-      console.warn(`Replay verification failed: ${mismatches} bits differ (${(mismatchRatio * 100).toFixed(2)}%), first mismatch at step ${firstMismatchStep}`);
+      // Debug: find exactly where and why the mismatch occurred
+      const mismatches = countMismatches(currentBits, selectedResult.finalBits);
+      const mismatchPositions: number[] = [];
+      for (let i = 0; i < Math.max(currentBits.length, selectedResult.finalBits.length); i++) {
+        if (currentBits[i] !== selectedResult.finalBits[i]) {
+          if (mismatchPositions.length < 10) mismatchPositions.push(i);
+        }
+      }
+      
+      console.error(`Replay verification FAILED (exact match required):`);
+      console.error(`- Reconstructed length: ${currentBits.length}, Stored length: ${selectedResult.finalBits.length}`);
+      console.error(`- Total mismatches: ${mismatches}`);
+      console.error(`- First mismatch positions: ${mismatchPositions.join(', ')}`);
+      console.error(`- First mismatch at step index: ${firstMismatchStep}`);
+      
+      if (firstMismatchStep >= 0 && steps[firstMismatchStep]) {
+        const failedStep = steps[firstMismatchStep];
+        console.error(`- Failed step operation: ${failedStep.operation}`);
+        console.error(`- Failed step params: ${JSON.stringify(failedStep.params)}`);
+        console.error(`- Stored after (first 50): ${failedStep.storedAfterBits?.slice(0, 50)}`);
+        console.error(`- Reconstructed after (first 50): ${failedStep.fullAfterBits?.slice(0, 50)}`);
+      }
+      
       setVerificationStatus('failed');
     }
 
