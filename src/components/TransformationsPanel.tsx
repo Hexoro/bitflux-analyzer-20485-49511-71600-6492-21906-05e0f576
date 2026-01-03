@@ -79,33 +79,82 @@ export const TransformationsPanel = ({ bits, selectedRanges, onTransform }: Tran
 
   const executeOperation = (opId: string) => {
     const amount = parseInt(shiftAmount) || 1;
+    const range = getEffectiveRange();
     
+    // Validate range
+    if (range.start < 0 || range.end > bits.length || range.start >= range.end) {
+      toast.error('Invalid range specified');
+      return;
+    }
+    
+    // Get the operation from predefinedManager to check if it's code-based
+    const opDef = predefinedManager.getOperation(opId);
+    if (!opDef) {
+      toast.error(`Operation ${opId} not found`);
+      return;
+    }
+    
+    // Build params based on operation requirements
+    let params: Record<string, any> = {};
+    
+    // Operations that need an operand/mask
+    if (['AND', 'OR', 'XOR', 'NAND', 'NOR', 'XNOR'].includes(opId)) {
+      if (!operandInput) {
+        toast.error('Enter operand (binary pattern) for this operation');
+        return;
+      }
+      params.mask = operandInput;
+    }
+    
+    // Operations that need a count
+    if (['SHL', 'SHR', 'ROL', 'ROR', 'ASHL', 'ASHR'].includes(opId)) {
+      params.count = amount;
+    }
+    
+    // Apply transformation with range handling
+    const before = bits.substring(0, range.start);
+    const selected = bits.substring(range.start, range.end);
+    const after = bits.substring(range.end);
+    
+    // If code-based, execute the code
+    if (opDef.isCodeBased && opDef.code) {
+      try {
+        const fn = new Function('bits', 'params', opDef.code + '\nreturn execute(bits, params);');
+        const result = fn(selected, params);
+        if (typeof result !== 'string') {
+          toast.error(`Operation must return a string, got ${typeof result}`);
+          return;
+        }
+        const finalBits = before + result + after;
+        onTransform(finalBits, `Applied ${opDef.name} on range [${range.start}:${range.end}]`);
+        return;
+      } catch (error) {
+        toast.error(`Code error: ${(error as Error).message}`);
+        return;
+      }
+    }
+    
+    // Built-in operations
     switch (opId) {
       case 'NOT':
         applyTransformation(LogicGates.NOT, 'Applied NOT gate');
         break;
       case 'AND':
-        if (!operandInput) { toast.error('Enter operand'); return; }
         applyTransformation(input => LogicGates.AND(input, operandInput), 'Applied AND gate');
         break;
       case 'OR':
-        if (!operandInput) { toast.error('Enter operand'); return; }
         applyTransformation(input => LogicGates.OR(input, operandInput), 'Applied OR gate');
         break;
       case 'XOR':
-        if (!operandInput) { toast.error('Enter operand'); return; }
         applyTransformation(input => LogicGates.XOR(input, operandInput), 'Applied XOR gate');
         break;
       case 'NAND':
-        if (!operandInput) { toast.error('Enter operand'); return; }
         applyTransformation(input => LogicGates.NAND(input, operandInput), 'Applied NAND gate');
         break;
       case 'NOR':
-        if (!operandInput) { toast.error('Enter operand'); return; }
         applyTransformation(input => LogicGates.NOR(input, operandInput), 'Applied NOR gate');
         break;
       case 'XNOR':
-        if (!operandInput) { toast.error('Enter operand'); return; }
         applyTransformation(input => LogicGates.XNOR(input, operandInput), 'Applied XNOR gate');
         break;
       case 'SHL':
@@ -127,10 +176,22 @@ export const TransformationsPanel = ({ bits, selectedRanges, onTransform }: Tran
         applyTransformation(AdvancedBitOperations.reverseBits, 'Reversed bits');
         break;
       case 'SWAP':
+      case 'ENDIAN':
         applyTransformation(AdvancedBitOperations.swapEndianness, 'Swapped endianness');
         break;
       default:
-        toast.info(`Operation ${opId} not yet implemented`);
+        // Try to use operationsRouter for any unknown operation
+        try {
+          const { executeOperationOnRange } = require('@/lib/operationsRouter');
+          const result = executeOperationOnRange(opId, bits, range.start, range.end, params);
+          if (result.success) {
+            onTransform(result.bits, `Applied ${opDef.name} on range [${range.start}:${range.end}]`);
+          } else {
+            toast.error(result.error || `Operation ${opId} failed`);
+          }
+        } catch (e) {
+          toast.info(`Operation ${opId} not yet implemented`);
+        }
     }
   };
 

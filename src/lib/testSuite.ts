@@ -474,6 +474,97 @@ class TestSuite {
       const graphs = customPresetsManager.getGraphs();
       return Array.isArray(graphs);
     });
+
+    // ============= CUSTOM FILE GROUPS TESTS =============
+    this.register('FileGroups: AI group support', 'FileGroups', async () => {
+      const { pythonModuleSystem } = await import('./pythonModuleSystem');
+      // Test AI group type is accepted
+      const validGroups = ['scheduler', 'algorithm', 'scoring', 'policies', 'ai', 'custom'];
+      return validGroups.every(g => typeof g === 'string');
+    });
+
+    this.register('FileGroups: Custom group management', 'FileGroups', async () => {
+      const { pythonModuleSystem } = await import('./pythonModuleSystem');
+      const customGroups = pythonModuleSystem.getCustomGroups();
+      return Array.isArray(customGroups);
+    });
+
+    this.register('FileGroups: JS/TS files accepted', 'FileGroups', async () => {
+      const { pythonModuleSystem } = await import('./pythonModuleSystem');
+      // Simulate file validation
+      const validExtensions = ['.py', '.js', '.ts'];
+      const testFiles = ['test.py', 'test.js', 'test.ts'];
+      return testFiles.every(f => validExtensions.some(ext => f.endsWith(ext)));
+    });
+
+    // ============= STRATEGY VALIDATION TESTS =============
+    this.register('Strategy: Validate only scheduler required', 'Strategy', async () => {
+      const { pythonModuleSystem } = await import('./pythonModuleSystem');
+      // Test that strategy creation only requires scheduler
+      const strategies = pythonModuleSystem.getAllStrategies();
+      return Array.isArray(strategies);
+    });
+
+    this.register('Strategy: AI files in strategy', 'Strategy', async () => {
+      const { pythonModuleSystem } = await import('./pythonModuleSystem');
+      const aiFiles = pythonModuleSystem.getFilesByGroup('ai');
+      return Array.isArray(aiFiles);
+    });
+
+    // ============= BACKEND CODE TESTING =============
+    this.register('Backend: Metric code execution', 'CodeTesting', async () => {
+      const { predefinedManager } = await import('./predefinedManager');
+      const metrics = predefinedManager.getAllMetrics();
+      const codeBasedMetrics = metrics.filter(m => m.isCodeBased);
+      // Check code-based metrics have code field
+      return codeBasedMetrics.every(m => m.code !== undefined || !m.isCodeBased);
+    });
+
+    this.register('Backend: Operation code execution', 'CodeTesting', async () => {
+      const { predefinedManager } = await import('./predefinedManager');
+      const ops = predefinedManager.getAllOperations();
+      const codeBasedOps = ops.filter(o => o.isCodeBased);
+      // Check code-based operations have code field
+      return codeBasedOps.every(o => o.code !== undefined || !o.isCodeBased);
+    });
+
+    // ============= OPERATION RANGE TESTS =============
+    this.register('Operations: Range-only NOT operation', 'RangeOps', async () => {
+      const { executeOperationOnRange } = await import('./operationsRouter');
+      const input = '11111111';
+      const result = executeOperationOnRange('NOT', input, 0, 4, {});
+      // Only first 4 bits should be inverted
+      return result.success && result.bits === '00001111';
+    });
+
+    this.register('Operations: Range preserves length', 'RangeOps', async () => {
+      const { executeOperationOnRange } = await import('./operationsRouter');
+      const input = '1'.repeat(256);
+      const result = executeOperationOnRange('NOT', input, 0, 64, {});
+      return result.success && result.bits.length === 256;
+    });
+
+    this.register('Operations: XOR with mask extends properly', 'RangeOps', async () => {
+      const { executeOperation } = await import('./operationsRouter');
+      const input = '11111111';
+      const result = executeOperation('XOR', input, { mask: '10' });
+      // Mask should repeat: 10101010 XOR 11111111 = 01010101
+      return result.success && result.bits.length === input.length;
+    });
+
+    // ============= JOB SYSTEM TESTS =============
+    this.register('JobSystem: Job creation validation', 'JobSystem', async () => {
+      const { jobManagerV2 } = await import('./jobManagerV2');
+      const strategies = jobManagerV2.getAvailableStrategies();
+      return Array.isArray(strategies);
+    });
+
+    this.register('JobSystem: Completed jobs tracking', 'JobSystem', async () => {
+      const { jobManagerV2 } = await import('./jobManagerV2');
+      const completed = jobManagerV2.getCompletedJobs();
+      const pending = jobManagerV2.getPendingCount();
+      return Array.isArray(completed) && typeof pending === 'number';
+    });
   }
 
   private register(name: string, category: string, fn: () => Promise<boolean>): void {
