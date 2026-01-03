@@ -222,10 +222,14 @@ export const FilesTab = ({ onFileSelect }: FilesTabProps) => {
       toast.error('Group already exists');
       return;
     }
-    setCustomGroupName(newGroupName.trim());
+    const groupName = newGroupName.trim();
+    // Persist the group immediately
+    pythonModuleSystem.registerCustomGroup(groupName);
+    setCustomGroupName(groupName);
+    setUploadGroup('custom'); // Auto-select custom group
     setNewGroupDialogOpen(false);
     setNewGroupName('');
-    toast.success(`Custom group "${newGroupName.trim()}" ready - upload files to use it`);
+    toast.success(`Custom group "${groupName}" created - now upload files to it`);
   };
 
   const getGroupIcon = (group: PythonFile['group']) => {

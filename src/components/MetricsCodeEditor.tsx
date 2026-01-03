@@ -51,7 +51,7 @@ const DEFAULT_METRIC_CODE = `function calculate(bits) {
   return ones / bits.length;
 }`;
 
-// Built-in metric code snippets for display
+// Built-in metric code snippets for display - ALL metrics
 const BUILTIN_METRIC_CODE: Record<string, string> = {
   'entropy': `function calculate(bits) {
   if (bits.length === 0) return 0;
@@ -85,13 +85,136 @@ const BUILTIN_METRIC_CODE: Record<string, string> = {
   return bits.length / runs;
 }`,
   'compression_ratio': `function calculate(bits) {
-  // Simple LZ-style compression estimate
   const patterns = new Set();
   for (let i = 0; i <= bits.length - 8; i++) {
     patterns.add(bits.slice(i, i + 8));
   }
-  const uniqueRatio = patterns.size / (bits.length / 8);
-  return 1 / uniqueRatio;
+  const uniqueRatio = patterns.size / Math.max(1, bits.length / 8);
+  return 1 / Math.max(0.01, uniqueRatio);
+}`,
+  'longest_run_0': `function calculate(bits) {
+  let max = 0, current = 0;
+  for (const bit of bits) {
+    if (bit === '0') { current++; max = Math.max(max, current); }
+    else current = 0;
+  }
+  return max;
+}`,
+  'longest_run_1': `function calculate(bits) {
+  let max = 0, current = 0;
+  for (const bit of bits) {
+    if (bit === '1') { current++; max = Math.max(max, current); }
+    else current = 0;
+  }
+  return max;
+}`,
+  'bit_count': `function calculate(bits) {
+  return bits.length;
+}`,
+  'zero_count': `function calculate(bits) {
+  return (bits.match(/0/g) || []).length;
+}`,
+  'one_count': `function calculate(bits) {
+  return (bits.match(/1/g) || []).length;
+}`,
+  'byte_count': `function calculate(bits) {
+  return Math.ceil(bits.length / 8);
+}`,
+  'run_count': `function calculate(bits) {
+  if (bits.length === 0) return 0;
+  let runs = 1;
+  for (let i = 1; i < bits.length; i++) {
+    if (bits[i] !== bits[i-1]) runs++;
+  }
+  return runs;
+}`,
+  'chi_square': `function calculate(bits) {
+  const n = bits.length;
+  const ones = (bits.match(/1/g) || []).length;
+  const zeros = n - ones;
+  const expected = n / 2;
+  return Math.pow(ones - expected, 2) / expected + Math.pow(zeros - expected, 2) / expected;
+}`,
+  'serial_correlation': `function calculate(bits) {
+  if (bits.length < 2) return 0;
+  let sum = 0, sumSq = 0, sumProd = 0;
+  for (let i = 0; i < bits.length - 1; i++) {
+    const a = bits[i] === '1' ? 1 : 0;
+    const b = bits[i+1] === '1' ? 1 : 0;
+    sum += a; sumSq += a*a; sumProd += a*b;
+  }
+  const mean = sum / (bits.length - 1);
+  const variance = sumSq / (bits.length - 1) - mean * mean;
+  if (variance === 0) return 0;
+  return (sumProd / (bits.length - 1) - mean * mean) / variance;
+}`,
+  'pattern_count_00': `function calculate(bits) {
+  return (bits.match(/00/g) || []).length;
+}`,
+  'pattern_count_01': `function calculate(bits) {
+  return (bits.match(/01/g) || []).length;
+}`,
+  'pattern_count_10': `function calculate(bits) {
+  return (bits.match(/10/g) || []).length;
+}`,
+  'pattern_count_11': `function calculate(bits) {
+  return (bits.match(/11/g) || []).length;
+}`,
+  'autocorrelation_1': `function calculate(bits) {
+  if (bits.length < 2) return 0;
+  let matches = 0;
+  for (let i = 0; i < bits.length - 1; i++) {
+    if (bits[i] === bits[i + 1]) matches++;
+  }
+  return matches / (bits.length - 1);
+}`,
+  'lz_complexity': `function calculate(bits) {
+  if (bits.length === 0) return 0;
+  const seen = new Set();
+  let complexity = 0;
+  let current = '';
+  for (const bit of bits) {
+    current += bit;
+    if (!seen.has(current)) {
+      seen.add(current);
+      complexity++;
+      current = '';
+    }
+  }
+  return complexity;
+}`,
+  'block_frequency': `function calculate(bits) {
+  const blockSize = 8;
+  let devSum = 0;
+  const numBlocks = Math.floor(bits.length / blockSize);
+  if (numBlocks === 0) return 0;
+  for (let i = 0; i < numBlocks; i++) {
+    const block = bits.slice(i * blockSize, (i + 1) * blockSize);
+    const ones = (block.match(/1/g) || []).length;
+    devSum += Math.abs(ones / blockSize - 0.5);
+  }
+  return devSum / numBlocks;
+}`,
+  'ideality': `function calculate(bits) {
+  // Measures how close the distribution is to ideal 50/50
+  const ones = (bits.match(/1/g) || []).length;
+  const ratio = bits.length > 0 ? ones / bits.length : 0.5;
+  return 1 - Math.abs(ratio - 0.5) * 2;
+}`,
+  'regularity': `function calculate(bits) {
+  // Measures pattern regularity via transition variance
+  const transitions = [];
+  let lastSwitch = 0;
+  for (let i = 1; i < bits.length; i++) {
+    if (bits[i] !== bits[i-1]) {
+      transitions.push(i - lastSwitch);
+      lastSwitch = i;
+    }
+  }
+  if (transitions.length < 2) return 1;
+  const mean = transitions.reduce((a, b) => a + b, 0) / transitions.length;
+  const variance = transitions.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / transitions.length;
+  return 1 / (1 + Math.sqrt(variance));
 }`,
 };
 
