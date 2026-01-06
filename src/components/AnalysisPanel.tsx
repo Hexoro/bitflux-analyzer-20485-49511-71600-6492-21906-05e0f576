@@ -182,15 +182,15 @@ export const AnalysisPanel = ({ stats, bits, bitsPerRow, onJumpTo, onIdealityCha
     // Collect anomalies (empty array for now - would come from AnomaliesPanel)
     const anomalies: Array<{ name: string; position: number; length: number; severity: string }> = [];
     
-    // Collect sequences from topPatterns
+    // Collect sequences from topPatterns - map to SequenceData format
     const sequences = topPatterns.map(p => ({
-      pattern: p.pattern,
+      sequence: p.pattern,
       count: p.count,
       positions: p.positions || [],
     }));
     
     // Collect boundaries (empty for now - would come from BoundariesPanel)
-    const boundaries: Array<{ position: number; type: string }> = [];
+    const boundaries: Array<{ sequence: string; description: string; positions: number[] }> = [];
     
     const blob = generateAnalysisReport(
       'Binary Analysis',
