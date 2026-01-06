@@ -39,15 +39,20 @@ import {
   TrendingUp,
   TrendingDown,
   AlertCircle,
+  GitCompare,
+  Database,
 } from 'lucide-react';
 import { fileSystemManager } from '@/lib/fileSystemManager';
 import { resultsManager, ExecutionResultV2 } from '@/lib/resultsManager';
 import { executeOperation, getOperationCost } from '@/lib/operationsRouter';
 import { calculateAllMetrics } from '@/lib/metricsCalculator';
 import { toast } from 'sonner';
-import { BitDiffView } from './algorithm/BitDiffView';
-import { MetricsTimelineChart } from './algorithm/MetricsTimelineChart';
-import { MaskOverlayView } from './algorithm/MaskOverlayView';
+// Enhanced player components
+import { EnhancedDiffView } from './player/EnhancedDiffView';
+import { EnhancedMetricsTimeline } from './player/EnhancedMetricsTimeline';
+import { EnhancedMaskView } from './player/EnhancedMaskView';
+import { EnhancedStepDetails } from './player/EnhancedStepDetails';
+import { EnhancedDataView } from './player/EnhancedDataView';
 
 interface PlayerModePanelProps {
   onExitPlayer: () => void;
@@ -531,7 +536,7 @@ export const PlayerModePanel = ({ onExitPlayer, selectedResultId }: PlayerModePa
             </CardContent>
           </Card>
 
-          {/* Step Details - Redesigned */}
+          {/* Step Details - Enhanced */}
           <div className="flex-1 overflow-hidden">
             <Tabs defaultValue="details" className="h-full flex flex-col">
               <TabsList className="grid grid-cols-5 w-full">
@@ -544,7 +549,7 @@ export const PlayerModePanel = ({ onExitPlayer, selectedResultId }: PlayerModePa
                   Mask
                 </TabsTrigger>
                 <TabsTrigger value="diff" className="text-xs gap-1">
-                  <Activity className="w-3 h-3" />
+                  <GitCompare className="w-3 h-3" />
                   Diff
                 </TabsTrigger>
                 <TabsTrigger value="timeline" className="text-xs gap-1">
@@ -552,236 +557,89 @@ export const PlayerModePanel = ({ onExitPlayer, selectedResultId }: PlayerModePa
                   Metrics
                 </TabsTrigger>
                 <TabsTrigger value="data" className="text-xs gap-1">
-                  <FileCode className="w-3 h-3" />
+                  <Database className="w-3 h-3" />
                   Data
                 </TabsTrigger>
               </TabsList>
 
               <TabsContent value="details" className="flex-1 overflow-auto mt-2">
-                {step ? (
-                  <div className="space-y-3">
-                    {/* Operation Header - Compact Card */}
-                    <Card className="bg-gradient-to-r from-primary/10 via-primary/5 to-transparent border-primary/20">
-                      <CardContent className="py-3">
-                        <div className="flex items-center gap-4">
-                          <div className="w-12 h-12 rounded-lg bg-primary/20 border border-primary/30 flex items-center justify-center">
-                            <Zap className="w-6 h-6 text-primary" />
-                          </div>
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2">
-                              <h4 className="font-mono text-xl font-bold text-primary">{step.operation}</h4>
-                              <Badge className="flex items-center gap-1">
-                                <DollarSign className="w-3 h-3" />
-                                {step.cost}
-                              </Badge>
-                              <Badge variant="outline" className="text-xs">
-                                Step {currentStep + 1}
-                              </Badge>
-                            </div>
-                            <p className="text-xs text-muted-foreground">
-                              {step.duration?.toFixed(1) || 0}ms • {step.bitsLength || 0} bits
-                            </p>
-                          </div>
-                          {step.verified !== undefined && (
-                            <Badge variant={step.verified ? 'default' : 'destructive'} className="text-xs">
-                              {step.verified ? '✓ Verified' : '✗ Mismatch'}
-                            </Badge>
-                          )}
-                        </div>
-                      </CardContent>
-                    </Card>
-
-                    <div className="grid grid-cols-2 gap-3">
-                      {/* Parameters */}
-                      <Card>
-                        <CardHeader className="py-2 bg-muted/30">
-                          <CardTitle className="text-xs">Parameters</CardTitle>
-                        </CardHeader>
-                        <CardContent className="py-2">
-                          {step.params && Object.keys(step.params).length > 0 ? (
-                            <div className="space-y-1">
-                              {Object.entries(step.params).map(([key, value]) => (
-                                <div key={key} className="flex justify-between text-xs bg-muted/30 px-2 py-1 rounded">
-                                  <span className="text-muted-foreground font-medium">{key}</span>
-                                  <span className="font-mono break-all max-w-[150px]">
-                                    {key === 'mask' && typeof value === 'string' && value.length > 24 
-                                      ? `${value.slice(0, 12)}...${value.slice(-8)}`
-                                      : JSON.stringify(value).slice(0, 60)}
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <p className="text-xs text-muted-foreground">No parameters</p>
-                          )}
-                        </CardContent>
-                      </Card>
-
-                      {/* Bit Range */}
-                      <Card>
-                        <CardHeader className="py-2 bg-muted/30">
-                          <CardTitle className="text-xs">Affected Range</CardTitle>
-                        </CardHeader>
-                        <CardContent className="py-2">
-                          {step.bitRanges && step.bitRanges.length > 0 ? (
-                            <div className="space-y-1">
-                              {step.bitRanges.slice(0, 5).map((range: any, i: number) => (
-                                <div key={i} className="flex items-center justify-between text-xs">
-                                  <Badge variant="outline" className="font-mono">
-                                    [{range.start}:{range.end}]
-                                  </Badge>
-                                  <span className="text-muted-foreground">
-                                    {range.end - range.start} bits
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <p className="text-xs text-muted-foreground">Full range</p>
-                          )}
-                        </CardContent>
-                      </Card>
-                    </div>
-
-                    {/* Operation Visualization - Compact */}
-                    {step.bitRanges && step.bitRanges.length > 0 && (
-                      <Card className="bg-gradient-to-r from-cyan-500/5 to-purple-500/5 border-cyan-500/20">
-                        <CardContent className="py-3">
-                          <h5 className="text-xs font-medium text-cyan-400 mb-2 flex items-center gap-1">
-                            <Layers className="w-3 h-3" />
-                            Before → After
-                          </h5>
-                          {(() => {
-                            const range = step.bitRanges[0];
-                            const sourceBits = step.fullBeforeBits?.slice(range.start, range.end) || '';
-                            const resultBits = step.fullAfterBits?.slice(range.start, range.end) || '';
-                            const changedCount = sourceBits && resultBits 
-                              ? Array.from(sourceBits).filter((b, i) => b !== resultBits[i]).length
-                              : 0;
-                            
-                            return (
-                              <div className="grid grid-cols-2 gap-2 text-xs font-mono">
-                                <div className="p-2 bg-muted/30 rounded">
-                                  <span className="text-yellow-400 break-all">
-                                    {sourceBits.slice(0, 48)}{sourceBits.length > 48 ? '...' : ''}
-                                  </span>
-                                </div>
-                                <div className="p-2 bg-muted/30 rounded">
-                                  <span className="text-green-400 break-all">
-                                    {resultBits.slice(0, 48)}{resultBits.length > 48 ? '...' : ''}
-                                  </span>
-                                </div>
-                                <div className="col-span-2 text-center text-muted-foreground">
-                                  {changedCount > 0 ? `${changedCount} bits changed` : 'No change'}
-                                </div>
-                              </div>
-                            );
-                          })()}
-                        </CardContent>
-                      </Card>
-                    )}
-
-                    {/* Metrics Grid */}
-                    <Card>
-                      <CardHeader className="py-2 bg-muted/30">
-                        <CardTitle className="text-xs flex items-center gap-2">
-                          <Activity className="w-3 h-3" />
-                          Live Metrics
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent className="py-2">
-                        <div className="grid grid-cols-3 gap-2">
-                          {step.metrics && Object.entries(step.metrics).slice(0, 9).map(([key, value]) => {
-                            const prevStep = currentStep > 0 ? reconstructedSteps[currentStep - 1] : null;
-                            const prevValue = prevStep?.metrics?.[key];
-                            const change = prevValue !== undefined ? (value as number) - (prevValue as number) : null;
-                            
-                            return (
-                              <div key={key} className="p-2 bg-muted/20 rounded text-xs">
-                                <div className="text-muted-foreground truncate">{key}</div>
-                                <div className="font-mono font-medium">
-                                  {typeof value === 'number' ? value.toFixed(3) : String(value)}
-                                </div>
-                                {change !== null && change !== 0 && (
-                                  <div className={`text-[10px] ${change < 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                    {change > 0 ? '+' : ''}{change.toFixed(3)}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </div>
-                ) : (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <Layers className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                    <p>Select a step to view details</p>
-                  </div>
-                )}
+                <ScrollArea className="h-[calc(100vh-400px)]">
+                  <EnhancedStepDetails
+                    step={step ? {
+                      operation: step.operation,
+                      params: step.params,
+                      cost: step.cost,
+                      duration: step.duration,
+                      bitRanges: step.bitRanges,
+                      fullBeforeBits: step.fullBeforeBits,
+                      fullAfterBits: step.fullAfterBits,
+                      metrics: step.metrics,
+                      verified: step.verified,
+                      executionError: step.executionError,
+                      bitsLength: step.bitsLength,
+                    } : null}
+                    stepIndex={currentStep}
+                    totalSteps={reconstructedSteps.length}
+                    previousMetrics={currentStep > 0 ? reconstructedSteps[currentStep - 1]?.metrics : undefined}
+                  />
+                </ScrollArea>
               </TabsContent>
 
               <TabsContent value="mask" className="flex-1 overflow-auto mt-4">
-                {step ? (
-                  <MaskOverlayView
-                    bits={step.fullAfterBits || step.afterBits || reconstructedBits}
-                    mask={step.params?.mask as string}
-                    bitRanges={step.bitRanges}
-                  />
-                ) : (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <Layers className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                    <p>Select a step to view mask overlay</p>
-                  </div>
-                )}
+                <ScrollArea className="h-[calc(100vh-400px)]">
+                  {step ? (
+                    <EnhancedMaskView
+                      bits={step.fullAfterBits || step.afterBits || reconstructedBits}
+                      mask={step.params?.mask as string}
+                      bitRanges={step.bitRanges}
+                      operationName={step.operation}
+                    />
+                  ) : (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <Layers className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                      <p>Select a step to view mask overlay</p>
+                    </div>
+                  )}
+                </ScrollArea>
               </TabsContent>
 
               <TabsContent value="diff" className="flex-1 overflow-auto mt-4">
-                {step && (
-                  <BitDiffView
-                    beforeBits={step.fullBeforeBits || step.beforeBits}
-                    afterBits={step.fullAfterBits || step.afterBits}
-                  />
-                )}
+                <ScrollArea className="h-[calc(100vh-400px)]">
+                  {step && (
+                    <EnhancedDiffView
+                      beforeBits={step.fullBeforeBits || step.beforeBits || ''}
+                      afterBits={step.fullAfterBits || step.afterBits || ''}
+                      operationName={step.operation}
+                      highlightRanges={step.bitRanges}
+                    />
+                  )}
+                </ScrollArea>
               </TabsContent>
 
               <TabsContent value="timeline" className="flex-1 overflow-auto mt-4">
-                <MetricsTimelineChart steps={reconstructedSteps} />
+                <ScrollArea className="h-[calc(100vh-400px)]">
+                  <EnhancedMetricsTimeline 
+                    steps={reconstructedSteps.map(s => ({
+                      operation: s.operation,
+                      metrics: s.metrics,
+                      cost: s.cost,
+                      duration: s.duration,
+                    }))} 
+                    currentStepIndex={currentStep}
+                    budget={budgetInitial}
+                  />
+                </ScrollArea>
               </TabsContent>
 
               <TabsContent value="data" className="flex-1 overflow-auto mt-4">
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm">Current Binary State</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <ScrollArea className="h-[300px]">
-                      <div className="font-mono text-xs break-all bg-muted/30 p-4 rounded">
-                        {reconstructedBits.slice(0, 5000)}
-                        {reconstructedBits.length > 5000 && (
-                          <span className="text-muted-foreground">
-                            ... ({reconstructedBits.length - 5000} more bits)
-                          </span>
-                        )}
-                      </div>
-                    </ScrollArea>
-                    <div className="flex gap-4 mt-4 text-sm">
-                      <div>
-                        <span className="text-muted-foreground">Total: </span>
-                        <span className="font-mono">{reconstructedBits.length} bits</span>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground">Ones: </span>
-                        <span className="font-mono">{(reconstructedBits.match(/1/g) || []).length}</span>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground">Zeros: </span>
-                        <span className="font-mono">{(reconstructedBits.match(/0/g) || []).length}</span>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
+                <ScrollArea className="h-[calc(100vh-400px)]">
+                  <EnhancedDataView
+                    bits={reconstructedBits}
+                    stepIndex={currentStep}
+                    initialBits={selectedResult?.initialBits}
+                    finalBits={selectedResult?.finalBits}
+                  />
+                </ScrollArea>
               </TabsContent>
             </Tabs>
           </div>
