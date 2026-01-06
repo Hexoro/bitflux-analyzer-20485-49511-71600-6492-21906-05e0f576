@@ -187,6 +187,14 @@ export class FileState {
     }
   }
 
+  updateSequenceColor(id: string, color: string): void {
+    const seq = this.savedSequences.find(s => s.id === id);
+    if (seq) {
+      seq.color = color;
+      this.notifyListeners();
+    }
+  }
+
   clearAllSequences(): void {
     this.savedSequences = [];
     this.nextSerial = 1;

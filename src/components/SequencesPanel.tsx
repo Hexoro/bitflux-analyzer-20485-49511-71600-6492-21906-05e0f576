@@ -1,21 +1,193 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { BinaryMetrics } from '@/lib/binaryMetrics';
 import { FileState, SavedSequence } from '@/lib/fileState';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
-import { Search, X, Grid, List, Eye, EyeOff, Sparkles, TrendingUp } from 'lucide-react';
+import { Textarea } from './ui/textarea';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
+import { Search, X, Grid, List, Eye, EyeOff, Sparkles, TrendingUp, Code, Play, Palette, Terminal, HelpCircle } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Checkbox } from './ui/checkbox';
 import { Badge } from './ui/badge';
 import { ScrollArea } from './ui/scroll-area';
 import { toast } from 'sonner';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from './ui/popover';
 
 interface SequencesPanelProps {
   fileState: FileState;
   onJumpTo: (index: number) => void;
 }
+
+// Python command parser for sequence filtering
+interface CommandResult {
+  type: 'filter' | 'highlight' | 'color' | 'find' | 'stats' | 'error';
+  message: string;
+  sequences?: SavedSequence[];
+}
+
+const parseAndExecuteCommand = (
+  command: string, 
+  sequences: SavedSequence[], 
+  bits: string
+): CommandResult => {
+  const cmd = command.trim().toLowerCase();
+  
+  // Help command
+  if (cmd === 'help' || cmd === '?') {
+    return {
+      type: 'stats',
+      message: `Available commands:
+• filter(count > 5) - Filter sequences by count
+• filter(length >= 4) - Filter by sequence length  
+• filter(zeros > 3) - Filter by number of zeros in sequence
+• filter(gap > 5) - Find sequences with gaps > 5 between occurrences
+• highlight(all) - Highlight all sequences
+• highlight(none) - Unhighlight all
+• find("0000") - Find new pattern in data
+• stats() - Show statistics
+• color(#, "#FF0000") - Set color of sequence #`
+    };
+  }
+  
+  // Filter commands
+  const filterMatch = cmd.match(/filter\s*\(\s*(\w+)\s*(>|<|>=|<=|==|!=)\s*(\d+)\s*\)/);
+  if (filterMatch) {
+    const [, field, operator, valueStr] = filterMatch;
+    const value = parseInt(valueStr);
+    
+    const filtered = sequences.filter(seq => {
+      let fieldValue: number;
+      
+      switch (field) {
+        case 'count':
+          fieldValue = seq.count;
+          break;
+        case 'length':
+          fieldValue = seq.sequence.length;
+          break;
+        case 'zeros':
+          fieldValue = (seq.sequence.match(/0/g) || []).length;
+          break;
+        case 'ones':
+          fieldValue = (seq.sequence.match(/1/g) || []).length;
+          break;
+        case 'gap':
+        case 'meandistance':
+          fieldValue = seq.meanDistance;
+          break;
+        case 'variance':
+          fieldValue = seq.varianceDistance;
+          break;
+        default:
+          return true;
+      }
+      
+      switch (operator) {
+        case '>': return fieldValue > value;
+        case '<': return fieldValue < value;
+        case '>=': return fieldValue >= value;
+        case '<=': return fieldValue <= value;
+        case '==': return fieldValue === value;
+        case '!=': return fieldValue !== value;
+        default: return true;
+      }
+    });
+    
+    return {
+      type: 'filter',
+      message: `Found ${filtered.length} sequences matching ${field} ${operator} ${value}`,
+      sequences: filtered
+    };
+  }
+  
+  // Find command
+  const findMatch = cmd.match(/find\s*\(\s*["']?([01]+)["']?\s*\)/);
+  if (findMatch) {
+    const pattern = findMatch[1];
+    const matches = BinaryMetrics.searchMultipleSequences(bits, [pattern]);
+    
+    if (matches.length > 0) {
+      return {
+        type: 'find',
+        message: `Found "${pattern}" ${matches[0].count} times at positions: ${matches[0].positions.slice(0, 5).join(', ')}${matches[0].positions.length > 5 ? '...' : ''}`,
+        sequences: []
+      };
+    }
+    return {
+      type: 'find',
+      message: `Pattern "${pattern}" not found in data`
+    };
+  }
+  
+  // Highlight command
+  const highlightMatch = cmd.match(/highlight\s*\(\s*(\w+)\s*\)/);
+  if (highlightMatch) {
+    const target = highlightMatch[1];
+    if (target === 'all') {
+      return {
+        type: 'highlight',
+        message: `Highlighting all ${sequences.length} sequences`,
+        sequences: sequences.map(s => ({ ...s, highlighted: true }))
+      };
+    } else if (target === 'none') {
+      return {
+        type: 'highlight',
+        message: 'Unhighlighted all sequences',
+        sequences: sequences.map(s => ({ ...s, highlighted: false }))
+      };
+    }
+  }
+  
+  // Stats command
+  if (cmd.startsWith('stats')) {
+    const totalOccurrences = sequences.reduce((sum, s) => sum + s.count, 0);
+    const avgLength = sequences.reduce((sum, s) => sum + s.sequence.length, 0) / (sequences.length || 1);
+    const avgGap = sequences.reduce((sum, s) => sum + s.meanDistance, 0) / (sequences.length || 1);
+    
+    return {
+      type: 'stats',
+      message: `📊 Sequence Statistics:
+• Total sequences: ${sequences.length}
+• Total occurrences: ${totalOccurrences}
+• Average length: ${avgLength.toFixed(1)} bits
+• Average gap: ${avgGap.toFixed(1)} bits
+• Coverage: ${((totalOccurrences / bits.length) * 100).toFixed(2)}%`
+    };
+  }
+  
+  // Color command
+  const colorMatch = cmd.match(/color\s*\(\s*(\d+)\s*,\s*["']?(#[0-9a-fA-F]{6})["']?\s*\)/);
+  if (colorMatch) {
+    const seqNum = parseInt(colorMatch[1]);
+    const color = colorMatch[2];
+    
+    const targetSeq = sequences.find(s => s.serialNumber === seqNum);
+    if (targetSeq) {
+      return {
+        type: 'color',
+        message: `Set color of sequence #${seqNum} to ${color}`,
+        sequences: sequences.map(s => 
+          s.serialNumber === seqNum ? { ...s, color } : s
+        )
+      };
+    }
+    return {
+      type: 'error',
+      message: `Sequence #${seqNum} not found`
+    };
+  }
+  
+  return {
+    type: 'error',
+    message: `Unknown command: "${cmd}". Type "help" for available commands.`
+  };
+};
 
 export const SequencesPanel = ({ fileState, onJumpTo }: SequencesPanelProps) => {
   const [searchInput, setSearchInput] = useState('');
@@ -23,6 +195,16 @@ export const SequencesPanel = ({ fileState, onJumpTo }: SequencesPanelProps) => 
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
   const [sortFilter, setSortFilter] = useState<string>('serial');
   const [savedSequences, setSavedSequences] = useState<SavedSequence[]>([]);
+  const [activeTab, setActiveTab] = useState<'search' | 'python'>('search');
+  
+  // Python command mode
+  const [commandInput, setCommandInput] = useState('');
+  const [commandHistory, setCommandHistory] = useState<string[]>([]);
+  const [commandOutput, setCommandOutput] = useState<string[]>([]);
+  const [filteredSequences, setFilteredSequences] = useState<SavedSequence[] | null>(null);
+  
+  // Color picker state
+  const [editingColorId, setEditingColorId] = useState<string | null>(null);
 
   const bits = fileState.model.getBits();
 
@@ -65,6 +247,33 @@ export const SequencesPanel = ({ fileState, onJumpTo }: SequencesPanelProps) => 
     }
 
     setSearchInput('');
+  };
+
+  const handleRunCommand = () => {
+    if (!commandInput.trim()) return;
+    
+    const result = parseAndExecuteCommand(commandInput, savedSequences, bits);
+    
+    setCommandHistory(prev => [...prev, `>>> ${commandInput}`]);
+    setCommandOutput(prev => [...prev, result.message]);
+    
+    if (result.type === 'filter' && result.sequences) {
+      setFilteredSequences(result.sequences);
+    } else if (result.type === 'highlight' && result.sequences) {
+      result.sequences.forEach(seq => {
+        fileState.toggleSequenceHighlight(seq.id);
+      });
+      setFilteredSequences(null);
+    } else if (result.type === 'color' && result.sequences) {
+      result.sequences.forEach(seq => {
+        const original = savedSequences.find(s => s.id === seq.id);
+        if (original && original.color !== seq.color) {
+          fileState.updateSequenceColor(seq.id, seq.color);
+        }
+      });
+    }
+    
+    setCommandInput('');
   };
 
   const handleFindAll = () => {
@@ -127,15 +336,24 @@ export const SequencesPanel = ({ fileState, onJumpTo }: SequencesPanelProps) => 
     toast.success('All sequences cleared');
   };
 
-  const sortedSequences = (Array.isArray(savedSequences) ? [...savedSequences] : []).sort((a, b) => {
-    switch (sortFilter) {
-      case 'serial': return a.serialNumber - b.serialNumber;
-      case 'count': return b.count - a.count;
-      case 'length': return b.sequence.length - a.sequence.length;
-      case 'position': return (a.positions[0] || 0) - (b.positions[0] || 0);
-      default: return 0;
-    }
-  });
+  const handleColorChange = (id: string, newColor: string) => {
+    fileState.updateSequenceColor(id, newColor);
+    setEditingColorId(null);
+  };
+
+  const displaySequences = filteredSequences || savedSequences;
+  
+  const sortedSequences = useMemo(() => {
+    return [...displaySequences].sort((a, b) => {
+      switch (sortFilter) {
+        case 'serial': return a.serialNumber - b.serialNumber;
+        case 'count': return b.count - a.count;
+        case 'length': return b.sequence.length - a.sequence.length;
+        case 'position': return (a.positions[0] || 0) - (b.positions[0] || 0);
+        default: return 0;
+      }
+    });
+  }, [displaySequences, sortFilter]);
 
   const totalOccurrences = savedSequences.reduce((sum, s) => sum + s.count, 0);
 
@@ -166,54 +384,142 @@ export const SequencesPanel = ({ fileState, onJumpTo }: SequencesPanelProps) => 
           </Card>
         </div>
 
-        {/* Search Card */}
+        {/* Main Search/Command Interface */}
         <Card className="bg-gradient-to-r from-card to-muted/20 border-border overflow-hidden">
-          <CardHeader className="py-3 bg-muted/30">
-            <CardTitle className="text-sm flex items-center gap-2">
-              <Search className="w-4 h-4 text-primary" />
-              Sequence Search
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="py-4 space-y-3">
-            <div className="flex gap-2">
-              <Input
-                placeholder="Enter binary sequences (e.g., 1010, 0011)"
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                className="font-mono flex-1 bg-background"
-              />
-              <div className="flex items-center gap-2">
-                <input
-                  type="color"
-                  value={colorInput}
-                  onChange={(e) => setColorInput(e.target.value)}
-                  className="w-10 h-10 rounded cursor-pointer border border-border bg-transparent"
-                  title="Choose highlight color"
-                />
-                <Button onClick={handleSearch} className="bg-primary hover:bg-primary/90">
-                  <Search className="w-4 h-4" />
-                </Button>
-              </div>
-            </div>
-            {savedSequences.length > 0 && (
-              <div className="flex gap-2">
-                <Button onClick={handleFindAll} variant="outline" size="sm" className="flex-1">
-                  <Sparkles className="w-3 h-3 mr-1" />
-                  Refresh All
-                </Button>
-                <Button onClick={handleExportSequences} variant="outline" size="sm" className="flex-1">
-                  Export
-                </Button>
-                <Button onClick={handleClearAll} variant="outline" size="sm" className="flex-1 text-destructive hover:text-destructive">
-                  Clear
-                </Button>
-              </div>
-            )}
-            <p className="text-xs text-muted-foreground">
-              Separate multiple sequences with commas or spaces. Choose color before searching.
-            </p>
-          </CardContent>
+          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
+            <CardHeader className="py-2 bg-muted/30">
+              <TabsList className="grid grid-cols-2 w-full max-w-[300px]">
+                <TabsTrigger value="search" className="text-xs">
+                  <Search className="w-3 h-3 mr-1" />
+                  Search
+                </TabsTrigger>
+                <TabsTrigger value="python" className="text-xs">
+                  <Terminal className="w-3 h-3 mr-1" />
+                  Commands
+                </TabsTrigger>
+              </TabsList>
+            </CardHeader>
+            
+            <TabsContent value="search" className="mt-0">
+              <CardContent className="py-4 space-y-3">
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Enter binary sequences (e.g., 1010, 0011)"
+                    value={searchInput}
+                    onChange={(e) => setSearchInput(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                    className="font-mono flex-1 bg-background"
+                  />
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="color"
+                      value={colorInput}
+                      onChange={(e) => setColorInput(e.target.value)}
+                      className="w-10 h-10 rounded cursor-pointer border border-border bg-transparent"
+                      title="Choose highlight color"
+                    />
+                    <Button onClick={handleSearch} className="bg-primary hover:bg-primary/90">
+                      <Search className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+                {savedSequences.length > 0 && (
+                  <div className="flex gap-2">
+                    <Button onClick={handleFindAll} variant="outline" size="sm" className="flex-1">
+                      <Sparkles className="w-3 h-3 mr-1" />
+                      Refresh All
+                    </Button>
+                    <Button onClick={handleExportSequences} variant="outline" size="sm" className="flex-1">
+                      Export
+                    </Button>
+                    <Button onClick={handleClearAll} variant="outline" size="sm" className="flex-1 text-destructive hover:text-destructive">
+                      Clear
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </TabsContent>
+            
+            <TabsContent value="python" className="mt-0">
+              <CardContent className="py-4 space-y-3">
+                {/* Command Output Area */}
+                <div className="bg-black/50 rounded-lg p-3 font-mono text-xs max-h-40 overflow-y-auto">
+                  {commandHistory.length === 0 && commandOutput.length === 0 ? (
+                    <div className="text-muted-foreground">
+                      <p className="mb-2">Python-like command interface for sequence filtering.</p>
+                      <p className="text-green-400">Type "help" for available commands.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      {commandHistory.map((cmd, i) => (
+                        <div key={i}>
+                          <div className="text-green-400">{cmd}</div>
+                          {commandOutput[i] && (
+                            <div className="text-gray-300 whitespace-pre-wrap ml-2">{commandOutput[i]}</div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                
+                {/* Command Input */}
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-green-400 font-mono text-sm">{'>>>'}</span>
+                    <Input
+                      value={commandInput}
+                      onChange={(e) => setCommandInput(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleRunCommand()}
+                      placeholder="filter(count > 5)"
+                      className="font-mono pl-10 bg-black/30 border-green-500/30 text-green-100 placeholder:text-green-500/50"
+                    />
+                  </div>
+                  <Button onClick={handleRunCommand} className="bg-green-600 hover:bg-green-500">
+                    <Play className="w-4 h-4" />
+                  </Button>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" size="icon" className="border-green-500/30">
+                        <HelpCircle className="w-4 h-4" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-80 text-xs">
+                      <h4 className="font-semibold mb-2">Command Examples</h4>
+                      <div className="space-y-1 font-mono text-[10px]">
+                        <p className="text-green-400">filter(count {">"} 5)</p>
+                        <p className="text-muted-foreground ml-2">Show sequences appearing more than 5 times</p>
+                        <p className="text-green-400">filter(zeros {">"} 3)</p>
+                        <p className="text-muted-foreground ml-2">Sequences with more than 3 zeros</p>
+                        <p className="text-green-400">find("10101")</p>
+                        <p className="text-muted-foreground ml-2">Find new pattern in data</p>
+                        <p className="text-green-400">color(1, "#FF0000")</p>
+                        <p className="text-muted-foreground ml-2">Set sequence #1 color to red</p>
+                        <p className="text-green-400">highlight(all)</p>
+                        <p className="text-muted-foreground ml-2">Highlight all sequences</p>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+                
+                {filteredSequences && (
+                  <div className="flex items-center justify-between text-xs">
+                    <Badge variant="secondary" className="bg-green-500/20 text-green-300">
+                      Showing {filteredSequences.length} filtered results
+                    </Badge>
+                    <Button 
+                      size="sm" 
+                      variant="ghost" 
+                      className="h-6 text-xs"
+                      onClick={() => setFilteredSequences(null)}
+                    >
+                      Clear Filter
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </TabsContent>
+          </Tabs>
         </Card>
 
         {savedSequences.length > 0 && (
@@ -272,15 +578,51 @@ export const SequencesPanel = ({ fileState, onJumpTo }: SequencesPanelProps) => 
                           >
                             #{seq.serialNumber}
                           </div>
-                          <Button
-                            onClick={() => handleToggleHighlight(seq.id)}
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 w-8 p-0"
-                            title={seq.highlighted ? 'Hide highlights' : 'Show highlights'}
-                          >
-                            {seq.highlighted ? <Eye className="w-4 h-4 text-primary" /> : <EyeOff className="w-4 h-4" />}
-                          </Button>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              onClick={() => handleToggleHighlight(seq.id)}
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 w-8 p-0"
+                              title={seq.highlighted ? 'Hide highlights' : 'Show highlights'}
+                            >
+                              {seq.highlighted ? <Eye className="w-4 h-4 text-primary" /> : <EyeOff className="w-4 h-4" />}
+                            </Button>
+                            {/* Color Picker */}
+                            <Popover open={editingColorId === seq.id} onOpenChange={(open) => setEditingColorId(open ? seq.id : null)}>
+                              <PopoverTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-8 w-8 p-0"
+                                  title="Change color"
+                                >
+                                  <Palette className="w-4 h-4" />
+                                </Button>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-auto p-3">
+                                <div className="space-y-2">
+                                  <p className="text-xs font-medium">Choose color</p>
+                                  <div className="flex gap-2 flex-wrap">
+                                    {['#FF0000', '#00FF00', '#0000FF', '#FFFF00', '#FF00FF', '#00FFFF', '#FF8000', '#8000FF'].map(color => (
+                                      <button
+                                        key={color}
+                                        className="w-6 h-6 rounded border border-border hover:scale-110 transition-transform"
+                                        style={{ backgroundColor: color }}
+                                        onClick={() => handleColorChange(seq.id, color)}
+                                      />
+                                    ))}
+                                  </div>
+                                  <input
+                                    type="color"
+                                    defaultValue={seq.color}
+                                    onChange={(e) => handleColorChange(seq.id, e.target.value)}
+                                    className="w-full h-8 rounded cursor-pointer"
+                                  />
+                                </div>
+                              </PopoverContent>
+                            </Popover>
+                          </div>
                         </div>
                         <Button
                           onClick={() => handleRemoveSequence(seq.id)}
@@ -375,10 +717,35 @@ export const SequencesPanel = ({ fileState, onJumpTo }: SequencesPanelProps) => 
                           />
                         </TableCell>
                         <TableCell>
-                          <div
-                            className="w-5 h-5 rounded-md border border-border"
-                            style={{ backgroundColor: seq.color }}
-                          />
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <button
+                                className="w-5 h-5 rounded-md border border-border cursor-pointer hover:scale-110 transition-transform"
+                                style={{ backgroundColor: seq.color }}
+                              />
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-3">
+                              <div className="space-y-2">
+                                <p className="text-xs font-medium">Choose color</p>
+                                <div className="flex gap-2 flex-wrap">
+                                  {['#FF0000', '#00FF00', '#0000FF', '#FFFF00', '#FF00FF', '#00FFFF', '#FF8000', '#8000FF'].map(color => (
+                                    <button
+                                      key={color}
+                                      className="w-6 h-6 rounded border border-border hover:scale-110 transition-transform"
+                                      style={{ backgroundColor: color }}
+                                      onClick={() => handleColorChange(seq.id, color)}
+                                    />
+                                  ))}
+                                </div>
+                                <input
+                                  type="color"
+                                  defaultValue={seq.color}
+                                  onChange={(e) => handleColorChange(seq.id, e.target.value)}
+                                  className="w-full h-8 rounded cursor-pointer"
+                                />
+                              </div>
+                            </PopoverContent>
+                          </Popover>
                         </TableCell>
                         <TableCell className="font-mono text-xs max-w-[200px] truncate">
                           {seq.sequence}
@@ -422,13 +789,13 @@ export const SequencesPanel = ({ fileState, onJumpTo }: SequencesPanelProps) => 
         )}
 
         {savedSequences.length === 0 && (
-          <Card className="bg-muted/20 border-dashed">
-            <CardContent className="py-12">
-              <div className="text-center text-muted-foreground">
-                <TrendingUp className="w-12 h-12 mx-auto mb-4 opacity-30" />
-                <p className="text-lg font-medium mb-1">No Sequences Found</p>
-                <p className="text-sm">Enter binary patterns above to search</p>
-              </div>
+          <Card className="bg-card border-border">
+            <CardContent className="py-8 text-center">
+              <TrendingUp className="w-12 h-12 mx-auto mb-3 text-muted-foreground/30" />
+              <p className="text-muted-foreground">No sequences saved yet</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Search for binary patterns above to analyze their distribution
+              </p>
             </CardContent>
           </Card>
         )}
