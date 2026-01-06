@@ -1,6 +1,6 @@
 /**
- * Algorithm Panel V7 - Redesigned Files and Strategy tabs
- * Tabs: Files, Strategy, Timeline, Results, Compare, Metrics, Operations, Python
+ * Algorithm Panel V8 - Enhanced with Console, Timeline persistence, auto-switch
+ * Tabs: Files, Strategy, Timeline, Results, Compare, Metrics, Operations, Console
  */
 
 import { useState, useEffect, useCallback } from 'react';
@@ -23,13 +23,14 @@ import {
 import { predefinedManager } from '@/lib/predefinedManager';
 import { ExecutionResult, TransformationStep } from './algorithm/PlayerTab';
 import { ResultsTab } from './algorithm/ResultsTab';
-import { FilesTabV2 } from './algorithm/FilesTabV2';
-import { StrategyTabV2 } from './algorithm/StrategyTabV2';
-import { PythonConsoleTab } from './algorithm/PythonConsoleTab';
+import { FilesTabV3 } from './algorithm/FilesTabV3';
+import { StrategyTabV3 } from './algorithm/StrategyTabV3';
+import { ConsoleTab } from './algorithm/ConsoleTab';
 import { ComparisonTab } from './algorithm/ComparisonTab';
 import { StrategyExecutionTimeline } from './algorithm/StrategyExecutionTimeline';
+import { strategyExecutionEngine } from '@/lib/strategyExecutionEngine';
 
-type AlgorithmTab = 'files' | 'strategy' | 'timeline' | 'results' | 'compare' | 'metrics' | 'operations' | 'python';
+type AlgorithmTab = 'files' | 'strategy' | 'timeline' | 'results' | 'compare' | 'metrics' | 'operations' | 'console';
 
 export const AlgorithmPanel = () => {
   const [activeTab, setActiveTab] = useState<AlgorithmTab>('files');
@@ -41,6 +42,17 @@ export const AlgorithmPanel = () => {
 
   useEffect(() => {
     const unsubscribe = predefinedManager.subscribe(() => forceUpdate({}));
+    return unsubscribe;
+  }, []);
+
+  // Auto-switch to timeline after strategy execution
+  useEffect(() => {
+    const unsubscribe = strategyExecutionEngine.subscribe((result, status) => {
+      if (status === 'completed' && result?.success) {
+        setActiveTab('timeline');
+      }
+      setIsExecuting(status === 'running' || status === 'starting');
+    });
     return unsubscribe;
   }, []);
 
@@ -58,8 +70,7 @@ export const AlgorithmPanel = () => {
 
   const handleRunStrategy = useCallback(async (strategy: any) => {
     setIsExecuting(true);
-    setActiveTab('results');
-    setTimeout(() => setIsExecuting(false), 500);
+    // After execution completes, useEffect will switch to timeline
   }, []);
 
   const handleStepChange = useCallback((step: TransformationStep | null) => {
@@ -77,9 +88,12 @@ export const AlgorithmPanel = () => {
           <Code className="w-4 h-4 mr-1" />
           Strategy
         </TabsTrigger>
-        <TabsTrigger value="timeline">
+        <TabsTrigger value="timeline" className="relative">
           <Clock className="w-4 h-4 mr-1" />
           Timeline
+          {isExecuting && (
+            <span className="absolute -top-1 -right-1 w-2 h-2 bg-cyan-400 rounded-full animate-pulse" />
+          )}
         </TabsTrigger>
         <TabsTrigger value="results">
           <FileText className="w-4 h-4 mr-1" />
@@ -97,19 +111,19 @@ export const AlgorithmPanel = () => {
           <Cog className="w-4 h-4 mr-1" />
           Operations
         </TabsTrigger>
-        <TabsTrigger value="python">
+        <TabsTrigger value="console">
           <Terminal className="w-4 h-4 mr-1" />
-          Python
+          Console
         </TabsTrigger>
       </TabsList>
 
       <div className="flex-1 overflow-hidden">
         <TabsContent value="files" className="h-full m-0">
-          <FilesTabV2 />
+          <FilesTabV3 />
         </TabsContent>
 
         <TabsContent value="strategy" className="h-full m-0">
-          <StrategyTabV2 onRunStrategy={handleRunStrategy} isExecuting={isExecuting} />
+          <StrategyTabV3 onRunStrategy={handleRunStrategy} isExecuting={isExecuting} />
         </TabsContent>
 
         <TabsContent value="timeline" className="h-full m-0">
@@ -231,9 +245,9 @@ export const AlgorithmPanel = () => {
           </ScrollArea>
         </TabsContent>
 
-        {/* Python Console Tab */}
-        <TabsContent value="python" className="h-full m-0">
-          <PythonConsoleTab />
+        {/* Console Tab */}
+        <TabsContent value="console" className="h-full m-0">
+          <ConsoleTab />
         </TabsContent>
       </div>
     </Tabs>
