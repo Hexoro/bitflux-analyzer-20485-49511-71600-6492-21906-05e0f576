@@ -213,10 +213,21 @@ export const QueueTimeline = () => {
                         {job.status === 'running' && (
                           <div className="mb-1">
                             <div className="flex justify-between text-xs text-muted-foreground mb-1">
-                              <span>{job.presets[job.currentPresetIndex]?.strategyName}</span>
-                              <span>{job.progress}%</span>
+                              <span>{job.presets[job.currentPresetIndex]?.strategyName || 'Processing'}</span>
+                              <span className="font-mono">{job.progress}%</span>
                             </div>
                             <Progress value={job.progress} className="h-1.5" />
+                          </div>
+                        )}
+                        
+                        {/* Progress bar for pending jobs - show 0% */}
+                        {job.status === 'pending' && (
+                          <div className="mb-1">
+                            <div className="flex justify-between text-xs text-muted-foreground mb-1">
+                              <span>Waiting...</span>
+                              <span className="font-mono">0%</span>
+                            </div>
+                            <Progress value={0} className="h-1.5 opacity-50" />
                           </div>
                         )}
                         

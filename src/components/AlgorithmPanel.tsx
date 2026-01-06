@@ -1,5 +1,5 @@
 /**
- * Algorithm Panel V6 - Player tab removed (migrated to File Player mode)
+ * Algorithm Panel V7 - Redesigned Files and Strategy tabs
  * Tabs: Files, Strategy, Results, Compare, Metrics, Operations, Python
  */
 
@@ -22,8 +22,8 @@ import {
 import { predefinedManager } from '@/lib/predefinedManager';
 import { ExecutionResult, TransformationStep } from './algorithm/PlayerTab';
 import { ResultsTab } from './algorithm/ResultsTab';
-import { FilesTab } from './algorithm/FilesTab';
-import { StrategyTab } from './algorithm/StrategyTab';
+import { FilesTabV2 } from './algorithm/FilesTabV2';
+import { StrategyTabV2 } from './algorithm/StrategyTabV2';
 import { PythonConsoleTab } from './algorithm/PythonConsoleTab';
 import { ComparisonTab } from './algorithm/ComparisonTab';
 
@@ -99,11 +99,11 @@ export const AlgorithmPanel = () => {
 
       <div className="flex-1 overflow-hidden">
         <TabsContent value="files" className="h-full m-0">
-          <FilesTab />
+          <FilesTabV2 />
         </TabsContent>
 
         <TabsContent value="strategy" className="h-full m-0">
-          <StrategyTab onRunStrategy={handleRunStrategy} isExecuting={isExecuting} />
+          <StrategyTabV2 onRunStrategy={handleRunStrategy} isExecuting={isExecuting} />
         </TabsContent>
 
         <TabsContent value="results" className="h-full m-0">

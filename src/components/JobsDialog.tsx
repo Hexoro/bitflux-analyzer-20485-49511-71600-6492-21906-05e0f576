@@ -33,6 +33,7 @@ import {
   ChevronRight,
   Layers,
   BarChart3,
+  Download,
 } from 'lucide-react';
 import { Terminal } from 'lucide-react';
 import { toast } from 'sonner';
@@ -41,6 +42,7 @@ import { fileSystemManager } from '@/lib/fileSystemManager';
 import { pythonModuleSystem } from '@/lib/pythonModuleSystem';
 import { BatchJobsUI } from './BatchJobsUI';
 import { QueueTimeline } from './QueueTimeline';
+import { generateJobReport, generateBatchReport, downloadBlob } from '@/lib/reportGenerator';
 
 interface JobsDialogProps {
   open: boolean;
@@ -224,9 +226,24 @@ export const JobsDialog = ({ open, onOpenChange }: JobsDialogProps) => {
                     </>
                   )}
                   {(job.status === 'completed' || job.status === 'failed' || job.status === 'cancelled') && (
-                    <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => jobManagerV2.deleteJob(job.id)}>
-                      <Trash2 className="w-3 h-3" />
-                    </Button>
+                    <>
+                      <Button 
+                        size="icon" 
+                        variant="ghost" 
+                        className="h-7 w-7" 
+                        onClick={() => {
+                          const blob = generateJobReport(job);
+                          downloadBlob(blob, `job-report-${job.name.replace(/\s+/g, '-')}.pdf`);
+                          toast.success('Report downloaded');
+                        }}
+                        title="Download Report"
+                      >
+                        <Download className="w-3 h-3" />
+                      </Button>
+                      <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => jobManagerV2.deleteJob(job.id)}>
+                        <Trash2 className="w-3 h-3" />
+                      </Button>
+                    </>
                   )}
                 </div>
               )}

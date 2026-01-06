@@ -42,7 +42,16 @@ export const OperationsGuide = ({ onInsertCommand }: OperationsGuideProps) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
 
-  const allOperations = useMemo(() => predefinedManager.getAllOperations(), []);
+  // Get unique operations only - avoid duplicates from DEFAULT + EXTENDED
+  const allOperations = useMemo(() => {
+    const ops = predefinedManager.getAllOperations();
+    const seen = new Set<string>();
+    return ops.filter(op => {
+      if (seen.has(op.id)) return false;
+      seen.add(op.id);
+      return true;
+    });
+  }, []);
   const availableOps = useMemo(() => getAvailableOperations(), []);
 
   const categories = useMemo(() => {
