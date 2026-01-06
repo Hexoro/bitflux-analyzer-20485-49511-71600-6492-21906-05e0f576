@@ -31,12 +31,16 @@ import {
   AlertTriangle,
   ChevronDown,
   ChevronRight,
+  Layers,
+  BarChart3,
 } from 'lucide-react';
 import { Terminal } from 'lucide-react';
 import { toast } from 'sonner';
 import { jobManagerV2, Job, JobPreset, JobPriority } from '@/lib/jobManagerV2';
 import { fileSystemManager } from '@/lib/fileSystemManager';
 import { pythonModuleSystem } from '@/lib/pythonModuleSystem';
+import { BatchJobsUI } from './BatchJobsUI';
+import { QueueTimeline } from './QueueTimeline';
 
 interface JobsDialogProps {
   open: boolean;
@@ -44,7 +48,7 @@ interface JobsDialogProps {
 }
 
 export const JobsDialog = ({ open, onOpenChange }: JobsDialogProps) => {
-  const [activeTab, setActiveTab] = useState<'queue' | 'completed' | 'create'>('queue');
+  const [activeTab, setActiveTab] = useState<'queue' | 'timeline' | 'completed' | 'create' | 'batch'>('queue');
   const [, forceUpdate] = useState({});
   
   // Create job state
@@ -340,6 +344,14 @@ export const JobsDialog = ({ open, onOpenChange }: JobsDialogProps) => {
             <TabsTrigger value="queue">
               Queue ({activeJobs.length})
             </TabsTrigger>
+            <TabsTrigger value="timeline">
+              <BarChart3 className="w-4 h-4 mr-1" />
+              Timeline
+            </TabsTrigger>
+            <TabsTrigger value="batch">
+              <Layers className="w-4 h-4 mr-1" />
+              Batch
+            </TabsTrigger>
             <TabsTrigger value="completed">
               Completed ({completedJobs.length})
             </TabsTrigger>
@@ -405,6 +417,20 @@ export const JobsDialog = ({ open, onOpenChange }: JobsDialogProps) => {
                 </CardContent>
               </Card>
             </div>
+          </TabsContent>
+
+          {/* Timeline Tab */}
+          <TabsContent value="timeline" className="flex-1 overflow-hidden m-0 mt-4">
+            <ScrollArea className="h-[500px]">
+              <QueueTimeline />
+            </ScrollArea>
+          </TabsContent>
+
+          {/* Batch Tab */}
+          <TabsContent value="batch" className="flex-1 overflow-hidden m-0 mt-4">
+            <ScrollArea className="h-[500px]">
+              <BatchJobsUI />
+            </ScrollArea>
           </TabsContent>
 
           {/* Completed Tab */}

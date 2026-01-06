@@ -531,233 +531,186 @@ export const PlayerModePanel = ({ onExitPlayer, selectedResultId }: PlayerModePa
             </CardContent>
           </Card>
 
-          {/* Step Details */}
+          {/* Step Details - Redesigned */}
           <div className="flex-1 overflow-hidden">
             <Tabs defaultValue="details" className="h-full flex flex-col">
-              <TabsList>
-                <TabsTrigger value="details">Step Details</TabsTrigger>
-                <TabsTrigger value="mask">Mask Overlay</TabsTrigger>
-                <TabsTrigger value="diff">Visual Diff</TabsTrigger>
-                <TabsTrigger value="timeline">Metrics Timeline</TabsTrigger>
-                <TabsTrigger value="data">Binary Data</TabsTrigger>
+              <TabsList className="grid grid-cols-5 w-full">
+                <TabsTrigger value="details" className="text-xs gap-1">
+                  <Zap className="w-3 h-3" />
+                  Step
+                </TabsTrigger>
+                <TabsTrigger value="mask" className="text-xs gap-1">
+                  <Layers className="w-3 h-3" />
+                  Mask
+                </TabsTrigger>
+                <TabsTrigger value="diff" className="text-xs gap-1">
+                  <Activity className="w-3 h-3" />
+                  Diff
+                </TabsTrigger>
+                <TabsTrigger value="timeline" className="text-xs gap-1">
+                  <TrendingUp className="w-3 h-3" />
+                  Metrics
+                </TabsTrigger>
+                <TabsTrigger value="data" className="text-xs gap-1">
+                  <FileCode className="w-3 h-3" />
+                  Data
+                </TabsTrigger>
               </TabsList>
 
-              <TabsContent value="details" className="flex-1 overflow-auto mt-4">
+              <TabsContent value="details" className="flex-1 overflow-auto mt-2">
                 {step ? (
-                  <div className="grid grid-cols-2 gap-4">
-                    <Card>
-                      <CardHeader className="pb-2">
-                        <CardTitle className="text-sm flex items-center gap-2">
-                          <Zap className="w-4 h-4" />
-                          Operation
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="p-3 rounded-lg bg-primary/10 border border-primary/30">
-                          <div className="flex items-center justify-between">
-                            <h4 className="font-mono text-lg text-primary">{step.operation}</h4>
-                            <Badge className="flex items-center gap-1">
-                              <DollarSign className="w-3 h-3" />
-                              {step.cost}
+                  <div className="space-y-3">
+                    {/* Operation Header - Compact Card */}
+                    <Card className="bg-gradient-to-r from-primary/10 via-primary/5 to-transparent border-primary/20">
+                      <CardContent className="py-3">
+                        <div className="flex items-center gap-4">
+                          <div className="w-12 h-12 rounded-lg bg-primary/20 border border-primary/30 flex items-center justify-center">
+                            <Zap className="w-6 h-6 text-primary" />
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <h4 className="font-mono text-xl font-bold text-primary">{step.operation}</h4>
+                              <Badge className="flex items-center gap-1">
+                                <DollarSign className="w-3 h-3" />
+                                {step.cost}
+                              </Badge>
+                              <Badge variant="outline" className="text-xs">
+                                Step {currentStep + 1}
+                              </Badge>
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                              {step.duration?.toFixed(1) || 0}ms • {step.bitsLength || 0} bits
+                            </p>
+                          </div>
+                          {step.verified !== undefined && (
+                            <Badge variant={step.verified ? 'default' : 'destructive'} className="text-xs">
+                              {step.verified ? '✓ Verified' : '✗ Mismatch'}
                             </Badge>
-                          </div>
-                        </div>
-                        {step.params && Object.keys(step.params).length > 0 && (
-                          <div className="mt-3">
-                            <h5 className="text-xs font-medium text-muted-foreground mb-1">Parameters</h5>
-                            <div className="space-y-1">
-                              {Object.entries(step.params).map(([key, value]) => (
-                                <div key={key} className="flex justify-between text-sm bg-muted/30 px-2 py-1 rounded">
-                                  <span className="text-muted-foreground">{key}:</span>
-                                  <span className="font-mono text-xs break-all max-w-[200px]">
-                                    {key === 'mask' && typeof value === 'string' && value.length > 32 
-                                      ? `${value.slice(0, 16)}...${value.slice(-16)} (${value.length} bits)`
-                                      : JSON.stringify(value).slice(0, 100)}
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* === OPERAND VISUALIZATION === */}
-                        {step.bitRanges && step.bitRanges.length > 0 && (
-                          <div className="mt-3 p-3 bg-gradient-to-r from-cyan-500/10 to-purple-500/10 border border-cyan-500/30 rounded-lg">
-                            <h5 className="text-xs font-medium text-cyan-400 mb-2 flex items-center gap-1">
-                              <Layers className="w-3 h-3" />
-                              Operation Details: {step.operation} on Range
-                            </h5>
-                            
-                            {(() => {
-                              const range = step.bitRanges[0];
-                              const sourceBits = step.fullBeforeBits?.slice(range.start, range.end) || '';
-                              const resultBits = step.fullAfterBits?.slice(range.start, range.end) || '';
-                              const maskBits = step.params?.mask as string;
-                              const extendedMask = maskBits ? 
-                                maskBits.repeat(Math.ceil(sourceBits.length / maskBits.length)).slice(0, sourceBits.length) : '';
-                              
-                              return (
-                                <div className="space-y-2 font-mono text-xs">
-                                  {/* Source Bits */}
-                                  <div className="flex items-start gap-2">
-                                    <span className="text-muted-foreground w-20 shrink-0">Source:</span>
-                                    <div className="break-all bg-muted/30 px-2 py-1 rounded flex-1">
-                                      <span className="text-yellow-400">
-                                        {sourceBits.slice(0, 64)}
-                                        {sourceBits.length > 64 && <span className="text-muted-foreground">... ({sourceBits.length} bits)</span>}
-                                      </span>
-                                    </div>
-                                  </div>
-                                  
-                                  {/* Operand/Mask (if applicable) */}
-                                  {extendedMask && (
-                                    <div className="flex items-start gap-2">
-                                      <span className="text-muted-foreground w-20 shrink-0">{step.operation}:</span>
-                                      <div className="break-all bg-muted/30 px-2 py-1 rounded flex-1">
-                                        <span className="text-cyan-400">
-                                          {extendedMask.slice(0, 64)}
-                                          {extendedMask.length > 64 && <span className="text-muted-foreground">... ({extendedMask.length} bits)</span>}
-                                        </span>
-                                      </div>
-                                    </div>
-                                  )}
-                                  
-                                  {/* Divider line for operation */}
-                                  <div className="flex items-center gap-2 text-muted-foreground">
-                                    <span className="w-20 shrink-0"></span>
-                                    <div className="flex-1 border-t border-dashed border-muted-foreground/30"></div>
-                                    <span className="text-xs px-2">{step.operation}</span>
-                                    <div className="flex-1 border-t border-dashed border-muted-foreground/30"></div>
-                                  </div>
-                                  
-                                  {/* Result Bits */}
-                                  <div className="flex items-start gap-2">
-                                    <span className="text-muted-foreground w-20 shrink-0">Result:</span>
-                                    <div className="break-all bg-muted/30 px-2 py-1 rounded flex-1">
-                                      <span className="text-green-400">
-                                        {resultBits.slice(0, 64)}
-                                        {resultBits.length > 64 && <span className="text-muted-foreground">... ({resultBits.length} bits)</span>}
-                                      </span>
-                                    </div>
-                                  </div>
-                                  
-                                  {/* Changed bits indicator */}
-                                  {sourceBits && resultBits && (
-                                    <div className="flex items-center gap-2 mt-1">
-                                      <span className="text-muted-foreground w-20 shrink-0">Changed:</span>
-                                      <span className={`${sourceBits !== resultBits ? 'text-orange-400' : 'text-muted-foreground'}`}>
-                                        {sourceBits !== resultBits 
-                                          ? `${Array.from(sourceBits).filter((b, i) => b !== resultBits[i]).length} bits different`
-                                          : 'No change'}
-                                      </span>
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            })()}
-                          </div>
-                        )}
-
-                        {/* Bit Ranges Summary */}
-                        {step.bitRanges && step.bitRanges.length > 0 && (
-                          <div className="mt-3">
-                            <h5 className="text-xs font-medium text-muted-foreground mb-1">Bit Ranges (0-indexed, exclusive end)</h5>
-                            <div className="flex flex-wrap gap-1">
-                              {step.bitRanges.slice(0, 10).map((range: any, i: number) => (
-                                <Badge key={i} variant="outline" className="font-mono text-xs">
-                                  [{range.start}:{range.end}] ({range.end - range.start} bits)
-                                </Badge>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Visual Mask Display (legacy) */}
-                        {step.params?.mask && typeof step.params.mask === 'string' && !step.bitRanges?.length && (
-                          <div className="mt-2 p-2 bg-cyan-500/10 border border-cyan-500/30 rounded">
-                            <h6 className="text-xs font-medium text-cyan-400 mb-1">Mask Pattern</h6>
-                            <div className="font-mono text-xs break-all max-h-20 overflow-y-auto">
-                              {(step.params.mask as string).slice(0, 128).split('').map((bit, i) => (
-                                <span key={i} className={bit === '1' ? 'text-cyan-400 font-bold' : 'text-muted-foreground'}>
-                                  {bit}
-                                </span>
-                              ))}
-                              {(step.params.mask as string).length > 128 && <span className="text-muted-foreground">...</span>}
-                            </div>
-                            <div className="text-xs text-muted-foreground mt-1">
-                              Active bits: {((step.params.mask as string).match(/1/g) || []).length} / {(step.params.mask as string).length}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Memory Window Display */}
-                        <div className="mt-3 p-2 bg-accent/10 rounded border border-accent/30">
-                          <h5 className="text-xs font-medium text-accent mb-1 flex items-center gap-1">
-                            <Activity className="w-3 h-3" />
-                            Memory Window
-                          </h5>
-                          <div className="grid grid-cols-2 gap-2 text-xs">
-                            <div className="flex justify-between">
-                              <span className="text-muted-foreground">Start:</span>
-                              <span className="font-mono">{step.bitRanges?.[0]?.start || 0}</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-muted-foreground">End:</span>
-                              <span className="font-mono">{step.bitRanges?.[0]?.end || step.fullAfterBits?.length || 0}</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-muted-foreground">Window Size:</span>
-                              <span className="font-mono">
-                                {(step.bitRanges?.[0]?.end || step.beforeBits?.length || 0) - (step.bitRanges?.[0]?.start || 0)} bits
-                              </span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-muted-foreground">Coverage:</span>
-                              <span className="font-mono">
-                                {step.fullAfterBits?.length ? 
-                                  (((step.bitRanges?.[0]?.end || step.beforeBits?.length || 0) - (step.bitRanges?.[0]?.start || 0)) / step.fullAfterBits.length * 100).toFixed(1) : 0}%
-                              </span>
-                            </div>
-                          </div>
+                          )}
                         </div>
                       </CardContent>
                     </Card>
 
+                    <div className="grid grid-cols-2 gap-3">
+                      {/* Parameters */}
+                      <Card>
+                        <CardHeader className="py-2 bg-muted/30">
+                          <CardTitle className="text-xs">Parameters</CardTitle>
+                        </CardHeader>
+                        <CardContent className="py-2">
+                          {step.params && Object.keys(step.params).length > 0 ? (
+                            <div className="space-y-1">
+                              {Object.entries(step.params).map(([key, value]) => (
+                                <div key={key} className="flex justify-between text-xs bg-muted/30 px-2 py-1 rounded">
+                                  <span className="text-muted-foreground font-medium">{key}</span>
+                                  <span className="font-mono break-all max-w-[150px]">
+                                    {key === 'mask' && typeof value === 'string' && value.length > 24 
+                                      ? `${value.slice(0, 12)}...${value.slice(-8)}`
+                                      : JSON.stringify(value).slice(0, 60)}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-muted-foreground">No parameters</p>
+                          )}
+                        </CardContent>
+                      </Card>
+
+                      {/* Bit Range */}
+                      <Card>
+                        <CardHeader className="py-2 bg-muted/30">
+                          <CardTitle className="text-xs">Affected Range</CardTitle>
+                        </CardHeader>
+                        <CardContent className="py-2">
+                          {step.bitRanges && step.bitRanges.length > 0 ? (
+                            <div className="space-y-1">
+                              {step.bitRanges.slice(0, 5).map((range: any, i: number) => (
+                                <div key={i} className="flex items-center justify-between text-xs">
+                                  <Badge variant="outline" className="font-mono">
+                                    [{range.start}:{range.end}]
+                                  </Badge>
+                                  <span className="text-muted-foreground">
+                                    {range.end - range.start} bits
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-muted-foreground">Full range</p>
+                          )}
+                        </CardContent>
+                      </Card>
+                    </div>
+
+                    {/* Operation Visualization - Compact */}
+                    {step.bitRanges && step.bitRanges.length > 0 && (
+                      <Card className="bg-gradient-to-r from-cyan-500/5 to-purple-500/5 border-cyan-500/20">
+                        <CardContent className="py-3">
+                          <h5 className="text-xs font-medium text-cyan-400 mb-2 flex items-center gap-1">
+                            <Layers className="w-3 h-3" />
+                            Before → After
+                          </h5>
+                          {(() => {
+                            const range = step.bitRanges[0];
+                            const sourceBits = step.fullBeforeBits?.slice(range.start, range.end) || '';
+                            const resultBits = step.fullAfterBits?.slice(range.start, range.end) || '';
+                            const changedCount = sourceBits && resultBits 
+                              ? Array.from(sourceBits).filter((b, i) => b !== resultBits[i]).length
+                              : 0;
+                            
+                            return (
+                              <div className="grid grid-cols-2 gap-2 text-xs font-mono">
+                                <div className="p-2 bg-muted/30 rounded">
+                                  <span className="text-yellow-400 break-all">
+                                    {sourceBits.slice(0, 48)}{sourceBits.length > 48 ? '...' : ''}
+                                  </span>
+                                </div>
+                                <div className="p-2 bg-muted/30 rounded">
+                                  <span className="text-green-400 break-all">
+                                    {resultBits.slice(0, 48)}{resultBits.length > 48 ? '...' : ''}
+                                  </span>
+                                </div>
+                                <div className="col-span-2 text-center text-muted-foreground">
+                                  {changedCount > 0 ? `${changedCount} bits changed` : 'No change'}
+                                </div>
+                              </div>
+                            );
+                          })()}
+                        </CardContent>
+                      </Card>
+                    )}
+
+                    {/* Metrics Grid */}
                     <Card>
-                      <CardHeader className="pb-2">
-                        <CardTitle className="text-sm flex items-center gap-2">
-                          <Activity className="w-4 h-4" />
-                          Metrics (Live)
+                      <CardHeader className="py-2 bg-muted/30">
+                        <CardTitle className="text-xs flex items-center gap-2">
+                          <Activity className="w-3 h-3" />
+                          Live Metrics
                         </CardTitle>
                       </CardHeader>
-                      <CardContent>
-                        <ScrollArea className="h-[200px]">
-                          <div className="space-y-1">
-                            {step.metrics && Object.entries(step.metrics).slice(0, 12).map(([key, value]) => {
-                              // Calculate change from previous step
-                              const prevStep = currentStep > 0 ? reconstructedSteps[currentStep - 1] : null;
-                              const prevValue = prevStep?.metrics?.[key];
-                              const change = prevValue !== undefined ? (value as number) - (prevValue as number) : null;
-                              
-                              return (
-                                <div key={key} className="flex justify-between items-center text-sm">
-                                  <span className="text-muted-foreground">{key}</span>
-                                  <div className="flex items-center gap-2">
-                                    <span className="font-mono">{typeof value === 'number' ? (value as number).toFixed(4) : String(value)}</span>
-                                    {change !== null && change !== 0 && (
-                                      <Badge 
-                                        variant={change < 0 ? 'default' : 'secondary'} 
-                                        className={`text-xs px-1 ${change < 0 ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}
-                                      >
-                                        {change > 0 ? '+' : ''}{change.toFixed(4)}
-                                      </Badge>
-                                    )}
-                                  </div>
+                      <CardContent className="py-2">
+                        <div className="grid grid-cols-3 gap-2">
+                          {step.metrics && Object.entries(step.metrics).slice(0, 9).map(([key, value]) => {
+                            const prevStep = currentStep > 0 ? reconstructedSteps[currentStep - 1] : null;
+                            const prevValue = prevStep?.metrics?.[key];
+                            const change = prevValue !== undefined ? (value as number) - (prevValue as number) : null;
+                            
+                            return (
+                              <div key={key} className="p-2 bg-muted/20 rounded text-xs">
+                                <div className="text-muted-foreground truncate">{key}</div>
+                                <div className="font-mono font-medium">
+                                  {typeof value === 'number' ? value.toFixed(3) : String(value)}
                                 </div>
-                              );
-                            })}
-                          </div>
-                        </ScrollArea>
+                                {change !== null && change !== 0 && (
+                                  <div className={`text-[10px] ${change < 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                    {change > 0 ? '+' : ''}{change.toFixed(3)}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
                       </CardContent>
                     </Card>
                   </div>

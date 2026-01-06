@@ -245,50 +245,57 @@ export const FilesTab = ({ onFileSelect }: FilesTabProps) => {
   };
 
   const FileList = ({ files, group }: { files: PythonFile[]; group: PythonFile['group'] }) => (
-    <div className="space-y-2">
+    <div className="space-y-1">
       {files.length === 0 ? (
-        <p className="text-sm text-muted-foreground py-2">No files in this group</p>
+        <p className="text-xs text-muted-foreground py-2 px-2">No files in this group</p>
       ) : (
         sortedFiles(files).map(file => (
           <div
             key={file.id}
-            className={`flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-colors ${
-              selectedFile?.id === file.id ? 'bg-primary/10 border-primary' : 'hover:bg-muted/50'
+            className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-all group ${
+              selectedFile?.id === file.id 
+                ? 'bg-primary/10 border-primary shadow-sm' 
+                : 'hover:bg-muted/50 border-transparent hover:border-border'
             }`}
             onClick={() => handleSelect(file)}
           >
-            <div className="flex items-center gap-3">
-              <FileCode className={`w-4 h-4 ${file.name.endsWith('.py') ? 'text-yellow-500' : 'text-cyan-500'}`} />
-              <div>
-                <p className="font-medium font-mono text-sm">{file.name}</p>
-                <p className="text-xs text-muted-foreground">
-                  {file.content.length} chars • {new Date(file.modified).toLocaleDateString()}
-                  {file.customGroup && <span className="ml-2 text-orange-400">[{file.customGroup}]</span>}
-                </p>
+            <FileCode className={`w-4 h-4 shrink-0 ${file.name.endsWith('.py') ? 'text-yellow-500' : 'text-cyan-500'}`} />
+            <div className="flex-1 min-w-0">
+              <p className="font-mono text-sm truncate">{file.name}</p>
+              <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                <span>{(file.content.length / 1024).toFixed(1)}KB</span>
+                <span>•</span>
+                <span>{new Date(file.modified).toLocaleDateString()}</span>
+                {file.customGroup && (
+                  <>
+                    <span>•</span>
+                    <span className="text-orange-400">{file.customGroup}</span>
+                  </>
+                )}
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
               <Button
                 size="icon"
                 variant="ghost"
-                className="h-8 w-8"
+                className="h-6 w-6"
                 onClick={(e) => {
                   e.stopPropagation();
                   handleSelect(file);
                 }}
               >
-                <Eye className="w-4 h-4" />
+                <Eye className="w-3 h-3" />
               </Button>
               <Button
                 size="icon"
                 variant="ghost"
-                className="h-8 w-8 text-destructive hover:text-destructive"
+                className="h-6 w-6 text-destructive hover:text-destructive"
                 onClick={(e) => {
                   e.stopPropagation();
                   handleDelete(file.id);
                 }}
               >
-                <Trash2 className="w-4 h-4" />
+                <Trash2 className="w-3 h-3" />
               </Button>
             </div>
           </div>
@@ -298,7 +305,7 @@ export const FilesTab = ({ onFileSelect }: FilesTabProps) => {
   );
 
   return (
-    <div className="h-full flex gap-4 p-4">
+    <div className="h-full flex gap-3 p-3">
       {/* Hidden file input - multiple allowed, accepts .py, .js, .ts */}
       <input
         type="file"
@@ -309,85 +316,52 @@ export const FilesTab = ({ onFileSelect }: FilesTabProps) => {
         className="hidden"
       />
 
-      {/* Left: File List */}
-      <div className="w-1/2 flex flex-col gap-4">
-        {/* Upload Controls */}
-        <Card>
-          <CardContent className="py-4 space-y-3">
+      {/* Left: Compact File List */}
+      <div className="w-1/2 flex flex-col gap-3">
+        {/* Upload Controls - Compact */}
+        <Card className="bg-gradient-to-r from-card to-muted/20">
+          <CardContent className="py-3 space-y-2">
             <div className="flex items-center gap-2">
               <Select value={uploadGroup} onValueChange={(v) => setUploadGroup(v as PythonFile['group'])}>
-                <SelectTrigger className="w-40">
+                <SelectTrigger className="w-32 h-8 text-xs">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="scheduler">
-                    <div className="flex items-center gap-2">
-                      <Clock className="w-4 h-4" />
-                      Scheduler
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="algorithm">
-                    <div className="flex items-center gap-2">
-                      <Code className="w-4 h-4" />
-                      Algorithm
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="scoring">
-                    <div className="flex items-center gap-2">
-                      <Calculator className="w-4 h-4" />
-                      Scoring
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="policies">
-                    <div className="flex items-center gap-2">
-                      <Shield className="w-4 h-4" />
-                      Policies
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="ai">
-                    <div className="flex items-center gap-2">
-                      <Brain className="w-4 h-4" />
-                      AI
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="custom">
-                    <div className="flex items-center gap-2">
-                      <Folder className="w-4 h-4" />
-                      Custom
-                    </div>
-                  </SelectItem>
+                  <SelectItem value="scheduler">Scheduler</SelectItem>
+                  <SelectItem value="algorithm">Algorithm</SelectItem>
+                  <SelectItem value="scoring">Scoring</SelectItem>
+                  <SelectItem value="policies">Policies</SelectItem>
+                  <SelectItem value="ai">AI</SelectItem>
+                  <SelectItem value="custom">Custom</SelectItem>
                 </SelectContent>
               </Select>
               
               {uploadGroup === 'custom' && (
                 <Select value={customGroupName} onValueChange={setCustomGroupName}>
-                  <SelectTrigger className="w-32">
-                    <SelectValue placeholder="Sub-group" />
+                  <SelectTrigger className="w-24 h-8 text-xs">
+                    <SelectValue placeholder="Sub" />
                   </SelectTrigger>
                   <SelectContent>
                     {customGroups.map(g => (
                       <SelectItem key={g} value={g}>{g}</SelectItem>
                     ))}
-                    {customGroups.length === 0 && (
-                      <SelectItem value="" disabled>No groups yet</SelectItem>
-                    )}
                   </SelectContent>
                 </Select>
               )}
               
-              <Button onClick={handleUpload} className="flex-1">
-                <Upload className="w-4 h-4 mr-2" />
-                Upload Files
+              <Button onClick={handleUpload} size="sm" className="flex-1 h-8">
+                <Upload className="w-3 h-3 mr-1" />
+                Upload
               </Button>
             </div>
 
-            {/* Custom Group Creation */}
-            <div className="flex items-center gap-2">
+            {/* Quick Actions Row */}
+            <div className="flex items-center gap-1 flex-wrap">
               <Dialog open={newGroupDialogOpen} onOpenChange={setNewGroupDialogOpen}>
                 <DialogTrigger asChild>
-                  <Button size="sm" variant="outline" className="h-7 text-xs">
+                  <Button size="sm" variant="outline" className="h-6 text-[10px] px-2">
                     <FolderPlus className="w-3 h-3 mr-1" />
-                    New Group
+                    Group
                   </Button>
                 </DialogTrigger>
                 <DialogContent>
@@ -398,19 +372,38 @@ export const FilesTab = ({ onFileSelect }: FilesTabProps) => {
                     <Input
                       value={newGroupName}
                       onChange={(e) => setNewGroupName(e.target.value)}
-                      placeholder="Group name (e.g., Utilities, Models)"
+                      placeholder="Group name"
                     />
                     <Button onClick={handleCreateCustomGroup} className="w-full">
-                      Create Group
+                      Create
                     </Button>
                   </div>
                 </DialogContent>
               </Dialog>
-
-              {/* Sort Control */}
-              <span className="text-xs text-muted-foreground ml-auto">Sort by:</span>
+              
+              <Button size="sm" variant="outline" className="h-6 text-[10px] px-2" onClick={handleAddExampleFiles}>
+                <Plus className="w-3 h-3 mr-1" />
+                Examples
+              </Button>
+              <Button size="sm" variant="outline" className="h-6 text-[10px] px-2" onClick={handleAddAIExampleFiles}>
+                <Brain className="w-3 h-3 mr-1" />
+                AI
+              </Button>
+              <Button 
+                size="sm" 
+                variant="default" 
+                className="h-6 text-[10px] px-2"
+                onClick={() => {
+                  loadUnifiedStrategyFiles(pythonModuleSystem);
+                  toast.success('Unified Strategy loaded');
+                }}
+              >
+                <Zap className="w-3 h-3 mr-1" />
+                Unified
+              </Button>
+              
               <Select value={sortBy} onValueChange={(v) => setSortBy(v as typeof sortBy)}>
-                <SelectTrigger className="w-24 h-7 text-xs">
+                <SelectTrigger className="w-16 h-6 text-[10px] ml-auto">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -419,31 +412,6 @@ export const FilesTab = ({ onFileSelect }: FilesTabProps) => {
                   <SelectItem value="date">Date</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
-
-            {/* Example Files */}
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs text-muted-foreground">Add examples:</span>
-              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={handleAddExampleFiles}>
-                <Plus className="w-3 h-3 mr-1" />
-                Python Strategy
-              </Button>
-              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={handleAddAIExampleFiles}>
-                <Brain className="w-3 h-3 mr-1" />
-                AI/TensorFlow
-              </Button>
-              <Button 
-                size="sm" 
-                variant="default" 
-                className="h-7 text-xs bg-primary"
-                onClick={() => {
-                  loadUnifiedStrategyFiles(pythonModuleSystem);
-                  toast.success('Unified Strategy loaded - tests all operations, metrics, AI, scoring, policies');
-                }}
-              >
-                <Zap className="w-3 h-3 mr-1" />
-                Unified Strategy
-              </Button>
             </div>
           </CardContent>
         </Card>
@@ -559,28 +527,37 @@ export const FilesTab = ({ onFileSelect }: FilesTabProps) => {
 
       {/* Right: File Preview with Edit */}
       <Card className="w-1/2 flex flex-col">
-        <CardHeader className="pb-2">
+        <CardHeader className="py-2 border-b">
           <CardTitle className="text-sm flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Eye className="w-4 h-4" />
-              {selectedFile ? (isEditing ? 'Editing: ' : '') + selectedFile.name : 'File Preview'}
+              {selectedFile ? (
+                <>
+                  <FileCode className={`w-4 h-4 ${selectedFile.name.endsWith('.py') ? 'text-yellow-500' : 'text-cyan-500'}`} />
+                  <span className="font-mono">{isEditing ? 'Editing: ' : ''}{selectedFile.name}</span>
+                </>
+              ) : (
+                <>
+                  <Eye className="w-4 h-4" />
+                  <span>File Preview</span>
+                </>
+              )}
             </div>
             {selectedFile && (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1">
                 {isEditing ? (
                   <>
-                    <Button size="sm" variant="ghost" onClick={handleCancelEdit}>
-                      <X className="w-4 h-4 mr-1" />
+                    <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={handleCancelEdit}>
+                      <X className="w-3 h-3 mr-1" />
                       Cancel
                     </Button>
-                    <Button size="sm" onClick={handleSaveEdit}>
-                      <Save className="w-4 h-4 mr-1" />
+                    <Button size="sm" className="h-7 px-2 text-xs" onClick={handleSaveEdit}>
+                      <Save className="w-3 h-3 mr-1" />
                       Save
                     </Button>
                   </>
                 ) : (
-                  <Button size="sm" variant="outline" onClick={handleStartEdit}>
-                    <Edit2 className="w-4 h-4 mr-1" />
+                  <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={handleStartEdit}>
+                    <Edit2 className="w-3 h-3 mr-1" />
                     Edit
                   </Button>
                 )}
@@ -588,35 +565,35 @@ export const FilesTab = ({ onFileSelect }: FilesTabProps) => {
             )}
           </CardTitle>
         </CardHeader>
-        <CardContent className="flex-1 overflow-hidden flex flex-col">
+        <CardContent className="flex-1 overflow-hidden flex flex-col p-3">
           {selectedFile ? (
             <div className="h-full flex flex-col">
               <div className="flex items-center gap-2 mb-2">
-                <Badge variant="outline">{selectedFile.group}</Badge>
+                <Badge variant="outline" className="text-[10px]">{selectedFile.group}</Badge>
                 {selectedFile.customGroup && (
-                  <Badge variant="secondary">{selectedFile.customGroup}</Badge>
+                  <Badge variant="secondary" className="text-[10px]">{selectedFile.customGroup}</Badge>
                 )}
                 {isEditing && (
                   <Input
                     value={editName}
                     onChange={(e) => setEditName(e.target.value)}
-                    className="h-7 w-48 font-mono text-sm"
+                    className="h-6 w-40 font-mono text-xs"
                   />
                 )}
-                <span className="text-xs text-muted-foreground ml-auto">
-                  Modified: {new Date(selectedFile.modified).toLocaleString()}
+                <span className="text-[10px] text-muted-foreground ml-auto">
+                  {new Date(selectedFile.modified).toLocaleString()}
                 </span>
               </div>
               {isEditing ? (
                 <Textarea
                   value={editContent}
                   onChange={(e) => setEditContent(e.target.value)}
-                  className="flex-1 font-mono text-sm resize-none"
+                  className="flex-1 font-mono text-xs resize-none"
                   placeholder="Code..."
                 />
               ) : (
-                <ScrollArea className="flex-1 border rounded-lg">
-                  <pre className="p-4 text-sm font-mono">
+                <ScrollArea className="flex-1 border rounded-lg bg-muted/20">
+                  <pre className="p-3 text-xs font-mono">
                     <code>{selectedFile.content}</code>
                   </pre>
                 </ScrollArea>
@@ -625,9 +602,9 @@ export const FilesTab = ({ onFileSelect }: FilesTabProps) => {
           ) : (
             <div className="h-full flex items-center justify-center text-muted-foreground">
               <div className="text-center">
-                <FolderOpen className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                <p>Select a file to preview</p>
-                <p className="text-xs mt-2">Supports .py, .js, .ts files</p>
+                <FolderOpen className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                <p className="text-sm">Select a file to preview</p>
+                <p className="text-xs mt-1">Supports .py, .js, .ts</p>
               </div>
             </div>
           )}

@@ -21,7 +21,9 @@ import {
   Repeat,
   GitMerge,
   Code,
+  BookOpen,
 } from 'lucide-react';
+import { OperationsGuide } from './OperationsGuide';
 import { LogicGates, ShiftOperations, BitManipulation, BitPacking, AdvancedBitOperations, ArithmeticOperations } from '@/lib/binaryOperations';
 import { predefinedManager, PredefinedOperation } from '@/lib/predefinedManager';
 import { executeOperation, getAvailableOperations, getOperationCost } from '@/lib/operationsRouter';
@@ -286,258 +288,289 @@ export const TransformationsPanel = ({ bits, selectedRanges, onTransform }: Tran
         </div>
       </div>
 
-      <ScrollArea className="flex-1">
-        <div className="p-4 space-y-4">
-          {/* Enhanced Command Interface */}
-          <Card className="bg-gradient-to-r from-card to-muted/20 overflow-hidden">
-            <CardHeader className="py-3 bg-muted/30">
-              <CardTitle className="text-sm flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Terminal className="w-4 h-4 text-primary" />
-                  Command Interface
-                </div>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
-                      <HelpCircle className="w-4 h-4" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-80">
-                    <div className="space-y-2">
-                      <h4 className="font-medium text-sm">Command Help</h4>
-                      <p className="text-xs text-muted-foreground">
-                        Type any operation followed by parameters. Use Tab for autocomplete, ↑↓ for history.
-                      </p>
-                      <div className="text-xs space-y-1">
-                        <p><code className="bg-muted px-1 rounded">NOT</code> - Invert bits</p>
-                        <p><code className="bg-muted px-1 rounded">AND 1010</code> - AND with mask</p>
-                        <p><code className="bg-muted px-1 rounded">XOR 11110000</code> - XOR with mask</p>
-                        <p><code className="bg-muted px-1 rounded">SHL 4</code> - Shift left 4 bits</p>
-                        <p><code className="bg-muted px-1 rounded">ROL 2</code> - Rotate left 2 bits</p>
-                        <p><code className="bg-muted px-1 rounded">REVERSE</code> - Reverse bit order</p>
-                        <p><code className="bg-muted px-1 rounded">GRAY</code> - Gray code encode</p>
-                        <p><code className="bg-muted px-1 rounded">BSWAP</code> - Swap bytes</p>
-                        <p><code className="bg-muted px-1 rounded">INC</code> - Increment</p>
-                      </div>
-                    </div>
-                  </PopoverContent>
-                </Popover>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="py-4 space-y-3">
-              <Textarea
-                ref={commandInputRef}
-                value={commandInput}
-                onChange={(e) => setCommandInput(e.target.value)}
-                placeholder={`Enter command (${availableOperations.length} available). Tab to autocomplete, ↑↓ for history`}
-                className="font-mono text-sm min-h-[60px] bg-background"
-                onKeyDown={handleKeyDown}
-              />
-              <div className="flex gap-2">
-                <Button onClick={handleExecuteCommand} className="flex-1 bg-primary hover:bg-primary/90">
-                  Execute Command
-                </Button>
-                <Popover open={showAutocomplete} onOpenChange={setShowAutocomplete}>
-                  <PopoverTrigger asChild>
-                    <Button variant="outline" onClick={() => setShowAutocomplete(true)}>
-                      Browse
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-64 p-0" align="end">
-                    <Command>
-                      <CommandInput placeholder="Search operations..." />
-                      <CommandList>
-                        <CommandEmpty>No operation found.</CommandEmpty>
-                        <CommandGroup heading="Available Operations">
-                          {availableOperations.slice(0, 20).map(op => (
-                            <CommandItem
-                              key={op}
-                              onSelect={() => {
-                                setCommandInput(op + ' ');
-                                setShowAutocomplete(false);
-                                commandInputRef.current?.focus();
-                              }}
-                            >
-                              <span className="font-mono">{op}</span>
-                            </CommandItem>
-                          ))}
-                          {availableOperations.length > 20 && (
-                            <CommandItem disabled>
-                              +{availableOperations.length - 20} more...
-                            </CommandItem>
-                          )}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
-              </div>
-              {commandResult && (
-                <div className={`p-2 border rounded text-xs font-mono whitespace-pre-wrap ${
-                  commandResult.startsWith('Error') 
-                    ? 'bg-destructive/10 border-destructive/30 text-destructive'
-                    : 'bg-muted/50 border-border'
-                }`}>
-                  {commandResult}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Parameters */}
-          <Card>
-            <CardHeader className="py-3 bg-muted/30">
-              <CardTitle className="text-sm">Operation Parameters</CardTitle>
-            </CardHeader>
-            <CardContent className="py-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label className="text-xs">Operand (binary)</Label>
-                  <Input
-                    value={operandInput}
-                    onChange={(e) => setOperandInput(e.target.value)}
-                    placeholder="e.g., 10101010"
-                    className="font-mono bg-background"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-xs">Shift/Rotate Amount</Label>
-                  <Input
-                    type="number"
-                    value={shiftAmount}
-                    onChange={(e) => setShiftAmount(e.target.value)}
-                    min={1}
-                    className="bg-background"
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4 mt-4">
-                <div className="space-y-2">
-                  <Label className="text-xs">Range Start (optional)</Label>
-                  <Input
-                    type="number"
-                    value={rangeStart}
-                    onChange={(e) => setRangeStart(e.target.value)}
-                    placeholder={hasSelection ? String(selectedRanges[0].start) : "0"}
-                    className="bg-background"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-xs">Range End (optional)</Label>
-                  <Input
-                    type="number"
-                    value={rangeEnd}
-                    onChange={(e) => setRangeEnd(e.target.value)}
-                    placeholder={hasSelection ? String(selectedRanges[0].end + 1) : String(bits.length)}
-                    className="bg-background"
-                  />
-                </div>
-              </div>
-              <p className="text-xs text-muted-foreground mt-2">
-                💡 Leave range empty to use selection or full file. Operations will only affect the specified range.
-              </p>
-            </CardContent>
-          </Card>
-
-          {/* Operations Grid by Category */}
-          <Tabs defaultValue="Logic Gates" className="w-full">
-            <TabsList className="w-full justify-start overflow-x-auto">
-              {Object.keys(operationsByCategory).slice(0, 5).map(cat => (
-                <TabsTrigger key={cat} value={cat} className="gap-1 text-xs">
-                  {getCategoryIcon(cat)}
-                  {cat}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-
-            {Object.entries(operationsByCategory).map(([category, ops]) => (
-              <TabsContent key={category} value={category} className="mt-4">
-                <div className="grid grid-cols-3 gap-2">
-                  {ops.map(op => {
-                    const isImplemented = availableOperations.includes(op.id);
-                    return (
-                      <Button
-                        key={op.id}
-                        variant="outline"
-                        size="sm"
-                        onClick={() => executeOperationById(op.id)}
-                        disabled={!isImplemented}
-                        className={`h-auto py-2 flex flex-col items-start text-left ${
-                          isImplemented 
-                            ? 'hover:bg-primary/10 hover:border-primary/50' 
-                            : 'opacity-50'
-                        }`}
-                      >
-                        <div className="flex items-center gap-1 w-full">
-                          <span className="font-medium text-xs">{op.id}</span>
-                          {!isImplemented && (
-                            <Badge variant="outline" className="text-[9px] ml-auto">pending</Badge>
-                          )}
-                        </div>
-                        <span className="text-[10px] text-muted-foreground truncate w-full">
-                          {op.name}
-                        </span>
-                      </Button>
-                    );
-                  })}
-                </div>
-                {ops.length === 0 && (
-                  <div className="text-center py-8 text-muted-foreground text-sm">
-                    No operations in this category
-                  </div>
-                )}
-              </TabsContent>
-            ))}
-          </Tabs>
-
-          {/* Quick Actions */}
-          <Card>
-            <CardHeader className="py-3 bg-muted/30">
-              <CardTitle className="text-sm">Quick Actions</CardTitle>
-            </CardHeader>
-            <CardContent className="py-4">
-              <div className="grid grid-cols-4 gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => executeOperationById('NOT')}
-                  className="flex-col h-auto py-2"
-                >
-                  <Binary className="w-4 h-4 mb-1" />
-                  <span className="text-xs">NOT</span>
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => executeOperationById('REVERSE')}
-                  className="flex-col h-auto py-2"
-                >
-                  <RotateCcw className="w-4 h-4 mb-1" />
-                  <span className="text-xs">Reverse</span>
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => executeOperationById('BSWAP')}
-                  className="flex-col h-auto py-2"
-                >
-                  <Move className="w-4 h-4 mb-1" />
-                  <span className="text-xs">Byte Swap</span>
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => executeOperationById('GRAY')}
-                  className="flex-col h-auto py-2"
-                >
-                  <GitBranch className="w-4 h-4 mb-1" />
-                  <span className="text-xs">Gray</span>
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+      <Tabs defaultValue="command" className="flex-1 flex flex-col overflow-hidden">
+        <div className="px-4 pt-2">
+          <TabsList className="w-full justify-start">
+            <TabsTrigger value="command" className="gap-1">
+              <Terminal className="w-3 h-3" />
+              Command
+            </TabsTrigger>
+            <TabsTrigger value="guide" className="gap-1">
+              <HelpCircle className="w-3 h-3" />
+              Guide ({availableOperations.length})
+            </TabsTrigger>
+            <TabsTrigger value="grid" className="gap-1">
+              <Binary className="w-3 h-3" />
+              Operations
+            </TabsTrigger>
+          </TabsList>
         </div>
-      </ScrollArea>
+
+        <TabsContent value="command" className="flex-1 overflow-auto m-0">
+          <ScrollArea className="h-full">
+            <div className="p-4 space-y-4">
+              {/* Enhanced Command Interface */}
+              <Card className="bg-gradient-to-r from-card to-muted/20 overflow-hidden">
+                <CardHeader className="py-3 bg-muted/30">
+                  <CardTitle className="text-sm flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Terminal className="w-4 h-4 text-primary" />
+                      Command Interface
+                    </div>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
+                          <HelpCircle className="w-4 h-4" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-80">
+                        <div className="space-y-2">
+                          <h4 className="font-medium text-sm">Command Help</h4>
+                          <p className="text-xs text-muted-foreground">
+                            Type any operation followed by parameters. Use Tab for autocomplete, ↑↓ for history.
+                          </p>
+                          <div className="text-xs space-y-1">
+                            <p><code className="bg-muted px-1 rounded">NOT</code> - Invert bits</p>
+                            <p><code className="bg-muted px-1 rounded">AND 1010</code> - AND with mask</p>
+                            <p><code className="bg-muted px-1 rounded">XOR 11110000</code> - XOR with mask</p>
+                            <p><code className="bg-muted px-1 rounded">SHL 4</code> - Shift left 4 bits</p>
+                            <p><code className="bg-muted px-1 rounded">ROL 2</code> - Rotate left 2 bits</p>
+                            <p><code className="bg-muted px-1 rounded">REVERSE</code> - Reverse bit order</p>
+                            <p><code className="bg-muted px-1 rounded">GRAY</code> - Gray code encode</p>
+                            <p><code className="bg-muted px-1 rounded">BSWAP</code> - Swap bytes</p>
+                            <p><code className="bg-muted px-1 rounded">INC</code> - Increment</p>
+                          </div>
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="py-4 space-y-3">
+                  <Textarea
+                    ref={commandInputRef}
+                    value={commandInput}
+                    onChange={(e) => setCommandInput(e.target.value)}
+                    placeholder={`Enter command (${availableOperations.length} available). Tab to autocomplete, ↑↓ for history`}
+                    className="font-mono text-sm min-h-[60px] bg-background"
+                    onKeyDown={handleKeyDown}
+                  />
+                  <div className="flex gap-2">
+                    <Button onClick={handleExecuteCommand} className="flex-1 bg-primary hover:bg-primary/90">
+                      Execute Command
+                    </Button>
+                    <Popover open={showAutocomplete} onOpenChange={setShowAutocomplete}>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" onClick={() => setShowAutocomplete(true)}>
+                          Browse
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-64 p-0" align="end">
+                        <Command>
+                          <CommandInput placeholder="Search operations..." />
+                          <CommandList>
+                            <CommandEmpty>No operation found.</CommandEmpty>
+                            <CommandGroup heading="Available Operations">
+                              {availableOperations.slice(0, 20).map(op => (
+                                <CommandItem
+                                  key={op}
+                                  onSelect={() => {
+                                    setCommandInput(op + ' ');
+                                    setShowAutocomplete(false);
+                                    commandInputRef.current?.focus();
+                                  }}
+                                >
+                                  <span className="font-mono">{op}</span>
+                                </CommandItem>
+                              ))}
+                              {availableOperations.length > 20 && (
+                                <CommandItem disabled>
+                                  +{availableOperations.length - 20} more...
+                                </CommandItem>
+                              )}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                  {commandResult && (
+                    <div className={`p-2 border rounded text-xs font-mono whitespace-pre-wrap ${
+                      commandResult.startsWith('Error') 
+                        ? 'bg-destructive/10 border-destructive/30 text-destructive'
+                        : 'bg-muted/50 border-border'
+                    }`}>
+                      {commandResult}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Parameters */}
+              <Card>
+                <CardHeader className="py-3 bg-muted/30">
+                  <CardTitle className="text-sm">Operation Parameters</CardTitle>
+                </CardHeader>
+                <CardContent className="py-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label className="text-xs">Operand (binary)</Label>
+                      <Input
+                        value={operandInput}
+                        onChange={(e) => setOperandInput(e.target.value)}
+                        placeholder="e.g., 10101010"
+                        className="font-mono bg-background"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs">Shift/Rotate Amount</Label>
+                      <Input
+                        type="number"
+                        value={shiftAmount}
+                        onChange={(e) => setShiftAmount(e.target.value)}
+                        min={1}
+                        className="bg-background"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 mt-4">
+                    <div className="space-y-2">
+                      <Label className="text-xs">Range Start (optional)</Label>
+                      <Input
+                        type="number"
+                        value={rangeStart}
+                        onChange={(e) => setRangeStart(e.target.value)}
+                        placeholder={hasSelection ? String(selectedRanges[0].start) : "0"}
+                        className="bg-background"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs">Range End (optional)</Label>
+                      <Input
+                        type="number"
+                        value={rangeEnd}
+                        onChange={(e) => setRangeEnd(e.target.value)}
+                        placeholder={hasSelection ? String(selectedRanges[0].end + 1) : String(bits.length)}
+                        className="bg-background"
+                      />
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    💡 Leave range empty to use selection or full file. Operations will only affect the specified range.
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+          </ScrollArea>
+        </TabsContent>
+
+        <TabsContent value="guide" className="flex-1 overflow-hidden m-0 p-4">
+          <OperationsGuide onInsertCommand={(cmd) => setCommandInput(cmd)} />
+        </TabsContent>
+
+        <TabsContent value="grid" className="flex-1 overflow-auto m-0">
+          <ScrollArea className="h-full">
+            <div className="p-4 space-y-4">
+              {/* Operations Grid by Category */}
+              <Tabs defaultValue="Logic Gates" className="w-full">
+                <TabsList className="w-full justify-start overflow-x-auto">
+                  {Object.keys(operationsByCategory).slice(0, 5).map(cat => (
+                    <TabsTrigger key={cat} value={cat} className="gap-1 text-xs">
+                      {getCategoryIcon(cat)}
+                      {cat}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+
+                {Object.entries(operationsByCategory).map(([category, ops]) => (
+                  <TabsContent key={category} value={category} className="mt-4">
+                    <div className="grid grid-cols-3 gap-2">
+                      {ops.map(op => {
+                        const isImplemented = availableOperations.includes(op.id);
+                        return (
+                          <Button
+                            key={op.id}
+                            variant="outline"
+                            size="sm"
+                            onClick={() => executeOperationById(op.id)}
+                            disabled={!isImplemented}
+                            className={`h-auto py-2 flex flex-col items-start text-left ${
+                              isImplemented 
+                                ? 'hover:bg-primary/10 hover:border-primary/50' 
+                                : 'opacity-50'
+                            }`}
+                          >
+                            <div className="flex items-center gap-1 w-full">
+                              <span className="font-medium text-xs">{op.id}</span>
+                              {!isImplemented && (
+                                <Badge variant="outline" className="text-[9px] ml-auto">pending</Badge>
+                              )}
+                            </div>
+                            <span className="text-[10px] text-muted-foreground truncate w-full">
+                              {op.name}
+                            </span>
+                          </Button>
+                        );
+                      })}
+                    </div>
+                    {ops.length === 0 && (
+                      <div className="text-center py-8 text-muted-foreground text-sm">
+                        No operations in this category
+                      </div>
+                    )}
+                  </TabsContent>
+                ))}
+              </Tabs>
+
+              {/* Quick Actions */}
+              <Card>
+                <CardHeader className="py-3 bg-muted/30">
+                  <CardTitle className="text-sm">Quick Actions</CardTitle>
+                </CardHeader>
+                <CardContent className="py-4">
+                  <div className="grid grid-cols-4 gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => executeOperationById('NOT')}
+                      className="flex-col h-auto py-2"
+                    >
+                      <Binary className="w-4 h-4 mb-1" />
+                      <span className="text-xs">NOT</span>
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => executeOperationById('REVERSE')}
+                      className="flex-col h-auto py-2"
+                    >
+                      <RotateCcw className="w-4 h-4 mb-1" />
+                      <span className="text-xs">Reverse</span>
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => executeOperationById('BSWAP')}
+                      className="flex-col h-auto py-2"
+                    >
+                      <Move className="w-4 h-4 mb-1" />
+                      <span className="text-xs">Byte Swap</span>
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => executeOperationById('GRAY')}
+                      className="flex-col h-auto py-2"
+                    >
+                      <GitBranch className="w-4 h-4 mb-1" />
+                      <span className="text-xs">Gray</span>
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </ScrollArea>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };
