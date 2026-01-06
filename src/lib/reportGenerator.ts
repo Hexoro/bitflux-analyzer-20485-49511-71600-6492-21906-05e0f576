@@ -70,7 +70,22 @@ export interface ComprehensiveAnalysisReport {
   boundaries: BoundaryData[];
   partitions: PartitionData[];
   history: HistoryEntry[];
+  bitstreamAnalysis?: BitstreamAnalysisData;
   generatedAt: Date;
+}
+
+export interface BitstreamAnalysisData {
+  entropy: number;
+  transitionRate: number;
+  compressionRatio: number;
+  bitBalance: number;
+  zeroToOneTransitions: number;
+  oneToZeroTransitions: number;
+  totalTransitions: number;
+  avgRunLength: number;
+  maxRunLength: number;
+  commonPatterns: Array<{ pattern: string; count: number }>;
+  longestRepeatedSubstring?: { pattern: string; positions: number[] };
 }
 
 // PDF styling constants
@@ -404,7 +419,8 @@ export function generateAnalysisReport(
   sequences: SequenceData[],
   boundaries: BoundaryData[],
   partitions?: PartitionData[],
-  history?: HistoryEntry[]
+  history?: HistoryEntry[],
+  bitstreamAnalysis?: BitstreamAnalysisData
 ): Blob {
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.getWidth();
@@ -638,6 +654,85 @@ export function generateAnalysisReport(
       doc.setTextColor(...COLORS.muted);
       doc.text(`... and ${partitions.length - 10} more partitions`, 20, y);
       y += 8;
+    }
+  }
+  
+  // Bitstream Analysis Section
+  if (bitstreamAnalysis) {
+    doc.addPage();
+    y = 20;
+    y = drawSectionHeader(doc, y, 'Bitstream Analysis');
+    
+    // Draw stat boxes for bitstream analysis
+    const bsBoxWidth = 40;
+    const bsBoxHeight = 26;
+    const bsBoxGap = 5;
+    const bsStartX = 15;
+    
+    drawStatBox(doc, bsStartX, y, bsBoxWidth, bsBoxHeight, 'Entropy', formatNumber(bitstreamAnalysis.entropy, 4), COLORS.primary);
+    drawStatBox(doc, bsStartX + bsBoxWidth + bsBoxGap, y, bsBoxWidth, bsBoxHeight, 'Trans Rate', `${(bitstreamAnalysis.transitionRate * 100).toFixed(1)}%`, COLORS.success);
+    drawStatBox(doc, bsStartX + (bsBoxWidth + bsBoxGap) * 2, y, bsBoxWidth, bsBoxHeight, 'RLE Ratio', `${bitstreamAnalysis.compressionRatio.toFixed(2)}:1`, COLORS.warning);
+    drawStatBox(doc, bsStartX + (bsBoxWidth + bsBoxGap) * 3, y, bsBoxWidth, bsBoxHeight, 'Balance', `${(bitstreamAnalysis.bitBalance * 100).toFixed(1)}%`, COLORS.primary);
+    
+    y += bsBoxHeight + 15;
+    
+    // Transition Details
+    y = drawSectionHeader(doc, y, 'Transition Analysis');
+    
+    const transitionStats = [
+      ['0 → 1 Transitions:', bitstreamAnalysis.zeroToOneTransitions.toString()],
+      ['1 → 0 Transitions:', bitstreamAnalysis.oneToZeroTransitions.toString()],
+      ['Total Transitions:', bitstreamAnalysis.totalTransitions.toString()],
+      ['Average Run Length:', formatNumber(bitstreamAnalysis.avgRunLength, 2)],
+      ['Maximum Run Length:', bitstreamAnalysis.maxRunLength.toString()],
+    ];
+    
+    transitionStats.forEach(([label, value]) => {
+      y = drawKeyValue(doc, y, label, value);
+    });
+    
+    y += 10;
+    
+    // Common Patterns
+    if (bitstreamAnalysis.commonPatterns && bitstreamAnalysis.commonPatterns.length > 0) {
+      y = checkPageBreak(doc, y, 40);
+      y = drawSectionHeader(doc, y, `Common Patterns (${bitstreamAnalysis.commonPatterns.length})`);
+      
+      bitstreamAnalysis.commonPatterns.slice(0, 10).forEach((pattern, idx) => {
+        y = checkPageBreak(doc, y, 12);
+        
+        doc.setFontSize(8);
+        doc.setFont('courier', 'normal');
+        doc.setTextColor(...COLORS.dark);
+        const patternDisplay = pattern.pattern.length > 40 ? pattern.pattern.slice(0, 40) + '...' : pattern.pattern;
+        doc.text(`${idx + 1}. ${patternDisplay}`, 25, y);
+        
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(...COLORS.muted);
+        doc.text(`×${pattern.count}`, 170, y);
+        
+        y += 8;
+      });
+    }
+    
+    // Longest Repeated Substring
+    if (bitstreamAnalysis.longestRepeatedSubstring) {
+      y += 10;
+      y = checkPageBreak(doc, y, 30);
+      y = drawSectionHeader(doc, y, 'Longest Repeated Substring');
+      
+      doc.setFontSize(8);
+      doc.setFont('courier', 'normal');
+      doc.setTextColor(...COLORS.dark);
+      const lrs = bitstreamAnalysis.longestRepeatedSubstring.pattern;
+      const lrsDisplay = lrs.length > 60 ? lrs.slice(0, 60) + '...' : lrs;
+      doc.text(lrsDisplay, 25, y);
+      y += 6;
+      
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(...COLORS.muted);
+      doc.text(`Length: ${lrs.length} bits | Occurrences: ${bitstreamAnalysis.longestRepeatedSubstring.positions.length}`, 25, y);
+      y += 10;
     }
   }
   

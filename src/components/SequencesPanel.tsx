@@ -195,7 +195,7 @@ export const SequencesPanel = ({ fileState, onJumpTo }: SequencesPanelProps) => 
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
   const [sortFilter, setSortFilter] = useState<string>('serial');
   const [savedSequences, setSavedSequences] = useState<SavedSequence[]>([]);
-  const [activeTab, setActiveTab] = useState<'search' | 'python'>('search');
+  const [activeTab, setActiveTab] = useState<'search' | 'templates' | 'python'>('search');
   
   // Python command mode
   const [commandInput, setCommandInput] = useState('');
@@ -388,10 +388,14 @@ export const SequencesPanel = ({ fileState, onJumpTo }: SequencesPanelProps) => 
         <Card className="bg-gradient-to-r from-card to-muted/20 border-border overflow-hidden">
           <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
             <CardHeader className="py-2 bg-muted/30">
-              <TabsList className="grid grid-cols-2 w-full max-w-[300px]">
+              <TabsList className="grid grid-cols-3 w-full max-w-[400px]">
                 <TabsTrigger value="search" className="text-xs">
                   <Search className="w-3 h-3 mr-1" />
                   Search
+                </TabsTrigger>
+                <TabsTrigger value="templates" className="text-xs">
+                  <Sparkles className="w-3 h-3 mr-1" />
+                  Templates
                 </TabsTrigger>
                 <TabsTrigger value="python" className="text-xs">
                   <Terminal className="w-3 h-3 mr-1" />
@@ -437,6 +441,181 @@ export const SequencesPanel = ({ fileState, onJumpTo }: SequencesPanelProps) => 
                     </Button>
                   </div>
                 )}
+              </CardContent>
+            </TabsContent>
+            
+            <TabsContent value="templates" className="mt-0">
+              <CardContent className="py-4 space-y-3">
+                <p className="text-xs text-muted-foreground mb-2">
+                  Quick templates for common binary patterns. Click to add.
+                </p>
+                
+                {/* Common Header Patterns */}
+                <div className="space-y-2">
+                  <div className="text-xs font-medium text-primary">File Headers & Markers</div>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      { name: 'Sync Byte', pattern: '01111110', desc: 'HDLC sync' },
+                      { name: 'Start of Frame', pattern: '10101010', desc: 'Preamble' },
+                      { name: 'Null Byte', pattern: '00000000', desc: 'Padding' },
+                      { name: 'All Ones', pattern: '11111111', desc: 'Fill pattern' },
+                      { name: 'Alternating', pattern: '01010101', desc: 'Clock recovery' },
+                    ].map(template => (
+                      <Button
+                        key={template.pattern}
+                        size="sm"
+                        variant="outline"
+                        className="h-auto py-1 px-2 text-[10px]"
+                        onClick={() => {
+                          const matches = BinaryMetrics.searchMultipleSequences(bits, [template.pattern]);
+                          if (matches.length > 0 && !fileState.savedSequences.find(s => s.sequence === template.pattern)) {
+                            fileState.addSequence(matches[0], colorInput);
+                            toast.success(`Added "${template.name}" pattern`);
+                          } else if (matches.length === 0) {
+                            toast.info(`Pattern not found in data`);
+                          } else {
+                            toast.info(`Pattern already added`);
+                          }
+                        }}
+                      >
+                        <div className="text-left">
+                          <div className="font-medium">{template.name}</div>
+                          <div className="font-mono text-muted-foreground">{template.pattern}</div>
+                        </div>
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Checksum & Error Detection */}
+                <div className="space-y-2">
+                  <div className="text-xs font-medium text-cyan-400">Checksum & Control</div>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      { name: 'CRC Start', pattern: '1000000100001', desc: 'CRC-16 poly' },
+                      { name: 'ETX', pattern: '00000011', desc: 'End of Text' },
+                      { name: 'STX', pattern: '00000010', desc: 'Start of Text' },
+                      { name: 'EOT', pattern: '00000100', desc: 'End Transmission' },
+                    ].map(template => (
+                      <Button
+                        key={template.pattern}
+                        size="sm"
+                        variant="outline"
+                        className="h-auto py-1 px-2 text-[10px] border-cyan-500/30"
+                        onClick={() => {
+                          const matches = BinaryMetrics.searchMultipleSequences(bits, [template.pattern]);
+                          if (matches.length > 0 && !fileState.savedSequences.find(s => s.sequence === template.pattern)) {
+                            fileState.addSequence(matches[0], '#00FFFF');
+                            toast.success(`Added "${template.name}" pattern`);
+                          } else if (matches.length === 0) {
+                            toast.info(`Pattern not found in data`);
+                          } else {
+                            toast.info(`Pattern already added`);
+                          }
+                        }}
+                      >
+                        <div className="text-left">
+                          <div className="font-medium">{template.name}</div>
+                          <div className="font-mono text-muted-foreground">{template.pattern}</div>
+                        </div>
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Run Length Patterns */}
+                <div className="space-y-2">
+                  <div className="text-xs font-medium text-green-400">Run Patterns</div>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      { name: 'Long Zero Run', pattern: '0000000000', desc: '10 zeros' },
+                      { name: 'Long One Run', pattern: '1111111111', desc: '10 ones' },
+                      { name: 'Nibble Zero', pattern: '0000', desc: '4 zeros' },
+                      { name: 'Nibble One', pattern: '1111', desc: '4 ones' },
+                    ].map(template => (
+                      <Button
+                        key={template.pattern}
+                        size="sm"
+                        variant="outline"
+                        className="h-auto py-1 px-2 text-[10px] border-green-500/30"
+                        onClick={() => {
+                          const matches = BinaryMetrics.searchMultipleSequences(bits, [template.pattern]);
+                          if (matches.length > 0 && !fileState.savedSequences.find(s => s.sequence === template.pattern)) {
+                            fileState.addSequence(matches[0], '#00FF00');
+                            toast.success(`Added "${template.name}" pattern`);
+                          } else if (matches.length === 0) {
+                            toast.info(`Pattern not found in data`);
+                          } else {
+                            toast.info(`Pattern already added`);
+                          }
+                        }}
+                      >
+                        <div className="text-left">
+                          <div className="font-medium">{template.name}</div>
+                          <div className="font-mono text-muted-foreground">{template.pattern}</div>
+                        </div>
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Custom Length */}
+                <div className="space-y-2">
+                  <div className="text-xs font-medium text-yellow-400">Generate Pattern</div>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="border-yellow-500/30"
+                      onClick={() => {
+                        const pattern = '0'.repeat(16);
+                        const matches = BinaryMetrics.searchMultipleSequences(bits, [pattern]);
+                        if (matches.length > 0) {
+                          fileState.addSequence(matches[0], '#FFFF00');
+                          toast.success(`Found ${matches[0].count} occurrences of 16 zeros`);
+                        } else {
+                          toast.info('Pattern not found');
+                        }
+                      }}
+                    >
+                      16-bit Zero
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="border-yellow-500/30"
+                      onClick={() => {
+                        const pattern = '1'.repeat(16);
+                        const matches = BinaryMetrics.searchMultipleSequences(bits, [pattern]);
+                        if (matches.length > 0) {
+                          fileState.addSequence(matches[0], '#FFFF00');
+                          toast.success(`Found ${matches[0].count} occurrences of 16 ones`);
+                        } else {
+                          toast.info('Pattern not found');
+                        }
+                      }}
+                    >
+                      16-bit One
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="border-yellow-500/30"
+                      onClick={() => {
+                        const pattern = '10'.repeat(8);
+                        const matches = BinaryMetrics.searchMultipleSequences(bits, [pattern]);
+                        if (matches.length > 0) {
+                          fileState.addSequence(matches[0], '#FF00FF');
+                          toast.success(`Found ${matches[0].count} occurrences of alternating 16-bit`);
+                        } else {
+                          toast.info('Pattern not found');
+                        }
+                      }}
+                    >
+                      16-bit Alt
+                    </Button>
+                  </div>
+                </div>
               </CardContent>
             </TabsContent>
             

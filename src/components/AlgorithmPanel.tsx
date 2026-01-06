@@ -1,6 +1,6 @@
 /**
  * Algorithm Panel V7 - Redesigned Files and Strategy tabs
- * Tabs: Files, Strategy, Results, Compare, Metrics, Operations, Python
+ * Tabs: Files, Strategy, Timeline, Results, Compare, Metrics, Operations, Python
  */
 
 import { useState, useEffect, useCallback } from 'react';
@@ -18,6 +18,7 @@ import {
   ChevronDown,
   Terminal,
   GitCompare,
+  Clock,
 } from 'lucide-react';
 import { predefinedManager } from '@/lib/predefinedManager';
 import { ExecutionResult, TransformationStep } from './algorithm/PlayerTab';
@@ -26,8 +27,9 @@ import { FilesTabV2 } from './algorithm/FilesTabV2';
 import { StrategyTabV2 } from './algorithm/StrategyTabV2';
 import { PythonConsoleTab } from './algorithm/PythonConsoleTab';
 import { ComparisonTab } from './algorithm/ComparisonTab';
+import { StrategyExecutionTimeline } from './algorithm/StrategyExecutionTimeline';
 
-type AlgorithmTab = 'files' | 'strategy' | 'results' | 'compare' | 'metrics' | 'operations' | 'python';
+type AlgorithmTab = 'files' | 'strategy' | 'timeline' | 'results' | 'compare' | 'metrics' | 'operations' | 'python';
 
 export const AlgorithmPanel = () => {
   const [activeTab, setActiveTab] = useState<AlgorithmTab>('files');
@@ -75,6 +77,10 @@ export const AlgorithmPanel = () => {
           <Code className="w-4 h-4 mr-1" />
           Strategy
         </TabsTrigger>
+        <TabsTrigger value="timeline">
+          <Clock className="w-4 h-4 mr-1" />
+          Timeline
+        </TabsTrigger>
         <TabsTrigger value="results">
           <FileText className="w-4 h-4 mr-1" />
           Results
@@ -104,6 +110,12 @@ export const AlgorithmPanel = () => {
 
         <TabsContent value="strategy" className="h-full m-0">
           <StrategyTabV2 onRunStrategy={handleRunStrategy} isExecuting={isExecuting} />
+        </TabsContent>
+
+        <TabsContent value="timeline" className="h-full m-0">
+          <ScrollArea className="h-full p-4">
+            <StrategyExecutionTimeline isExecuting={isExecuting} />
+          </ScrollArea>
         </TabsContent>
 
         <TabsContent value="results" className="h-full m-0">
