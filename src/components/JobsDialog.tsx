@@ -34,7 +34,7 @@ import {
 } from 'lucide-react';
 import { Terminal } from 'lucide-react';
 import { toast } from 'sonner';
-import { jobManagerV2, Job, JobPreset } from '@/lib/jobManagerV2';
+import { jobManagerV2, Job, JobPreset, JobPriority } from '@/lib/jobManagerV2';
 import { fileSystemManager } from '@/lib/fileSystemManager';
 import { pythonModuleSystem } from '@/lib/pythonModuleSystem';
 
@@ -53,6 +53,7 @@ export const JobsDialog = ({ open, onOpenChange }: JobsDialogProps) => {
   const [presets, setPresets] = useState<JobPreset[]>([]);
   const [selectedStrategyId, setSelectedStrategyId] = useState<string>('');
   const [presetIterations, setPresetIterations] = useState(1);
+  const [selectedPriority, setSelectedPriority] = useState<JobPriority>('normal');
   
   // Expanded job details
   const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
@@ -117,17 +118,33 @@ export const JobsDialog = ({ open, onOpenChange }: JobsDialogProps) => {
     }
 
     try {
-      // Create job but don't auto-start - jobs start in pending state
-      const job = jobManagerV2.createJob(jobName, selectedFileId, presets);
+      // Create job with priority
+      const job = jobManagerV2.createJob(jobName, selectedFileId, presets, {
+        priority: selectedPriority,
+      });
       toast.success(`Job "${jobName}" created - Click play to start`);
       
       // Reset form
       setJobName('');
       setSelectedFileId('');
       setPresets([]);
+      setSelectedPriority('normal');
       setActiveTab('queue');
     } catch (error) {
       toast.error((error as Error).message);
+    }
+  };
+
+  const getPriorityBadge = (priority: JobPriority) => {
+    switch (priority) {
+      case 'critical':
+        return <Badge className="bg-red-500/20 text-red-500 text-xs">Critical</Badge>;
+      case 'high':
+        return <Badge className="bg-orange-500/20 text-orange-500 text-xs">High</Badge>;
+      case 'low':
+        return <Badge className="bg-gray-500/20 text-gray-500 text-xs">Low</Badge>;
+      default:
+        return null;
     }
   };
 
@@ -161,7 +178,13 @@ export const JobsDialog = ({ open, onOpenChange }: JobsDialogProps) => {
             <div className="flex items-center gap-3">
               {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
               <div>
-                <p className="font-medium">{job.name}</p>
+                <div className="flex items-center gap-2">
+                  <p className="font-medium">{job.name}</p>
+                  {job.priority !== 'normal' && getPriorityBadge(job.priority)}
+                  {job.queuePosition && job.status === 'pending' && (
+                    <Badge variant="outline" className="text-xs">#{job.queuePosition} in queue</Badge>
+                  )}
+                </div>
                 <p className="text-xs text-muted-foreground">
                   {job.dataFileName} • {job.presets.length} strategy(ies)
                 </p>
@@ -177,14 +200,24 @@ export const JobsDialog = ({ open, onOpenChange }: JobsDialogProps) => {
                     </Button>
                   )}
                   {job.status === 'running' && (
-                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => jobManagerV2.cancelJob(job.id)}>
-                      <Pause className="w-3 h-3" />
-                    </Button>
+                    <>
+                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => jobManagerV2.pauseJob(job.id)}>
+                        <Pause className="w-3 h-3" />
+                      </Button>
+                      <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => jobManagerV2.cancelJob(job.id)}>
+                        <Square className="w-3 h-3" />
+                      </Button>
+                    </>
                   )}
-                  {(job.status === 'running' || job.status === 'paused' || job.status === 'pending') && (
-                    <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => jobManagerV2.cancelJob(job.id)}>
-                      <Square className="w-3 h-3" />
-                    </Button>
+                  {job.status === 'paused' && (
+                    <>
+                      <Button size="icon" variant="ghost" className="h-7 w-7 text-green-500" onClick={() => jobManagerV2.resumeJob(job.id)}>
+                        <Play className="w-3 h-3" />
+                      </Button>
+                      <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => jobManagerV2.cancelJob(job.id)}>
+                        <Square className="w-3 h-3" />
+                      </Button>
+                    </>
                   )}
                   {(job.status === 'completed' || job.status === 'failed' || job.status === 'cancelled') && (
                     <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => jobManagerV2.deleteJob(job.id)}>
@@ -210,13 +243,15 @@ export const JobsDialog = ({ open, onOpenChange }: JobsDialogProps) => {
               <div className="flex justify-between text-xs text-muted-foreground">
                 <span>{job.progress}% complete</span>
                 <span>
-                  {job.startTime && job.progress > 0 && (() => {
-                    const elapsed = Date.now() - job.startTime.getTime();
-                    const estimated = (elapsed / job.progress) * (100 - job.progress);
-                    const mins = Math.floor(estimated / 60000);
-                    const secs = Math.floor((estimated % 60000) / 1000);
-                    return `ETA: ${mins}m ${secs}s`;
-                  })()}
+                  {job.eta ? `ETA: ${job.eta.formatted}` : 
+                    job.startTime && job.progress > 0 && (() => {
+                      const elapsed = Date.now() - job.startTime.getTime();
+                      const estimated = (elapsed / job.progress) * (100 - job.progress);
+                      const mins = Math.floor(estimated / 60000);
+                      const secs = Math.floor((estimated % 60000) / 1000);
+                      return `ETA: ${mins}m ${secs}s`;
+                    })()
+                  }
                 </span>
               </div>
             </div>
@@ -584,6 +619,42 @@ export const JobsDialog = ({ open, onOpenChange }: JobsDialogProps) => {
                         </div>
                       </div>
                     )}
+
+                    {/* Priority Selection */}
+                    <div className="space-y-2">
+                      <Label>Priority</Label>
+                      <Select value={selectedPriority} onValueChange={(v) => setSelectedPriority(v as JobPriority)}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="bg-popover border border-border z-50">
+                          <SelectItem value="critical">
+                            <div className="flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full bg-red-500" />
+                              Critical
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="high">
+                            <div className="flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full bg-orange-500" />
+                              High
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="normal">
+                            <div className="flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full bg-blue-500" />
+                              Normal
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="low">
+                            <div className="flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full bg-gray-500" />
+                              Low
+                            </div>
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
 
                     <Button
                       className="w-full"
