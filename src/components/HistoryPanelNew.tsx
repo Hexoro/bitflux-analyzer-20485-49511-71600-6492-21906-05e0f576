@@ -18,7 +18,10 @@ import {
   Zap,
   TrendingUp,
   TrendingDown,
+  Download,
+  FileJson,
 } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface ChangeInfo {
   type: 'added' | 'deleted' | 'modified';
@@ -131,6 +134,73 @@ export const HistoryPanelNew = ({
     return `${(bytes / 1024).toFixed(2)} KB`;
   };
 
+  const handleExportHistory = () => {
+    if (groups.length === 0) {
+      toast.info('No history to export');
+      return;
+    }
+
+    const allEntries = groups.flatMap(g => g.entries);
+    const exportData = {
+      exportedAt: new Date().toISOString(),
+      totalEntries: allEntries.length,
+      groups: groups.map(g => ({
+        id: g.id,
+        type: g.type,
+        count: g.count,
+        lastTimestamp: g.lastTimestamp.toISOString(),
+        entries: g.entries.map(e => ({
+          id: e.id,
+          timestamp: e.timestamp.toISOString(),
+          description: e.description,
+          stats: e.stats,
+          bitsPreview: e.bits.substring(0, 100) + (e.bits.length > 100 ? '...' : ''),
+          totalBits: e.bits.length
+        }))
+      }))
+    };
+
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `history_export_${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    
+    toast.success('History exported successfully');
+  };
+
+  const handleExportFullHistory = () => {
+    if (groups.length === 0) {
+      toast.info('No history to export');
+      return;
+    }
+
+    const allEntries = groups.flatMap(g => g.entries);
+    const exportData = {
+      exportedAt: new Date().toISOString(),
+      totalEntries: allEntries.length,
+      entries: allEntries.map(e => ({
+        id: e.id,
+        timestamp: e.timestamp.toISOString(),
+        description: e.description,
+        stats: e.stats,
+        bits: e.bits
+      }))
+    };
+
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `full_history_export_${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    
+    toast.success('Full history with bits exported');
+  };
+
   const totalEntries = groups.reduce((sum, g) => sum + g.count, 0);
 
   if (groups.length === 0) {
@@ -153,7 +223,7 @@ export const HistoryPanelNew = ({
     <div className="h-full flex flex-col">
       {/* Header Stats */}
       <div className="p-4 border-b border-border bg-card">
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-3 gap-3 mb-3">
           <div className="p-2 bg-primary/10 rounded-lg text-center">
             <div className="text-xs text-muted-foreground">Total Entries</div>
             <div className="text-xl font-bold text-primary">{totalEntries}</div>
@@ -168,6 +238,18 @@ export const HistoryPanelNew = ({
               {groups[0] ? formatTime(groups[0].lastTimestamp) : '--'}
             </div>
           </div>
+        </div>
+        
+        {/* Export Buttons */}
+        <div className="flex gap-2">
+          <Button size="sm" variant="outline" className="flex-1" onClick={handleExportHistory}>
+            <Download className="w-3 h-3 mr-1" />
+            Export Summary
+          </Button>
+          <Button size="sm" variant="outline" className="flex-1" onClick={handleExportFullHistory}>
+            <FileJson className="w-3 h-3 mr-1" />
+            Export Full
+          </Button>
         </div>
       </div>
 

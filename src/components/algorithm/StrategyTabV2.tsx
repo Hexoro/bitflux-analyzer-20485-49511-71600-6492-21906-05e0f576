@@ -236,22 +236,22 @@ export const StrategyTabV2 = ({ onRunStrategy, isExecuting = false }: StrategyTa
   };
 
   return (
-    <div className="h-full flex flex-col p-3 bg-gradient-to-br from-violet-950/20 via-background to-indigo-950/20">
-      {/* Header with distinctive styling */}
-      <div className="flex items-center justify-between mb-3 pb-3 border-b border-violet-500/30">
+    <div className="h-full flex flex-col p-3 bg-gradient-to-br from-cyan-950/20 via-background to-emerald-950/20">
+      {/* Header with neon styling */}
+      <div className="flex items-center justify-between mb-3 pb-3 border-b border-cyan-400/40 shadow-[0_0_15px_rgba(0,255,255,0.1)]">
         <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-gradient-to-br from-violet-500/20 to-indigo-500/20 border border-violet-500/30">
-            <Layers className="w-5 h-5 text-violet-400" />
+          <div className="p-2 rounded-lg bg-gradient-to-br from-cyan-500/20 to-emerald-500/20 border border-cyan-400/40 shadow-[0_0_10px_rgba(0,255,255,0.2)]">
+            <Layers className="w-5 h-5 text-cyan-400 drop-shadow-[0_0_5px_rgba(0,255,255,0.5)]" />
           </div>
           <div>
-            <h2 className="font-semibold text-violet-100">Strategy Builder</h2>
+            <h2 className="font-semibold text-cyan-100 drop-shadow-[0_0_5px_rgba(0,255,255,0.3)]">Strategy Builder</h2>
             <p className="text-xs text-muted-foreground">{strategies.length} strategies • {files.length} files</p>
           </div>
         </div>
         
         <div className="flex items-center gap-2">
           <Select value={selectedDataFile} onValueChange={setSelectedDataFile}>
-            <SelectTrigger className="w-40 h-8 bg-background/50 border-violet-500/30">
+            <SelectTrigger className="w-40 h-8 bg-background/50 border-cyan-400/30 focus:border-cyan-400/60 focus:shadow-[0_0_10px_rgba(0,255,255,0.2)]">
               <SelectValue placeholder="Data file" />
             </SelectTrigger>
             <SelectContent>
@@ -264,7 +264,7 @@ export const StrategyTabV2 = ({ onRunStrategy, isExecuting = false }: StrategyTa
           </Select>
 
           {executionStatus && (
-            <Badge className="bg-violet-500/20 border-violet-500/50 animate-pulse">
+            <Badge className="bg-cyan-500/20 border-cyan-400/50 animate-pulse shadow-[0_0_10px_rgba(0,255,255,0.3)]">
               <Loader2 className="w-3 h-3 mr-1 animate-spin" />
               {executionStatus}
             </Badge>
@@ -277,16 +277,16 @@ export const StrategyTabV2 = ({ onRunStrategy, isExecuting = false }: StrategyTa
         {/* Left Panel - Strategy List with Tabs */}
         <div className="w-2/5 flex flex-col">
           <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="flex-1 flex flex-col">
-            <TabsList className="grid grid-cols-3 mb-2 bg-violet-950/50">
-              <TabsTrigger value="browse" className="text-xs data-[state=active]:bg-violet-600">
+            <TabsList className="grid grid-cols-3 mb-2 bg-cyan-950/50">
+              <TabsTrigger value="browse" className="text-xs data-[state=active]:bg-gradient-to-r data-[state=active]:from-cyan-600 data-[state=active]:to-emerald-600 data-[state=active]:shadow-[0_0_10px_rgba(0,255,255,0.3)]">
                 <Search className="w-3 h-3 mr-1" />
                 Browse
               </TabsTrigger>
-              <TabsTrigger value="create" className="text-xs data-[state=active]:bg-violet-600">
+              <TabsTrigger value="create" className="text-xs data-[state=active]:bg-gradient-to-r data-[state=active]:from-cyan-600 data-[state=active]:to-emerald-600 data-[state=active]:shadow-[0_0_10px_rgba(0,255,255,0.3)]">
                 <Plus className="w-3 h-3 mr-1" />
                 Create
               </TabsTrigger>
-              <TabsTrigger value="examples" className="text-xs data-[state=active]:bg-violet-600">
+              <TabsTrigger value="examples" className="text-xs data-[state=active]:bg-gradient-to-r data-[state=active]:from-cyan-600 data-[state=active]:to-emerald-600 data-[state=active]:shadow-[0_0_10px_rgba(0,255,255,0.3)]">
                 <BookOpen className="w-3 h-3 mr-1" />
                 Examples
               </TabsTrigger>
@@ -294,12 +294,12 @@ export const StrategyTabV2 = ({ onRunStrategy, isExecuting = false }: StrategyTa
 
             <TabsContent value="browse" className="flex-1 flex flex-col gap-2 mt-0">
               <div className="relative">
-                <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-cyan-400/60" />
                 <Input
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Search strategies..."
-                  className="pl-8 h-8 bg-background/50 border-violet-500/30"
+                  className="pl-8 h-8 bg-background/50 border-cyan-400/30 focus:border-cyan-400/60 focus:shadow-[0_0_10px_rgba(0,255,255,0.15)]"
                 />
               </div>
               
@@ -323,8 +323,8 @@ export const StrategyTabV2 = ({ onRunStrategy, isExecuting = false }: StrategyTa
                           key={strategy.id}
                           className={`cursor-pointer transition-all ${
                             isSelected 
-                              ? 'bg-violet-500/20 border-violet-400 shadow-lg shadow-violet-500/20' 
-                              : 'bg-background/30 border-violet-500/20 hover:border-violet-500/50 hover:bg-violet-500/10'
+                              ? 'bg-cyan-500/15 border-cyan-400/70 shadow-lg shadow-cyan-500/20' 
+                              : 'bg-background/30 border-cyan-500/20 hover:border-cyan-400/50 hover:bg-cyan-500/10'
                           }`}
                           onClick={() => setSelectedStrategy(strategy)}
                         >
@@ -374,42 +374,42 @@ export const StrategyTabV2 = ({ onRunStrategy, isExecuting = false }: StrategyTa
             </TabsContent>
 
             <TabsContent value="create" className="flex-1 overflow-auto mt-0">
-              <Card className="bg-background/30 border-violet-500/20">
+              <Card className="bg-background/30 border-cyan-400/20">
                 <CardHeader className="py-3">
-                  <CardTitle className="text-sm flex items-center gap-2 text-violet-200">
-                    <Wand2 className="w-4 h-4" />
+                  <CardTitle className="text-sm flex items-center gap-2 text-cyan-200">
+                    <Wand2 className="w-4 h-4 text-cyan-400" />
                     Create New Strategy
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div>
-                    <Label className="text-xs text-violet-200">Strategy Name</Label>
+                    <Label className="text-xs text-cyan-200">Strategy Name</Label>
                     <Input
                       value={strategyName}
                       onChange={(e) => setStrategyName(e.target.value)}
                       placeholder="My Strategy"
-                      className="h-8 mt-1 bg-background/50 border-violet-500/30"
+                      className="h-8 mt-1 bg-background/50 border-cyan-400/30 focus:border-cyan-400/60"
                     />
                   </div>
 
                   <div>
-                    <Label className="text-xs text-violet-200">Description (optional)</Label>
+                    <Label className="text-xs text-cyan-200">Description (optional)</Label>
                     <Textarea
                       value={strategyDescription}
                       onChange={(e) => setStrategyDescription(e.target.value)}
                       placeholder="What this strategy does..."
-                      className="mt-1 min-h-[60px] bg-background/50 border-violet-500/30"
+                      className="mt-1 min-h-[60px] bg-background/50 border-cyan-400/30"
                     />
                   </div>
 
                   <div>
-                    <Label className="text-xs flex items-center gap-2 text-violet-200">
-                      <Clock className="w-3 h-3 text-purple-400" />
+                    <Label className="text-xs flex items-center gap-2 text-cyan-200">
+                      <Clock className="w-3 h-3 text-cyan-400" />
                       Scheduler
-                      <Badge variant="destructive" className="text-[10px] h-4">Required</Badge>
+                      <Badge className="text-[10px] h-4 bg-pink-500/20 text-pink-300 border-pink-500/50">Required</Badge>
                     </Label>
                     <Select value={selectedScheduler} onValueChange={setSelectedScheduler}>
-                      <SelectTrigger className="h-8 mt-1 bg-background/50 border-violet-500/30">
+                      <SelectTrigger className="h-8 mt-1 bg-background/50 border-cyan-400/30">
                         <SelectValue placeholder="Select scheduler" />
                       </SelectTrigger>
                       <SelectContent>
@@ -421,11 +421,11 @@ export const StrategyTabV2 = ({ onRunStrategy, isExecuting = false }: StrategyTa
                   </div>
 
                   <div>
-                    <Label className="text-xs flex items-center gap-2 text-violet-200">
-                      <Code className="w-3 h-3 text-blue-400" />
+                    <Label className="text-xs flex items-center gap-2 text-cyan-200">
+                      <Code className="w-3 h-3 text-emerald-400" />
                       Algorithms ({selectedAlgorithms.length} selected)
                     </Label>
-                    <ScrollArea className="h-20 mt-1 border border-violet-500/30 rounded-md p-2 bg-background/30">
+                    <ScrollArea className="h-20 mt-1 border border-cyan-400/30 rounded-md p-2 bg-background/30">
                       {algorithmFiles.length === 0 ? (
                         <p className="text-xs text-muted-foreground">No algorithm files. Load examples first.</p>
                       ) : (
@@ -443,11 +443,11 @@ export const StrategyTabV2 = ({ onRunStrategy, isExecuting = false }: StrategyTa
                   </div>
 
                   <div>
-                    <Label className="text-xs flex items-center gap-2 text-violet-200">
+                    <Label className="text-xs flex items-center gap-2 text-cyan-200">
                       <Calculator className="w-3 h-3 text-yellow-400" />
                       Scoring ({selectedScoring.length} selected)
                     </Label>
-                    <ScrollArea className="h-16 mt-1 border border-violet-500/30 rounded-md p-2 bg-background/30">
+                    <ScrollArea className="h-16 mt-1 border border-cyan-400/30 rounded-md p-2 bg-background/30">
                       {scoringFiles.map(f => (
                         <div key={f.id} className="flex items-center gap-2 py-1">
                           <Checkbox
@@ -461,9 +461,9 @@ export const StrategyTabV2 = ({ onRunStrategy, isExecuting = false }: StrategyTa
                   </div>
 
                   {/* Custom Groups Section */}
-                  <div className="pt-2 border-t border-violet-500/20">
-                    <Label className="text-xs flex items-center gap-2 text-violet-200 mb-2">
-                      <FolderOpen className="w-3 h-3 text-orange-400" />
+                  <div className="pt-2 border-t border-cyan-400/20">
+                    <Label className="text-xs flex items-center gap-2 text-cyan-200 mb-2">
+                      <FolderOpen className="w-3 h-3 text-pink-400" />
                       Custom Groups
                     </Label>
                     <div className="flex gap-2 mb-2">
@@ -471,10 +471,10 @@ export const StrategyTabV2 = ({ onRunStrategy, isExecuting = false }: StrategyTa
                         value={newGroupName}
                         onChange={(e) => setNewGroupName(e.target.value)}
                         placeholder="New group name..."
-                        className="h-7 text-xs flex-1 bg-background/50 border-violet-500/30"
+                        className="h-7 text-xs flex-1 bg-background/50 border-cyan-400/30"
                         onKeyDown={(e) => e.key === 'Enter' && handleAddCustomGroup()}
                       />
-                      <Button size="sm" className="h-7 text-xs" onClick={handleAddCustomGroup}>
+                      <Button size="sm" className="h-7 text-xs bg-cyan-600 hover:bg-cyan-500" onClick={handleAddCustomGroup}>
                         <Plus className="w-3 h-3" />
                       </Button>
                     </div>
@@ -494,7 +494,7 @@ export const StrategyTabV2 = ({ onRunStrategy, isExecuting = false }: StrategyTa
                     </div>
                   </div>
 
-                  <Button className="w-full bg-violet-600 hover:bg-violet-500" onClick={handleCreateStrategy}>
+                  <Button className="w-full bg-gradient-to-r from-cyan-600 to-emerald-600 hover:from-cyan-500 hover:to-emerald-500 shadow-[0_0_15px_rgba(0,255,255,0.2)]" onClick={handleCreateStrategy}>
                     <Plus className="w-4 h-4 mr-2" />
                     Create Strategy
                   </Button>
@@ -505,12 +505,12 @@ export const StrategyTabV2 = ({ onRunStrategy, isExecuting = false }: StrategyTa
             <TabsContent value="examples" className="flex-1 overflow-auto mt-0">
               <div className="space-y-3">
                 {/* Unified Strategy Example - Featured */}
-                <Card className="bg-gradient-to-br from-violet-600/20 to-indigo-600/20 border-violet-400/50">
+                <Card className="bg-gradient-to-br from-cyan-600/20 to-emerald-600/20 border-cyan-400/50 shadow-[0_0_20px_rgba(0,255,255,0.1)]">
                   <CardHeader className="py-3">
                     <CardTitle className="text-sm flex items-center gap-2">
-                      <Sparkles className="w-4 h-4 text-yellow-400" />
-                      <span className="text-violet-100">Unified Comprehensive Strategy</span>
-                      <Badge className="bg-yellow-500/20 text-yellow-300 border-yellow-500/50">Featured</Badge>
+                      <Sparkles className="w-4 h-4 text-yellow-400 drop-shadow-[0_0_5px_rgba(255,255,0,0.5)]" />
+                      <span className="text-cyan-100 drop-shadow-[0_0_3px_rgba(0,255,255,0.3)]">Unified Comprehensive Strategy</span>
+                      <Badge className="bg-pink-500/20 text-pink-300 border-pink-500/50 shadow-[0_0_8px_rgba(255,0,255,0.2)]">Featured</Badge>
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-3">
@@ -519,24 +519,24 @@ export const StrategyTabV2 = ({ onRunStrategy, isExecuting = false }: StrategyTa
                       Includes scheduler, algorithm, scoring, and policy files.
                     </p>
                     <div className="grid grid-cols-2 gap-2 text-xs">
-                      <div className="p-2 rounded bg-background/30 border border-violet-500/20">
-                        <div className="font-medium text-violet-200 mb-1">Scheduler</div>
-                        <code className="text-[10px] text-purple-300">UnifiedScheduler.py</code>
+                      <div className="p-2 rounded bg-background/30 border border-cyan-400/20">
+                        <div className="font-medium text-cyan-200 mb-1">Scheduler</div>
+                        <code className="text-[10px] text-pink-300">UnifiedScheduler.py</code>
                       </div>
-                      <div className="p-2 rounded bg-background/30 border border-violet-500/20">
-                        <div className="font-medium text-violet-200 mb-1">Algorithm</div>
-                        <code className="text-[10px] text-blue-300">UnifiedAlgorithm.py</code>
+                      <div className="p-2 rounded bg-background/30 border border-cyan-400/20">
+                        <div className="font-medium text-cyan-200 mb-1">Algorithm</div>
+                        <code className="text-[10px] text-emerald-300">UnifiedAlgorithm.py</code>
                       </div>
-                      <div className="p-2 rounded bg-background/30 border border-violet-500/20">
-                        <div className="font-medium text-violet-200 mb-1">Scoring</div>
+                      <div className="p-2 rounded bg-background/30 border border-cyan-400/20">
+                        <div className="font-medium text-cyan-200 mb-1">Scoring</div>
                         <code className="text-[10px] text-yellow-300">UnifiedScoring.py</code>
                       </div>
-                      <div className="p-2 rounded bg-background/30 border border-violet-500/20">
-                        <div className="font-medium text-violet-200 mb-1">Policy</div>
-                        <code className="text-[10px] text-green-300">UnifiedPolicy.py</code>
+                      <div className="p-2 rounded bg-background/30 border border-cyan-400/20">
+                        <div className="font-medium text-cyan-200 mb-1">Policy</div>
+                        <code className="text-[10px] text-cyan-300">UnifiedPolicy.py</code>
                       </div>
                     </div>
-                    <Button className="w-full bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500" onClick={handleLoadUnifiedExample}>
+                    <Button className="w-full bg-gradient-to-r from-cyan-600 to-emerald-600 hover:from-cyan-500 hover:to-emerald-500 shadow-[0_0_15px_rgba(0,255,255,0.2)]" onClick={handleLoadUnifiedExample}>
                       <Zap className="w-4 h-4 mr-2" />
                       Load Unified Strategy
                     </Button>
@@ -544,10 +544,10 @@ export const StrategyTabV2 = ({ onRunStrategy, isExecuting = false }: StrategyTa
                 </Card>
 
                 {/* Basic Example */}
-                <Card className="bg-background/30 border-violet-500/20">
+                <Card className="bg-background/30 border-cyan-400/20">
                   <CardHeader className="py-3">
-                    <CardTitle className="text-sm flex items-center gap-2 text-violet-200">
-                      <Target className="w-4 h-4 text-cyan-400" />
+                    <CardTitle className="text-sm flex items-center gap-2 text-cyan-200">
+                      <Target className="w-4 h-4 text-emerald-400" />
                       Basic Entropy Reduction
                     </CardTitle>
                   </CardHeader>
@@ -558,7 +558,7 @@ export const StrategyTabV2 = ({ onRunStrategy, isExecuting = false }: StrategyTa
                     <Button 
                       size="sm" 
                       variant="outline" 
-                      className="w-full border-violet-500/30"
+                      className="w-full border-cyan-400/30 hover:bg-cyan-500/10"
                       onClick={() => {
                         loadExampleAlgorithmFiles(pythonModuleSystem);
                         toast.success('Basic example files loaded');
@@ -574,12 +574,12 @@ export const StrategyTabV2 = ({ onRunStrategy, isExecuting = false }: StrategyTa
         </div>
 
         {/* Right Panel - Strategy Details */}
-        <Card className="flex-1 flex flex-col overflow-hidden bg-background/30 border-violet-500/20">
+        <Card className="flex-1 flex flex-col overflow-hidden bg-background/30 border-cyan-400/20">
           {selectedStrategy ? (
             <>
-              <CardHeader className="py-3 border-b border-violet-500/20 bg-gradient-to-r from-violet-500/10 to-transparent">
+              <CardHeader className="py-3 border-b border-cyan-400/20 bg-gradient-to-r from-cyan-500/10 to-transparent">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-sm flex items-center gap-2 text-violet-100">
+                  <CardTitle className="text-sm flex items-center gap-2 text-cyan-100">
                     <Settings2 className="w-4 h-4" />
                     {selectedStrategy.name}
                   </CardTitle>

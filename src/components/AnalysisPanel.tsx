@@ -6,7 +6,7 @@
 import { CompressionMetrics } from '@/lib/enhancedMetrics';
 import { AdvancedMetricsCalculator } from '@/lib/advancedMetrics';
 import { BinaryStats } from '@/lib/binaryMetrics';
-import { PatternAnalysis } from '@/lib/bitstreamAnalysis';
+import { PatternAnalysis, TransitionAnalysis, CompressionAnalysisTools } from '@/lib/bitstreamAnalysis';
 import { IdealityMetrics } from '@/lib/idealityMetrics';
 import { calculateAllMetrics, getMetricsByCategory } from '@/lib/metricsCalculator';
 import { predefinedManager } from '@/lib/predefinedManager';
@@ -192,13 +192,39 @@ export const AnalysisPanel = ({ stats, bits, bitsPerRow, onJumpTo, onIdealityCha
     // Collect boundaries (empty for now - would come from BoundariesPanel)
     const boundaries: Array<{ sequence: string; description: string; positions: number[] }> = [];
     
+    // Collect bitstream analysis data
+    const transitionData = TransitionAnalysis.analyzeTransitions(safeBits);
+    const compressionData = CompressionAnalysisTools.estimateRLECompression(safeBits);
+    const runLengths = TransitionAnalysis.runLengthEncode(safeBits);
+    const onesCount = safeBits.split('1').length - 1;
+    const bitBalance = onesCount / safeBits.length;
+    const commonPatterns = PatternAnalysis.findAllPatterns(safeBits, 8, 3).slice(0, 10);
+    const longestRepeated = PatternAnalysis.findLongestRepeatedSubstring(safeBits, 64);
+    
+    const bitstreamAnalysis = {
+      entropy: compressionData.entropy,
+      transitionRate: transitionData.transitionRate,
+      compressionRatio: compressionData.compressionRatio,
+      bitBalance,
+      zeroToOneTransitions: transitionData.zeroToOne,
+      oneToZeroTransitions: transitionData.oneToZero,
+      totalTransitions: transitionData.totalTransitions,
+      avgRunLength: runLengths.reduce((sum, r) => sum + r.length, 0) / (runLengths.length || 1),
+      maxRunLength: Math.max(...runLengths.map(r => r.length), 0),
+      commonPatterns: commonPatterns.map(p => ({ pattern: p.pattern, count: p.count })),
+      longestRepeatedSubstring: longestRepeated ? { pattern: longestRepeated.pattern, positions: longestRepeated.positions } : undefined,
+    };
+    
     const blob = generateAnalysisReport(
       'Binary Analysis',
       safeBits,
       allMetrics.metrics,
       anomalies,
       sequences,
-      boundaries
+      boundaries,
+      undefined, // partitions - would come from PartitionsPanel
+      undefined, // history - would come from HistoryPanel
+      bitstreamAnalysis
     );
     
     downloadBlob(blob, `analysis-report-${new Date().toISOString().split('T')[0]}.pdf`);
