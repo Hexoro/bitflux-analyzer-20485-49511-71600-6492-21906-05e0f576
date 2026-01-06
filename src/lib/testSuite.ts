@@ -2059,6 +2059,89 @@ class TestSuite {
   getCategories(): string[] {
     return [...new Set(this.tests.map(t => t.category))];
   }
+
+  /**
+   * Get all test names for single test selection
+   */
+  getTestNames(): Array<{ name: string; category: string }> {
+    return this.tests.map(t => ({ name: t.name, category: t.category }));
+  }
+
+  /**
+   * Run a single test by name
+   */
+  async runSingle(testName: string): Promise<TestResult | null> {
+    await this.registerVectorTests();
+    
+    const test = this.tests.find(t => t.name === testName);
+    if (!test) return null;
+
+    const startTime = performance.now();
+    let passed = false;
+    let message = '';
+
+    try {
+      const result = await Promise.race([
+        test.fn(),
+        new Promise<boolean>((_, reject) =>
+          setTimeout(() => reject(new Error('Test timeout')), 5000)
+        )
+      ]);
+      passed = result === true;
+      message = passed ? 'Passed' : 'Test returned false';
+    } catch (error) {
+      passed = false;
+      message = (error as Error).message || 'Unknown error';
+    }
+
+    return {
+      name: test.name,
+      category: test.category,
+      passed,
+      message,
+      duration: performance.now() - startTime,
+    };
+  }
+
+  /**
+   * Run all tests in a category
+   */
+  async runCategory(category: string): Promise<TestResult[]> {
+    await this.registerVectorTests();
+    
+    const categoryTests = this.tests.filter(t => t.category === category);
+    const results: TestResult[] = [];
+
+    for (const test of categoryTests) {
+      const startTime = performance.now();
+      let passed = false;
+      let message = '';
+
+      try {
+        const result = await Promise.race([
+          test.fn(),
+          new Promise<boolean>((_, reject) =>
+            setTimeout(() => reject(new Error('Test timeout')), 3000)
+          )
+        ]);
+        passed = result === true;
+        message = passed ? 'Passed' : 'Test returned false';
+      } catch (error) {
+        passed = false;
+        message = (error as Error).message || 'Unknown error';
+      }
+
+      results.push({
+        name: test.name,
+        category: test.category,
+        passed,
+        message,
+        duration: performance.now() - startTime,
+      });
+    }
+
+    return results;
+  }
 }
 
 export const testSuite = new TestSuite();

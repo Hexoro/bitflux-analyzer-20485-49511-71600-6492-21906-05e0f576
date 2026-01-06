@@ -10,6 +10,7 @@ import { PatternAnalysis } from '@/lib/bitstreamAnalysis';
 import { IdealityMetrics } from '@/lib/idealityMetrics';
 import { calculateAllMetrics, getMetricsByCategory } from '@/lib/metricsCalculator';
 import { predefinedManager } from '@/lib/predefinedManager';
+import { generateAnalysisReport, downloadBlob } from '@/lib/reportGenerator';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
 import { Input } from './ui/input';
@@ -21,7 +22,7 @@ import { ScrollArea } from './ui/scroll-area';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from './ui/collapsible';
 import { useState, useMemo, useEffect } from 'react';
 import { toast } from 'sonner';
-import { ChevronDown, Activity, Database } from 'lucide-react';
+import { ChevronDown, Activity, Database, Download, FileText } from 'lucide-react';
 
 interface AnalysisPanelProps {
   stats: BinaryStats | null;
@@ -176,6 +177,34 @@ export const AnalysisPanel = ({ stats, bits, bitsPerRow, onJumpTo, onIdealityCha
     toast.success('Metrics exported successfully');
   };
 
+  // Generate PDF report
+  const generateReport = () => {
+    // Collect anomalies (empty array for now - would come from AnomaliesPanel)
+    const anomalies: Array<{ name: string; position: number; length: number; severity: string }> = [];
+    
+    // Collect sequences from topPatterns
+    const sequences = topPatterns.map(p => ({
+      pattern: p.pattern,
+      count: p.count,
+      positions: p.positions || [],
+    }));
+    
+    // Collect boundaries (empty for now - would come from BoundariesPanel)
+    const boundaries: Array<{ position: number; type: string }> = [];
+    
+    const blob = generateAnalysisReport(
+      'Binary Analysis',
+      safeBits,
+      allMetrics.metrics,
+      anomalies,
+      sequences,
+      boundaries
+    );
+    
+    downloadBlob(blob, `analysis-report-${new Date().toISOString().split('T')[0]}.pdf`);
+    toast.success('PDF report generated');
+  };
+
   // NOW we can do early returns AFTER all hooks
   if (!hasData) {
     return (
@@ -195,9 +224,16 @@ export const AnalysisPanel = ({ stats, bits, bitsPerRow, onJumpTo, onIdealityCha
             {Object.keys(allMetrics.metrics).length} metrics
           </Badge>
         </div>
-        <Button variant="outline" size="sm" onClick={exportMetrics}>
-          Export Metrics
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={generateReport}>
+            <FileText className="w-4 h-4 mr-1" />
+            PDF Report
+          </Button>
+          <Button variant="outline" size="sm" onClick={exportMetrics}>
+            <Download className="w-4 h-4 mr-1" />
+            Export JSON
+          </Button>
+        </div>
       </div>
 
       <Accordion type="multiple" defaultValue={["file-info", "compression", "all-metrics", "patterns"]} className="space-y-2">

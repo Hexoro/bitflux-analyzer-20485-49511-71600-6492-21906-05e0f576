@@ -35,11 +35,13 @@ import {
   Trash2,
   Plus,
   Zap,
+  Download,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { jobManagerV2, Job, JobPreset, JobPriority, BatchJobConfig } from '@/lib/jobManagerV2';
 import { fileSystemManager } from '@/lib/fileSystemManager';
 import { pythonModuleSystem } from '@/lib/pythonModuleSystem';
+import { generateBatchReport, downloadBlob } from '@/lib/reportGenerator';
 
 interface BatchJobsUIProps {
   onClose?: () => void;
@@ -340,6 +342,20 @@ export const BatchJobsUI = ({ onClose }: BatchJobsUIProps) => {
                           >
                             <Play className="w-3 h-3 mr-1" />
                             Start
+                          </Button>
+                        )}
+                        {completed > 0 && (
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            className="h-7"
+                            onClick={() => {
+                              const blob = generateBatchReport(batchId, jobs);
+                              downloadBlob(blob, `batch-report-${batchId}.pdf`);
+                              toast.success('Batch report downloaded');
+                            }}
+                          >
+                            <Download className="w-3 h-3" />
                           </Button>
                         )}
                         <Button 
