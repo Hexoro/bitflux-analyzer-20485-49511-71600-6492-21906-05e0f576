@@ -24,15 +24,53 @@ import { useState, useMemo, useEffect } from 'react';
 import { toast } from 'sonner';
 import { ChevronDown, Activity, Database, Download, FileText } from 'lucide-react';
 
+interface Partition {
+  id: string;
+  startIndex: number;
+  endIndex: number;
+  bits: string;
+  stats: {
+    totalBits: number;
+    entropy: number;
+    onePercent: number;
+    zeroPercent: number;
+    meanRunLength: number;
+  };
+}
+
+interface Boundary {
+  sequence: string;
+  description: string;
+  positions: number[];
+  color?: string;
+}
+
+interface HistoryEntry {
+  id: string;
+  timestamp: Date;
+  description: string;
+  bits?: string;
+  stats?: {
+    totalBits: number;
+    zeroCount: number;
+    oneCount: number;
+    entropy: number;
+  };
+}
+
 interface AnalysisPanelProps {
   stats: BinaryStats | null;
   bits: string;
   bitsPerRow: number;
   onJumpTo: (index: number) => void;
   onIdealityChange: (idealBitIndices: number[]) => void;
+  partitions?: Partition[];
+  boundaries?: Boundary[];
+  history?: HistoryEntry[];
+  anomalies?: Array<{ name: string; position: number; length: number; severity: string; description?: string }>;
 }
 
-export const AnalysisPanel = ({ stats, bits, bitsPerRow, onJumpTo, onIdealityChange }: AnalysisPanelProps) => {
+export const AnalysisPanel = ({ stats, bits, bitsPerRow, onJumpTo, onIdealityChange, partitions = [], boundaries = [], history = [], anomalies = [] }: AnalysisPanelProps) => {
   // Create safe defaults - MUST be before any hooks
   const safeStats = stats || {
     totalBits: 0,
@@ -179,18 +217,12 @@ export const AnalysisPanel = ({ stats, bits, bitsPerRow, onJumpTo, onIdealityCha
 
   // Generate PDF report
   const generateReport = () => {
-    // Collect anomalies (empty array for now - would come from AnomaliesPanel)
-    const anomalies: Array<{ name: string; position: number; length: number; severity: string }> = [];
-    
     // Collect sequences from topPatterns - map to SequenceData format
     const sequences = topPatterns.map(p => ({
       sequence: p.pattern,
       count: p.count,
       positions: p.positions || [],
     }));
-    
-    // Collect boundaries (empty for now - would come from BoundariesPanel)
-    const boundaries: Array<{ sequence: string; description: string; positions: number[] }> = [];
     
     // Collect bitstream analysis data
     const transitionData = TransitionAnalysis.analyzeTransitions(safeBits);
@@ -215,15 +247,41 @@ export const AnalysisPanel = ({ stats, bits, bitsPerRow, onJumpTo, onIdealityCha
       longestRepeatedSubstring: longestRepeated ? { pattern: longestRepeated.pattern, positions: longestRepeated.positions } : undefined,
     };
     
+    // Convert partitions to proper format for report
+    const partitionData = partitions.map(p => ({
+      id: p.id,
+      startIndex: p.startIndex,
+      endIndex: p.endIndex,
+      bits: p.bits,
+      stats: p.stats,
+    }));
+    
+    // Convert boundaries to proper format
+    const boundaryData = boundaries.map(b => ({
+      sequence: b.sequence,
+      description: b.description,
+      positions: b.positions,
+      color: b.color,
+    }));
+    
+    // Convert history entries
+    const historyData = history.map(h => ({
+      id: h.id,
+      timestamp: h.timestamp,
+      description: h.description,
+      bits: h.bits,
+      stats: h.stats,
+    }));
+    
     const blob = generateAnalysisReport(
       'Binary Analysis',
       safeBits,
       allMetrics.metrics,
       anomalies,
       sequences,
-      boundaries,
-      undefined, // partitions - would come from PartitionsPanel
-      undefined, // history - would come from HistoryPanel
+      boundaryData,
+      partitionData,
+      historyData,
       bitstreamAnalysis
     );
     

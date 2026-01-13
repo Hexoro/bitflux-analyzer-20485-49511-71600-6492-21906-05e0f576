@@ -522,6 +522,9 @@ const Index = () => {
                     bitsPerRow={bitsPerRow}
                     onJumpTo={handleJumpTo}
                     onIdealityChange={setIdealBitIndices}
+                    partitions={partitions}
+                    boundaries={boundaries}
+                    history={historyGroups.flatMap(g => g.entries)}
                   />
                 </TabsContent>
 

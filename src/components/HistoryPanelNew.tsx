@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { HistoryEntry } from '@/lib/historyManager';
 import { HistoryGroup } from '@/lib/fileState';
 import { Badge } from '@/components/ui/badge';
+import jsPDF from 'jspdf';
 import { 
   Clock, 
   GitCompare, 
@@ -20,6 +21,7 @@ import {
   TrendingDown,
   Download,
   FileJson,
+  FileText,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -201,6 +203,119 @@ export const HistoryPanelNew = ({
     toast.success('Full history with bits exported');
   };
 
+  const handleExportPDF = () => {
+    if (groups.length === 0) {
+      toast.info('No history to export');
+      return;
+    }
+
+    const allEntries = groups.flatMap(g => g.entries);
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    
+    // Header
+    doc.setFillColor(15, 23, 42);
+    doc.rect(0, 0, pageWidth, 40, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(22);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Edit History Report', 20, 25);
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(156, 163, 175);
+    doc.text(`Generated: ${new Date().toLocaleString()}`, 20, 35);
+    doc.setTextColor(100, 200, 255);
+    doc.text('BSEE', pageWidth - 30, 25);
+    
+    let y = 55;
+    
+    // Summary stats
+    doc.setFillColor(241, 245, 249);
+    doc.rect(15, y - 5, pageWidth - 30, 12, 'F');
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(0, 132, 255);
+    doc.text('SUMMARY', 20, y + 3);
+    y += 15;
+    
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(0, 0, 0);
+    doc.text(`Total Entries: ${allEntries.length}`, 20, y);
+    y += 6;
+    doc.text(`Groups: ${groups.length}`, 20, y);
+    y += 6;
+    if (allEntries[0]) {
+      doc.text(`Latest: ${new Date(allEntries[0].timestamp).toLocaleString()}`, 20, y);
+      y += 6;
+    }
+    if (allEntries[allEntries.length - 1]) {
+      doc.text(`Oldest: ${new Date(allEntries[allEntries.length - 1].timestamp).toLocaleString()}`, 20, y);
+    }
+    y += 15;
+    
+    // Entries
+    doc.setFillColor(241, 245, 249);
+    doc.rect(15, y - 5, pageWidth - 30, 12, 'F');
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(0, 132, 255);
+    doc.text(`HISTORY ENTRIES (${allEntries.length})`, 20, y + 3);
+    y += 15;
+    
+    allEntries.slice(0, 50).forEach((entry, idx) => {
+      if (y > 270) {
+        doc.addPage();
+        y = 20;
+      }
+      
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(128, 128, 128);
+      doc.text(new Date(entry.timestamp).toLocaleString(), 20, y);
+      
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(30, 30, 30);
+      const desc = entry.description.length > 60 ? entry.description.slice(0, 57) + '...' : entry.description;
+      doc.text(desc, 75, y);
+      
+      if (entry.stats) {
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(128, 128, 128);
+        doc.text(`${entry.stats.totalBits} bits | H=${entry.stats.entropy.toFixed(3)}`, 160, y);
+      }
+      
+      y += 7;
+    });
+    
+    if (allEntries.length > 50) {
+      y += 5;
+      doc.setFont('helvetica', 'italic');
+      doc.setTextColor(128, 128, 128);
+      doc.text(`... and ${allEntries.length - 50} more entries`, 20, y);
+    }
+    
+    // Footer
+    const pageCount = doc.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8);
+      doc.setTextColor(128, 128, 128);
+      doc.text(`Page ${i} of ${pageCount}`, pageWidth - 40, 285);
+      doc.text('BSEE - Binary Structural Exploration Engine', pageWidth / 2, 285, { align: 'center' });
+    }
+    
+    const blob = doc.output('blob');
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `history_report_${Date.now()}.pdf`;
+    a.click();
+    URL.revokeObjectURL(url);
+    
+    toast.success('History PDF exported');
+  };
+
   const totalEntries = groups.reduce((sum, g) => sum + g.count, 0);
 
   if (groups.length === 0) {
@@ -244,11 +359,15 @@ export const HistoryPanelNew = ({
         <div className="flex gap-2">
           <Button size="sm" variant="outline" className="flex-1" onClick={handleExportHistory}>
             <Download className="w-3 h-3 mr-1" />
-            Export Summary
+            Summary
           </Button>
           <Button size="sm" variant="outline" className="flex-1" onClick={handleExportFullHistory}>
             <FileJson className="w-3 h-3 mr-1" />
-            Export Full
+            Full JSON
+          </Button>
+          <Button size="sm" variant="outline" className="flex-1" onClick={handleExportPDF}>
+            <FileText className="w-3 h-3 mr-1" />
+            PDF
           </Button>
         </div>
       </div>
