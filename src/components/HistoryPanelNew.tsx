@@ -1,9 +1,11 @@
+import { useState } from 'react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { HistoryEntry } from '@/lib/historyManager';
 import { HistoryGroup } from '@/lib/fileState';
 import { Badge } from '@/components/ui/badge';
+import { HistoryComparisonDialog } from './HistoryComparisonDialog';
 import jsPDF from 'jspdf';
 import { 
   Clock, 
@@ -22,6 +24,7 @@ import {
   Download,
   FileJson,
   FileText,
+  Scale,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -47,7 +50,11 @@ export const HistoryPanelNew = ({
   onCompareVersion,
   onToggleGroup 
 }: HistoryPanelNewProps) => {
+  const [comparisonDialogOpen, setComparisonDialogOpen] = useState(false);
+  const [comparisonInitialEntry, setComparisonInitialEntry] = useState<HistoryEntry | undefined>(undefined);
   
+  // Get all entries for comparison dialog
+  const allEntries = groups.flatMap(g => g.entries);
   const calculateDiff = (currentEntry: HistoryEntry, previousEntry: HistoryEntry | null): ChangeInfo[] => {
     if (!previousEntry) {
       return [{
@@ -369,8 +376,26 @@ export const HistoryPanelNew = ({
             <FileText className="w-3 h-3 mr-1" />
             PDF
           </Button>
+          <Button 
+            size="sm" 
+            variant="outline" 
+            className="flex-1" 
+            onClick={() => setComparisonDialogOpen(true)}
+            disabled={allEntries.length < 2}
+          >
+            <Scale className="w-3 h-3 mr-1" />
+            Compare
+          </Button>
         </div>
       </div>
+
+      {/* Comparison Dialog */}
+      <HistoryComparisonDialog
+        open={comparisonDialogOpen}
+        onOpenChange={setComparisonDialogOpen}
+        entries={allEntries}
+        initialEntry={comparisonInitialEntry}
+      />
 
       <ScrollArea className="flex-1">
         <div className="p-4 space-y-2">
