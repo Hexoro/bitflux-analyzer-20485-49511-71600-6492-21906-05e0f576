@@ -22,7 +22,8 @@ import { ScrollArea } from './ui/scroll-area';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from './ui/collapsible';
 import { useState, useMemo, useEffect } from 'react';
 import { toast } from 'sonner';
-import { ChevronDown, Activity, Database, Download, FileText } from 'lucide-react';
+import { ChevronDown, Activity, Database, Download, FileText, Target } from 'lucide-react';
+import { PartialRangeMetrics } from './PartialRangeMetrics';
 
 interface Partition {
   id: string;
@@ -463,6 +464,19 @@ export const AnalysisPanel = ({ stats, bits, bitsPerRow, onJumpTo, onIdealityCha
                 <div className="text-xs text-muted-foreground">Length: {safeStats.longestOneRun.length} • Pos: {safeStats.longestOneRun.start}-{safeStats.longestOneRun.end}</div>
               </div>
             )}
+          </AccordionContent>
+        </AccordionItem>
+
+        {/* Partial Range Metrics */}
+        <AccordionItem value="partial-range" className="border-border">
+          <AccordionTrigger className="text-sm font-semibold text-primary hover:no-underline px-4 py-2 bg-card rounded-t-lg">
+            <div className="flex items-center gap-2">
+              <Target className="w-4 h-4" />
+              Partial Range Analysis
+            </div>
+          </AccordionTrigger>
+          <AccordionContent className="p-4 bg-card rounded-b-lg border-t border-border">
+            <PartialRangeMetrics bits={safeBits} />
           </AccordionContent>
         </AccordionItem>
 

@@ -24,10 +24,10 @@ import { predefinedManager } from '@/lib/predefinedManager';
 import { ExecutionResult, TransformationStep } from './algorithm/PlayerTab';
 import { ResultsTab } from './algorithm/ResultsTab';
 import { FilesTabV3 } from './algorithm/FilesTabV3';
-import { StrategyTabV3 } from './algorithm/StrategyTabV3';
+import { StrategyTabV4 } from './algorithm/StrategyTabV4';
 import { ConsoleTab } from './algorithm/ConsoleTab';
 import { ComparisonTab } from './algorithm/ComparisonTab';
-import { StrategyExecutionTimeline } from './algorithm/StrategyExecutionTimeline';
+import { StrategyTimelineV2 } from './algorithm/StrategyTimelineV2';
 import { strategyExecutionEngine } from '@/lib/strategyExecutionEngine';
 
 type AlgorithmTab = 'files' | 'strategy' | 'timeline' | 'results' | 'compare' | 'metrics' | 'operations' | 'console';
@@ -123,13 +123,15 @@ export const AlgorithmPanel = () => {
         </TabsContent>
 
         <TabsContent value="strategy" className="h-full m-0">
-          <StrategyTabV3 onRunStrategy={handleRunStrategy} isExecuting={isExecuting} />
+          <StrategyTabV4 
+            onRunStrategy={handleRunStrategy} 
+            isExecuting={isExecuting}
+            onNavigateToTimeline={() => setActiveTab('timeline')}
+          />
         </TabsContent>
 
         <TabsContent value="timeline" className="h-full m-0">
-          <ScrollArea className="h-full p-4">
-            <StrategyExecutionTimeline isExecuting={isExecuting} />
-          </ScrollArea>
+          <StrategyTimelineV2 isExecuting={isExecuting} />
         </TabsContent>
 
         <TabsContent value="results" className="h-full m-0">

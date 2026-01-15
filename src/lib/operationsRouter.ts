@@ -494,10 +494,12 @@ const OPERATION_IMPLEMENTATIONS: Record<string, (bits: string, params: Operation
   },
 
   // Shuffle bits (Fisher-Yates-like deterministic)
-  SHUFFLE: (bits) => {
+  // CRITICAL: Uses seed param for replay consistency. If no seed provided, one is computed.
+  SHUFFLE: (bits, p) => {
+    // Use provided seed or compute from content - seed MUST be stored in params for replay
+    const seed = p.count || bits.split('').reduce((a, b, i) => a + (b === '1' ? i : 0), 0) || 1;
     const arr = bits.split('');
-    const seed = arr.reduce((a, b, i) => a + (b === '1' ? i : 0), 0);
-    let rng = seed || 1;
+    let rng = seed;
     for (let i = arr.length - 1; i > 0; i--) {
       rng = (rng * 1103515245 + 12345) & 0x7fffffff;
       const j = rng % (i + 1);
@@ -507,11 +509,11 @@ const OPERATION_IMPLEMENTATIONS: Record<string, (bits: string, params: Operation
   },
 
   // Unshuffle (reverse of shuffle - requires same seed)
-  UNSHUFFLE: (bits) => {
-    // Generate swap sequence
+  UNSHUFFLE: (bits, p) => {
+    // Use provided seed or compute from content
+    const seed = p.count || bits.split('').reduce((a, b, i) => a + (b === '1' ? i : 0), 0) || 1;
     const arr = bits.split('');
-    const seed = arr.reduce((a, b, i) => a + (b === '1' ? i : 0), 0);
-    let rng = seed || 1;
+    let rng = seed;
     const swaps: [number, number][] = [];
     for (let i = arr.length - 1; i > 0; i--) {
       rng = (rng * 1103515245 + 12345) & 0x7fffffff;
@@ -630,9 +632,10 @@ const OPERATION_IMPLEMENTATIONS: Record<string, (bits: string, params: Operation
     return first + first.split('').reverse().join('');
   },
 
-  // Scramble with LFSR
-  LFSR: (bits) => {
-    let lfsr = 0xACE1;
+  // Scramble with LFSR - uses seed param for replay consistency
+  LFSR: (bits, p) => {
+    // Use provided seed or default - seed MUST be stored for replay
+    let lfsr = p.count || 0xACE1;
     let result = '';
     for (let i = 0; i < bits.length; i++) {
       const bit = ((lfsr >> 0) ^ (lfsr >> 2) ^ (lfsr >> 3) ^ (lfsr >> 5)) & 1;
@@ -1272,6 +1275,18 @@ export function executeOperation(operationId: string, bits: string, params: Oper
         'FEISTEL': '0'.repeat(bits.length),
       };
       paramsUsed.mask = defaultMasks[operationId] || '0'.repeat(bits.length);
+    }
+
+    // CRITICAL: For SHUFFLE, UNSHUFFLE, LFSR - compute and store the seed if not provided
+    // This ensures replay uses the exact same seed
+    const SEED_OPS = ['SHUFFLE', 'UNSHUFFLE', 'LFSR'];
+    if (SEED_OPS.includes(operationId) && paramsUsed.count === undefined) {
+      if (operationId === 'LFSR') {
+        paramsUsed.count = 0xACE1; // Default LFSR seed
+      } else {
+        // Compute content-based seed for SHUFFLE/UNSHUFFLE
+        paramsUsed.count = bits.split('').reduce((a, b, i) => a + (b === '1' ? i : 0), 0) || 1;
+      }
     }
 
     // Check for custom implementation first
