@@ -1,33 +1,29 @@
 /**
- * Algorithm Panel V8 - Enhanced with Console, Timeline persistence, auto-switch
- * Tabs: Files, Strategy, Timeline, Results, Compare, Metrics, Operations, Console
+ * Algorithm Panel - Main tab container for algorithm-related functionality
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import {
-  FileText,
-  FolderOpen,
-  Code,
-  Activity,
-  Cog,
-  ChevronRight,
-  ChevronDown,
-  Terminal,
-  GitCompare,
-  Clock,
-} from 'lucide-react';
-import { predefinedManager } from '@/lib/predefinedManager';
-import { ExecutionResult, TransformationStep } from './algorithm/PlayerTab';
-import { ResultsTab } from './algorithm/ResultsTab';
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
+import { FileCode, Zap, Play, Layers, GitCompare, Activity, ChevronRight, ChevronDown, Calculator, Terminal, Target } from 'lucide-react';
 import { FilesTabV3 } from './algorithm/FilesTabV3';
-import { StrategyTabV4 } from './algorithm/StrategyTabV4';
-import { ConsoleTab } from './algorithm/ConsoleTab';
+import { StrategyTabV5 } from './algorithm/StrategyTabV5';
+import { StrategyTimelineV3 } from './algorithm/StrategyTimelineV3';
+import { ResultsTab } from './algorithm/ResultsTab';
 import { ComparisonTab } from './algorithm/ComparisonTab';
-import { StrategyTimelineV2 } from './algorithm/StrategyTimelineV2';
+import { ConsoleTab } from './algorithm/ConsoleTab';
+import { strategyExecutionEngine } from '@/lib/strategyExecutionEngine';
+import { resultsManager, ExecutionResultV2 } from '@/lib/resultsManager';
+import { getAvailableMetrics } from '@/lib/metricsCalculator';
+import { getAvailableOperations } from '@/lib/operationsRouter';
 import { strategyExecutionEngine } from '@/lib/strategyExecutionEngine';
 
 type AlgorithmTab = 'files' | 'strategy' | 'timeline' | 'results' | 'compare' | 'metrics' | 'operations' | 'console';
