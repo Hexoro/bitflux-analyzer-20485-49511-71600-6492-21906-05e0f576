@@ -54,27 +54,15 @@ export const EnhancedStepDetails = ({
   totalSteps,
   previousMetrics 
 }: EnhancedStepDetailsProps) => {
-  // Get operation definition for parameter info
+  // Get operation definition for parameter info - MUST be called unconditionally
   const operationDef = useMemo(() => {
     if (!step) return null;
     return predefinedManager.getOperation(step.operation);
-  }, [step?.operation]);
+  }, [step]);
 
-  if (!step) {
-    return (
-      <Card className="bg-gradient-to-b from-card to-muted/10">
-        <CardContent className="py-12 text-center">
-          <Layers className="w-12 h-12 mx-auto mb-4 opacity-30 text-muted-foreground" />
-          <p className="text-lg font-medium text-muted-foreground">Select a Step</p>
-          <p className="text-sm text-muted-foreground">Click on a step in the timeline to view details</p>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  // Calculate bit changes
+  // Calculate bit changes - MUST be called unconditionally
   const bitChanges = useMemo(() => {
-    if (!step.fullBeforeBits || !step.fullAfterBits) return null;
+    if (!step?.fullBeforeBits || !step?.fullAfterBits) return null;
     
     let changed = 0;
     let zeroToOne = 0;
@@ -90,10 +78,12 @@ export const EnhancedStepDetails = ({
     }
     
     return { changed, zeroToOne, oneToZero, total: len };
-  }, [step.fullBeforeBits, step.fullAfterBits]);
+  }, [step?.fullBeforeBits, step?.fullAfterBits]);
 
-  // Merge parameters with operation definition
+  // Merge parameters with operation definition - MUST be called unconditionally
   const parameterDetails = useMemo(() => {
+    if (!step) return [];
+    
     const details: Array<{
       name: string;
       value: any;
@@ -129,7 +119,20 @@ export const EnhancedStepDetails = ({
     });
     
     return details;
-  }, [operationDef, step.params]);
+  }, [operationDef, step]);
+
+  // Early return AFTER all hooks
+  if (!step) {
+    return (
+      <Card className="bg-gradient-to-b from-card to-muted/10">
+        <CardContent className="py-12 text-center">
+          <Layers className="w-12 h-12 mx-auto mb-4 opacity-30 text-muted-foreground" />
+          <p className="text-lg font-medium text-muted-foreground">Select a Step</p>
+          <p className="text-sm text-muted-foreground">Click on a step in the timeline to view details</p>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <div className="space-y-4">

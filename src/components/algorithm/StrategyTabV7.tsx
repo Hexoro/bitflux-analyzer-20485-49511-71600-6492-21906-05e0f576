@@ -125,8 +125,10 @@ import {
 const STRATEGY_STORAGE_KEY = 'bsee_saved_strategies_v7';
 const STRATEGY_TAGS_KEY = 'bsee_strategy_tags_v7';
 const EXECUTION_HISTORY_KEY = 'bsee_execution_history_v7';
+const STRATEGY_VERSIONS_KEY = 'bsee_strategy_versions_v1';
+const BREAKPOINTS_KEY = 'bsee_breakpoints_v1';
 
-type StrategySubTab = 'view' | 'execute' | 'create' | 'analytics' | 'templates';
+type StrategySubTab = 'view' | 'execute' | 'create' | 'analytics' | 'templates' | 'versions';
 type FileViewMode = 'grid' | 'list';
 type FileGroup = 'all' | 'scheduler' | 'algorithm' | 'scoring' | 'policies' | 'custom';
 
@@ -134,6 +136,26 @@ interface StrategyTag {
   id: string;
   name: string;
   color: string;
+}
+
+interface StrategyVersion {
+  id: string;
+  strategyId: string;
+  version: number;
+  snapshot: EnhancedStrategy;
+  timestamp: number;
+  message: string;
+  author?: string;
+}
+
+interface Breakpoint {
+  id: string;
+  strategyId: string;
+  operation: string;
+  stepIndex?: number;
+  condition?: string; // e.g., "entropy < 0.5"
+  enabled: boolean;
+  hitCount: number;
 }
 
 interface EnhancedStrategy extends Omit<StrategyConfig, 'created'> {
@@ -147,6 +169,8 @@ interface EnhancedStrategy extends Omit<StrategyConfig, 'created'> {
   runCount: number;
   avgScore?: number;
   avgDuration?: number;
+  version?: number;
+  breakpoints?: string[]; // Breakpoint IDs
 }
 
 interface ExecutionHistoryEntry {
@@ -301,6 +325,19 @@ export const StrategyTabV7 = ({ onRunStrategy, isExecuting = false, onNavigateTo
   const [executionQueue, setExecutionQueue] = useState<string[]>([]);
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
   
+  // Versioning state
+  const [strategyVersions, setStrategyVersions] = useState<StrategyVersion[]>([]);
+  const [showVersionDialog, setShowVersionDialog] = useState(false);
+  const [versionMessage, setVersionMessage] = useState('');
+  const [selectedVersionStrategy, setSelectedVersionStrategy] = useState<string | null>(null);
+  
+  // Breakpoints state
+  const [breakpoints, setBreakpoints] = useState<Breakpoint[]>([]);
+  const [showBreakpointDialog, setShowBreakpointDialog] = useState(false);
+  const [newBreakpointOp, setNewBreakpointOp] = useState('');
+  const [newBreakpointCondition, setNewBreakpointCondition] = useState('');
+  const [newBreakpointStep, setNewBreakpointStep] = useState<number | undefined>();
+  
   // Dialog states
   const [showTagDialog, setShowTagDialog] = useState(false);
   const [newTagName, setNewTagName] = useState('');
@@ -331,6 +368,18 @@ export const StrategyTabV7 = ({ onRunStrategy, isExecuting = false, onNavigateTo
       const savedHistory = localStorage.getItem(EXECUTION_HISTORY_KEY);
       if (savedHistory) {
         setExecutionHistory(JSON.parse(savedHistory));
+      }
+      
+      // Load versions
+      const savedVersions = localStorage.getItem(STRATEGY_VERSIONS_KEY);
+      if (savedVersions) {
+        setStrategyVersions(JSON.parse(savedVersions));
+      }
+      
+      // Load breakpoints
+      const savedBreakpoints = localStorage.getItem(BREAKPOINTS_KEY);
+      if (savedBreakpoints) {
+        setBreakpoints(JSON.parse(savedBreakpoints));
       }
     } catch (e) {
       console.error('Failed to load saved data:', e);
@@ -664,6 +713,106 @@ export const StrategyTabV7 = ({ onRunStrategy, isExecuting = false, onNavigateTo
     setActiveSubTab('create');
     toast.success('Template applied');
   };
+
+  // --- VERSION MANAGEMENT ---
+  const handleSaveVersion = (strategy: EnhancedStrategy) => {
+    if (!versionMessage.trim()) {
+      toast.error('Please enter a version message');
+      return;
+    }
+    
+    const existingVersions = strategyVersions.filter(v => v.strategyId === strategy.id);
+    const nextVersion = existingVersions.length + 1;
+    
+    const newVersion: StrategyVersion = {
+      id: `ver_${Date.now()}`,
+      strategyId: strategy.id,
+      version: nextVersion,
+      snapshot: { ...strategy },
+      timestamp: Date.now(),
+      message: versionMessage,
+    };
+    
+    setStrategyVersions(prev => [...prev, newVersion]);
+    setStrategies(prev => prev.map(s => 
+      s.id === strategy.id ? { ...s, version: nextVersion } : s
+    ));
+    setVersionMessage('');
+    setShowVersionDialog(false);
+    toast.success(`Version ${nextVersion} saved`);
+  };
+
+  const handleRestoreVersion = (version: StrategyVersion) => {
+    setStrategies(prev => prev.map(s => 
+      s.id === version.strategyId ? { ...version.snapshot, version: s.version } : s
+    ));
+    toast.success(`Restored to version ${version.version}`);
+  };
+
+  const handleDeleteVersion = (versionId: string) => {
+    setStrategyVersions(prev => prev.filter(v => v.id !== versionId));
+    toast.success('Version deleted');
+  };
+
+  // Get versions for a strategy
+  const getStrategyVersions = (strategyId: string) => {
+    return strategyVersions.filter(v => v.strategyId === strategyId).sort((a, b) => b.version - a.version);
+  };
+
+  // --- BREAKPOINT MANAGEMENT ---
+  const handleAddBreakpoint = () => {
+    if (!newBreakpointOp.trim() || !selectedStrategy) {
+      toast.error('Select an operation for the breakpoint');
+      return;
+    }
+    
+    const newBreakpoint: Breakpoint = {
+      id: `bp_${Date.now()}`,
+      strategyId: selectedStrategy.id,
+      operation: newBreakpointOp,
+      stepIndex: newBreakpointStep,
+      condition: newBreakpointCondition || undefined,
+      enabled: true,
+      hitCount: 0,
+    };
+    
+    setBreakpoints(prev => [...prev, newBreakpoint]);
+    setNewBreakpointOp('');
+    setNewBreakpointCondition('');
+    setNewBreakpointStep(undefined);
+    setShowBreakpointDialog(false);
+    toast.success('Breakpoint added');
+  };
+
+  const handleToggleBreakpoint = (breakpointId: string) => {
+    setBreakpoints(prev => prev.map(bp => 
+      bp.id === breakpointId ? { ...bp, enabled: !bp.enabled } : bp
+    ));
+  };
+
+  const handleDeleteBreakpoint = (breakpointId: string) => {
+    setBreakpoints(prev => prev.filter(bp => bp.id !== breakpointId));
+    toast.success('Breakpoint removed');
+  };
+
+  // Get breakpoints for a strategy
+  const getStrategyBreakpoints = (strategyId: string) => {
+    return breakpoints.filter(bp => bp.strategyId === strategyId);
+  };
+
+  // Save versions to localStorage
+  useEffect(() => {
+    if (strategyVersions.length > 0) {
+      localStorage.setItem(STRATEGY_VERSIONS_KEY, JSON.stringify(strategyVersions));
+    }
+  }, [strategyVersions]);
+
+  // Save breakpoints to localStorage
+  useEffect(() => {
+    if (breakpoints.length > 0) {
+      localStorage.setItem(BREAKPOINTS_KEY, JSON.stringify(breakpoints));
+    }
+  }, [breakpoints]);
 
   // Get group icon
   const getGroupIcon = (group: string) => {
@@ -1027,6 +1176,11 @@ export const StrategyTabV7 = ({ onRunStrategy, isExecuting = false, onNavigateTo
             <TabsTrigger value="templates" className="text-xs gap-1.5 data-[state=active]:bg-pink-500/20">
               <Library className="w-3 h-3" />
               Templates
+            </TabsTrigger>
+            <TabsTrigger value="versions" className="text-xs gap-1.5 data-[state=active]:bg-indigo-500/20">
+              <GitBranch className="w-3 h-3" />
+              Versions
+              <Badge variant="outline" className="text-[9px] h-4 ml-1">{strategyVersions.length}</Badge>
             </TabsTrigger>
           </TabsList>
         </div>
@@ -1859,6 +2013,192 @@ export const StrategyTabV7 = ({ onRunStrategy, isExecuting = false, onNavigateTo
               </div>
             </ScrollArea>
           </TabsContent>
+
+          {/* VERSIONS TAB */}
+          <TabsContent value="versions" className="h-full m-0 p-3">
+            <div className="h-full flex gap-3">
+              {/* Strategy selector */}
+              <div className="w-1/3 flex flex-col gap-3">
+                <Card>
+                  <CardHeader className="py-2 px-3">
+                    <CardTitle className="text-xs flex items-center gap-2">
+                      <Package className="w-3 h-3 text-indigo-400" />
+                      Select Strategy
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-3">
+                    <Select 
+                      value={selectedVersionStrategy || ''} 
+                      onValueChange={setSelectedVersionStrategy}
+                    >
+                      <SelectTrigger className="h-9">
+                        <SelectValue placeholder="Choose a strategy..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {strategies.map(s => (
+                          <SelectItem key={s.id} value={s.id}>
+                            <div className="flex items-center gap-2">
+                              <span>{s.name}</span>
+                              {s.version && (
+                                <Badge variant="outline" className="text-[9px]">v{s.version}</Badge>
+                              )}
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </CardContent>
+                </Card>
+                
+                {selectedVersionStrategy && (
+                  <Card className="flex-1">
+                    <CardHeader className="py-2 px-3">
+                      <CardTitle className="text-xs flex items-center gap-2">
+                        <Zap className="w-3 h-3 text-yellow-400" />
+                        Breakpoints
+                        <Badge variant="outline" className="text-[9px] h-4">
+                          {getStrategyBreakpoints(selectedVersionStrategy).length}
+                        </Badge>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-3 space-y-2">
+                      <ScrollArea className="h-40">
+                        {getStrategyBreakpoints(selectedVersionStrategy).map(bp => (
+                          <div key={bp.id} className="flex items-center gap-2 p-2 rounded bg-muted/30 mb-2">
+                            <Switch 
+                              checked={bp.enabled} 
+                              onCheckedChange={() => handleToggleBreakpoint(bp.id)} 
+                              className="scale-75"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-mono truncate">{bp.operation}</p>
+                              {bp.condition && (
+                                <p className="text-[10px] text-muted-foreground">if: {bp.condition}</p>
+                              )}
+                              {bp.stepIndex !== undefined && (
+                                <p className="text-[10px] text-muted-foreground">Step: {bp.stepIndex}</p>
+                              )}
+                            </div>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-6 w-6 text-destructive"
+                              onClick={() => handleDeleteBreakpoint(bp.id)}
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        ))}
+                        {getStrategyBreakpoints(selectedVersionStrategy).length === 0 && (
+                          <p className="text-xs text-muted-foreground text-center py-4">No breakpoints</p>
+                        )}
+                      </ScrollArea>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full h-7 text-xs"
+                        onClick={() => {
+                          setSelectedStrategy(strategies.find(s => s.id === selectedVersionStrategy) || null);
+                          setShowBreakpointDialog(true);
+                        }}
+                      >
+                        <Plus className="w-3 h-3 mr-1" />
+                        Add Breakpoint
+                      </Button>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+              
+              {/* Version History */}
+              <Card className="flex-1">
+                <CardHeader className="py-2 px-3 flex-row items-center justify-between">
+                  <CardTitle className="text-xs flex items-center gap-2">
+                    <History className="w-3 h-3 text-indigo-400" />
+                    Version History
+                  </CardTitle>
+                  {selectedVersionStrategy && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-6 text-xs"
+                      onClick={() => setShowVersionDialog(true)}
+                    >
+                      <Plus className="w-3 h-3 mr-1" />
+                      Save Version
+                    </Button>
+                  )}
+                </CardHeader>
+                <CardContent className="p-3">
+                  {selectedVersionStrategy ? (
+                    <ScrollArea className="h-[400px]">
+                      <div className="space-y-2">
+                        {getStrategyVersions(selectedVersionStrategy).map(version => (
+                          <Card key={version.id} className="bg-muted/30">
+                            <CardContent className="p-3">
+                              <div className="flex items-start justify-between mb-2">
+                                <div className="flex items-center gap-2">
+                                  <Badge className="bg-indigo-500/20 text-indigo-400 border-indigo-500/30">
+                                    v{version.version}
+                                  </Badge>
+                                  <span className="text-[10px] text-muted-foreground">
+                                    {new Date(version.timestamp).toLocaleString()}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    className="h-6 w-6"
+                                    onClick={() => handleRestoreVersion(version)}
+                                  >
+                                    <RefreshCw className="w-3 h-3" />
+                                  </Button>
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    className="h-6 w-6 text-destructive"
+                                    onClick={() => handleDeleteVersion(version.id)}
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                  </Button>
+                                </div>
+                              </div>
+                              <p className="text-sm">{version.message}</p>
+                              <div className="flex items-center gap-2 mt-2 text-[10px] text-muted-foreground">
+                                <span>{version.snapshot.algorithmFiles.length} algorithms</span>
+                                <Separator orientation="vertical" className="h-3" />
+                                <span>{version.snapshot.scoringFiles.length} scoring</span>
+                                <Separator orientation="vertical" className="h-3" />
+                                <span>{version.snapshot.policyFiles.length} policies</span>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        ))}
+                        {getStrategyVersions(selectedVersionStrategy).length === 0 && (
+                          <div className="text-center py-8">
+                            <GitBranch className="w-12 h-12 mx-auto text-muted-foreground/30 mb-4" />
+                            <p className="text-sm text-muted-foreground">No versions saved</p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Save a version to track changes
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </ScrollArea>
+                  ) : (
+                    <div className="text-center py-12">
+                      <Package className="w-12 h-12 mx-auto text-muted-foreground/30 mb-4" />
+                      <p className="text-sm text-muted-foreground">Select a strategy</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Choose a strategy to view its version history
+                      </p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
         </div>
       </Tabs>
       
@@ -1901,6 +2241,108 @@ export const StrategyTabV7 = ({ onRunStrategy, isExecuting = false, onNavigateTo
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowTagDialog(false)}>Cancel</Button>
             <Button onClick={handleAddTag}>Create Tag</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Version Save Dialog */}
+      <Dialog open={showVersionDialog} onOpenChange={setShowVersionDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-sm flex items-center gap-2">
+              <GitBranch className="w-4 h-4 text-indigo-400" />
+              Save Version
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Save the current state of this strategy as a version
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label className="text-xs">Version Message</Label>
+              <Textarea
+                value={versionMessage}
+                onChange={(e) => setVersionMessage(e.target.value)}
+                placeholder="Describe what changed in this version..."
+                className="min-h-[80px]"
+              />
+            </div>
+            {selectedVersionStrategy && (
+              <div className="p-3 rounded bg-muted/30">
+                <p className="text-xs text-muted-foreground mb-1">Saving version for:</p>
+                <p className="text-sm font-medium">
+                  {strategies.find(s => s.id === selectedVersionStrategy)?.name}
+                </p>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowVersionDialog(false)}>Cancel</Button>
+            <Button 
+              onClick={() => {
+                const strategy = strategies.find(s => s.id === selectedVersionStrategy);
+                if (strategy) handleSaveVersion(strategy);
+              }}
+              disabled={!versionMessage.trim()}
+            >
+              <Save className="w-4 h-4 mr-2" />
+              Save Version
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Breakpoint Dialog */}
+      <Dialog open={showBreakpointDialog} onOpenChange={setShowBreakpointDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-sm flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-red-400" />
+              Add Breakpoint
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Pause execution when this operation is reached
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label className="text-xs">Operation Name</Label>
+              <Input
+                value={newBreakpointOp}
+                onChange={(e) => setNewBreakpointOp(e.target.value)}
+                placeholder="e.g. XOR, ROTATE_LEFT, SWAP"
+                className="h-8 font-mono"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs">Step Index (Optional)</Label>
+              <Input
+                type="number"
+                value={newBreakpointStep || ''}
+                onChange={(e) => setNewBreakpointStep(e.target.value ? parseInt(e.target.value) : undefined)}
+                placeholder="Leave empty for all occurrences"
+                className="h-8"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs">Condition (Optional)</Label>
+              <Input
+                value={newBreakpointCondition}
+                onChange={(e) => setNewBreakpointCondition(e.target.value)}
+                placeholder="e.g. entropy < 0.5"
+                className="h-8 font-mono text-xs"
+              />
+              <p className="text-[10px] text-muted-foreground">
+                Break only when this condition is true
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowBreakpointDialog(false)}>Cancel</Button>
+            <Button onClick={handleAddBreakpoint} disabled={!newBreakpointOp.trim()}>
+              <Plus className="w-4 h-4 mr-2" />
+              Add Breakpoint
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
