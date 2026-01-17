@@ -418,7 +418,7 @@ export const FilesTab = ({ onFileSelect }: FilesTabProps) => {
 
         {/* File Groups */}
         <ScrollArea className="flex-1">
-          <Accordion type="multiple" defaultValue={['scheduler', 'algorithm', 'scoring', 'policies', 'ai']}>
+          <Accordion type="multiple" defaultValue={['scheduler', 'algorithm', 'scoring', 'policies', 'ai', 'custom-ungrouped']}>
             <AccordionItem value="scheduler">
               <AccordionTrigger className="py-3">
                 <div className="flex items-center gap-2">
