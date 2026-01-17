@@ -32,7 +32,7 @@ import {
   Cog,
 } from 'lucide-react';
 import { FilesTabV3 } from './algorithm/FilesTabV3';
-import { StrategyTabV6 } from './algorithm/StrategyTabV6';
+import { StrategyTabV7 } from './algorithm/StrategyTabV7';
 import { StrategyTimelineV2 } from './algorithm/StrategyTimelineV2';
 import { ResultsTab } from './algorithm/ResultsTab';
 import { ComparisonTab } from './algorithm/ComparisonTab';
@@ -128,7 +128,7 @@ export const AlgorithmPanel = () => {
         </TabsContent>
 
         <TabsContent value="strategy" className="h-full m-0">
-          <StrategyTabV6 
+          <StrategyTabV7 
             onRunStrategy={handleRunStrategy} 
             isExecuting={isExecuting}
             onNavigateToTimeline={() => setActiveTab('timeline')}
