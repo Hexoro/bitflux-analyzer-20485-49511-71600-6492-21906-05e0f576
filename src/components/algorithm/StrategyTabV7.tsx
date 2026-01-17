@@ -136,13 +136,13 @@ interface StrategyTag {
   color: string;
 }
 
-interface EnhancedStrategy extends StrategyConfig {
+interface EnhancedStrategy extends Omit<StrategyConfig, 'created'> {
   tags: string[];
   starred: boolean;
   customFiles: string[];
   description?: string;
   createdAt: number;
-  created: number;
+  created: Date | number;
   lastRun?: number;
   runCount: number;
   avgScore?: number;
@@ -445,8 +445,17 @@ export const StrategyTabV7 = ({ onRunStrategy, isExecuting = false, onNavigateTo
   const filteredFiles = useMemo(() => {
     let filtered = files.filter(f => {
       const matchesSearch = f.name.toLowerCase().includes(fileSearch.toLowerCase());
-      const matchesGroup = fileGroupFilter === 'all' || 
-        (fileGroupFilter === 'custom' ? !['scheduler', 'algorithm', 'scoring', 'policies'].includes(f.group) : f.group === fileGroupFilter);
+      let matchesGroup = false;
+      
+      if (fileGroupFilter === 'all') {
+        matchesGroup = true;
+      } else if (fileGroupFilter === 'custom') {
+        // Show custom, ai, and any non-standard groups
+        matchesGroup = f.group === 'custom' || f.group === 'ai' || !['scheduler', 'algorithm', 'scoring', 'policies'].includes(f.group);
+      } else {
+        matchesGroup = f.group === fileGroupFilter;
+      }
+      
       return matchesSearch && matchesGroup;
     });
     
@@ -455,7 +464,7 @@ export const StrategyTabV7 = ({ onRunStrategy, isExecuting = false, onNavigateTo
       let cmp = 0;
       if (sortBy === 'name') cmp = a.name.localeCompare(b.name);
       else if (sortBy === 'lines') cmp = a.content.split('\n').length - b.content.split('\n').length;
-      else if (sortBy === 'date') cmp = (a.id || '').localeCompare(b.id || '');
+      else if (sortBy === 'date') cmp = new Date(b.modified).getTime() - new Date(a.modified).getTime();
       return sortAsc ? cmp : -cmp;
     });
     
@@ -469,7 +478,7 @@ export const StrategyTabV7 = ({ onRunStrategy, isExecuting = false, onNavigateTo
     algorithm: files.filter(f => f.group === 'algorithm').length,
     scoring: files.filter(f => f.group === 'scoring').length,
     policies: files.filter(f => f.group === 'policies').length,
-    custom: files.filter(f => !['scheduler', 'algorithm', 'scoring', 'policies'].includes(f.group)).length,
+    custom: files.filter(f => f.group === 'custom' || f.group === 'ai' || !['scheduler', 'algorithm', 'scoring', 'policies'].includes(f.group)).length,
   }), [files]);
 
   // Strategy filtering
@@ -546,7 +555,7 @@ export const StrategyTabV7 = ({ onRunStrategy, isExecuting = false, onNavigateTo
       starred: false,
       createdAt: Date.now(),
       runCount: 0,
-      created: Date.now(),
+      created: new Date(),
     };
 
     setStrategies(prev => [...prev, newStrategy]);
@@ -602,6 +611,9 @@ export const StrategyTabV7 = ({ onRunStrategy, isExecuting = false, onNavigateTo
     setExecutionProgress(0);
     try {
       // Convert to base StrategyConfig
+      const createdDate = selectedStrategy.created instanceof Date 
+        ? selectedStrategy.created 
+        : new Date(selectedStrategy.createdAt || selectedStrategy.created);
       const baseConfig: StrategyConfig = {
         id: selectedStrategy.id,
         name: selectedStrategy.name,
@@ -609,7 +621,7 @@ export const StrategyTabV7 = ({ onRunStrategy, isExecuting = false, onNavigateTo
         algorithmFiles: [...selectedStrategy.algorithmFiles, ...(selectedStrategy.customFiles || [])],
         scoringFiles: selectedStrategy.scoringFiles,
         policyFiles: selectedStrategy.policyFiles,
-        created: selectedStrategy.created || selectedStrategy.createdAt,
+        created: createdDate,
       };
       
       const result = await strategyExecutionEngine.executeStrategy(
@@ -1260,9 +1272,66 @@ export const StrategyTabV7 = ({ onRunStrategy, isExecuting = false, onNavigateTo
                           Advanced Options
                         </Button>
                       </CollapsibleTrigger>
-                      <CollapsibleContent className="pt-2 space-y-2">
-                        <div className="text-xs text-muted-foreground">
-                          Advanced options coming soon: batch execution, custom budgets, step-by-step mode...
+                      <CollapsibleContent className="pt-3 space-y-3">
+                        <div className="space-y-2">
+                          <Label className="text-[10px] text-muted-foreground">Max Parallel Workers</Label>
+                          <Select defaultValue="4">
+                            <SelectTrigger className="h-7 text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="1">1 (Sequential)</SelectItem>
+                              <SelectItem value="2">2 Workers</SelectItem>
+                              <SelectItem value="4">4 Workers</SelectItem>
+                              <SelectItem value="8">8 Workers</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <Label className="text-[10px] text-muted-foreground">Budget Override</Label>
+                          <Input type="number" defaultValue="1000" className="h-7 text-xs" />
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <Label className="text-[10px] text-muted-foreground">Step Mode</Label>
+                          <Select defaultValue="continuous">
+                            <SelectTrigger className="h-7 text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="continuous">Continuous</SelectItem>
+                              <SelectItem value="step">Step-by-Step</SelectItem>
+                              <SelectItem value="breakpoint">Breakpoints</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        
+                        <div className="flex items-center justify-between">
+                          <Label className="text-xs">Verify After Each Step</Label>
+                          <Switch defaultChecked={false} />
+                        </div>
+                        
+                        <div className="flex items-center justify-between">
+                          <Label className="text-xs">Log Detailed Metrics</Label>
+                          <Switch defaultChecked={true} />
+                        </div>
+                        
+                        <div className="flex items-center justify-between">
+                          <Label className="text-xs">Store Full Bit History</Label>
+                          <Switch defaultChecked={true} />
+                        </div>
+                        
+                        <Separator />
+                        
+                        <div className="space-y-2">
+                          <Label className="text-[10px] text-muted-foreground">Timeout (seconds)</Label>
+                          <Input type="number" defaultValue="300" className="h-7 text-xs" />
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <Label className="text-[10px] text-muted-foreground">Memory Limit (MB)</Label>
+                          <Input type="number" defaultValue="512" className="h-7 text-xs" />
                         </div>
                       </CollapsibleContent>
                     </Collapsible>

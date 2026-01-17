@@ -41,6 +41,8 @@ import {
   AlertCircle,
   GitCompare,
   Database,
+  Code,
+  BookOpen,
 } from 'lucide-react';
 import { fileSystemManager } from '@/lib/fileSystemManager';
 import { resultsManager, ExecutionResultV2 } from '@/lib/resultsManager';
@@ -53,6 +55,7 @@ import { EnhancedMetricsTimeline } from './player/EnhancedMetricsTimeline';
 import { EnhancedMaskView } from './player/EnhancedMaskView';
 import { EnhancedStepDetails } from './player/EnhancedStepDetails';
 import { EnhancedDataView } from './player/EnhancedDataView';
+import { CodeContextView } from './player/CodeContextView';
 
 interface PlayerModePanelProps {
   onExitPlayer: () => void;
@@ -557,10 +560,14 @@ export const PlayerModePanel = ({ onExitPlayer, selectedResultId }: PlayerModePa
           {/* Step Details - Enhanced */}
           <div className="flex-1 overflow-hidden">
             <Tabs defaultValue="details" className="h-full flex flex-col">
-              <TabsList className="grid grid-cols-5 w-full">
+              <TabsList className="grid grid-cols-6 w-full">
                 <TabsTrigger value="details" className="text-xs gap-1">
                   <Zap className="w-3 h-3" />
                   Step
+                </TabsTrigger>
+                <TabsTrigger value="code" className="text-xs gap-1">
+                  <Code className="w-3 h-3" />
+                  Code
                 </TabsTrigger>
                 <TabsTrigger value="mask" className="text-xs gap-1">
                   <Layers className="w-3 h-3" />
@@ -599,6 +606,16 @@ export const PlayerModePanel = ({ onExitPlayer, selectedResultId }: PlayerModePa
                     stepIndex={currentStep}
                     totalSteps={reconstructedSteps.length}
                     previousMetrics={currentStep > 0 ? reconstructedSteps[currentStep - 1]?.metrics : undefined}
+                  />
+                </ScrollArea>
+              </TabsContent>
+
+              <TabsContent value="code" className="flex-1 overflow-auto mt-2">
+                <ScrollArea className="h-[calc(100vh-400px)]">
+                  <CodeContextView
+                    step={step}
+                    stepIndex={currentStep}
+                    totalSteps={reconstructedSteps.length}
                   />
                 </ScrollArea>
               </TabsContent>
