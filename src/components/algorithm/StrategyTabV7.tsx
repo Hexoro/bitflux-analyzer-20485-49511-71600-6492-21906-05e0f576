@@ -146,16 +146,41 @@ interface StrategyVersion {
   timestamp: number;
   message: string;
   author?: string;
+  fileHashes: Record<string, string>; // filename -> content hash
+  changedFiles?: string[]; // Which files changed from previous version
 }
 
 interface Breakpoint {
   id: string;
   strategyId: string;
-  operation: string;
-  stepIndex?: number;
+  type: 'operation' | 'line' | 'condition' | 'module';
+  
+  // Operation-based
+  operation?: string;
+  avoidOperations?: string[]; // Operations to skip/break on
+  
+  // Line-based
+  fileName?: string;
+  lineNumber?: number;
+  lineRange?: { start: number; end: number };
+  
+  // Condition-based
   condition?: string; // e.g., "entropy < 0.5"
+  conditionType?: 'metric' | 'budget' | 'step' | 'custom';
+  
+  // Module-based
+  moduleNames?: string[]; // Files to break when called
+  
+  // Step-based
+  stepIndex?: number;
+  
+  // State
   enabled: boolean;
   hitCount: number;
+  
+  // Actions
+  action: 'break' | 'log' | 'skip';
+  logMessage?: string;
 }
 
 interface EnhancedStrategy extends Omit<StrategyConfig, 'created'> {
@@ -213,38 +238,82 @@ const TAG_COLORS = [
 ];
 
 // ETA estimation
-const estimateETA = (strategy: EnhancedStrategy, dataFileSize: number, parallelEnabled: boolean): { 
+// Hash content for version tracking
+const hashContent = (content: string): string => {
+  let hash = 0;
+  for (let i = 0; i < content.length; i++) {
+    hash = ((hash << 5) - hash) + content.charCodeAt(i);
+    hash = hash & hash;
+  }
+  return Math.abs(hash).toString(16).padStart(8, '0');
+};
+
+// Realistic ETA estimation with history-based calculation
+const estimateETA = (
+  strategy: EnhancedStrategy, 
+  dataFileSize: number, 
+  parallelEnabled: boolean,
+  executionHistory: ExecutionHistoryEntry[] = []
+): { 
   minutes: number; 
   seconds: number; 
   confidence: 'high' | 'medium' | 'low';
   breakdown: { phase: string; seconds: number }[];
 } => {
-  const fileCount = strategy.algorithmFiles.length + strategy.scoringFiles.length + 
-                   strategy.policyFiles.length + (strategy.customFiles?.length || 0) + 1;
-  const baseTime = 0.5;
-  const sizeMultiplier = Math.log2(dataFileSize + 1) * 0.1;
-  let totalSeconds = fileCount * baseTime * (1 + sizeMultiplier);
+  // Find similar past executions for this strategy
+  const similarRuns = executionHistory.filter(h => 
+    h.strategyId === strategy.id || 
+    h.strategyName === strategy.name
+  );
+  
+  // If we have historical data, use it
+  if (similarRuns.length >= 3) {
+    const recentRuns = similarRuns.slice(0, 10);
+    const avgDuration = recentRuns.reduce((sum, r) => sum + r.duration, 0) / recentRuns.length;
+    const adjustedTime = avgDuration * (parallelEnabled ? 0.7 : 1);
+    const totalSeconds = adjustedTime / 1000; // Convert ms to seconds
+    
+    return {
+      minutes: Math.floor(totalSeconds / 60),
+      seconds: Math.round(totalSeconds % 60),
+      confidence: 'high',
+      breakdown: [{ phase: 'Based on history', seconds: totalSeconds }]
+    };
+  }
+  
+  // Fallback to heuristic based on file complexity
+  const fileCount = 1 + strategy.algorithmFiles.length + strategy.scoringFiles.length + 
+                   strategy.policyFiles.length + (strategy.customFiles?.length || 0);
+  
+  // More realistic: log-scaled size multiplier
+  const sizeMultiplier = dataFileSize > 0 ? Math.log10(dataFileSize + 1) * 0.3 : 0.1;
+  
+  // Base: ~50ms per file, plus data size overhead
+  const baseTimeMs = fileCount * 50 * (1 + sizeMultiplier);
+  let totalMs = baseTimeMs;
   
   // Parallel reduces time
   if (parallelEnabled && strategy.algorithmFiles.length > 1) {
-    totalSeconds *= 0.6;
+    totalMs *= 0.6;
   }
   
+  const totalSeconds = totalMs / 1000;
+  
   const breakdown = [
-    { phase: 'Scheduler', seconds: baseTime * (1 + sizeMultiplier) },
-    { phase: 'Algorithms', seconds: strategy.algorithmFiles.length * baseTime * (parallelEnabled ? 0.5 : 1) },
-    { phase: 'Scoring', seconds: strategy.scoringFiles.length * baseTime * 0.5 },
-    { phase: 'Policies', seconds: strategy.policyFiles.length * baseTime * 0.3 },
+    { phase: 'Scheduler', seconds: 0.05 * (1 + sizeMultiplier) },
+    { phase: 'Algorithms', seconds: strategy.algorithmFiles.length * 0.05 * (parallelEnabled ? 0.5 : 1) },
+    { phase: 'Scoring', seconds: strategy.scoringFiles.length * 0.025 },
+    { phase: 'Policies', seconds: strategy.policyFiles.length * 0.015 },
   ];
   
   if (strategy.customFiles?.length) {
-    breakdown.push({ phase: 'Custom', seconds: strategy.customFiles.length * baseTime });
+    breakdown.push({ phase: 'Custom', seconds: strategy.customFiles.length * 0.05 });
   }
   
   return {
     minutes: Math.floor(totalSeconds / 60),
     seconds: Math.round(totalSeconds % 60),
-    confidence: fileCount > 8 ? 'low' : fileCount > 4 ? 'medium' : 'high',
+    confidence: similarRuns.length > 0 ? 'medium' : 'low',
     breakdown,
   };
 };
@@ -334,8 +403,17 @@ export const StrategyTabV7 = ({ onRunStrategy, isExecuting = false, onNavigateTo
   // Breakpoints state
   const [breakpoints, setBreakpoints] = useState<Breakpoint[]>([]);
   const [showBreakpointDialog, setShowBreakpointDialog] = useState(false);
+  const [newBreakpointType, setNewBreakpointType] = useState<'operation' | 'line' | 'condition' | 'module'>('operation');
   const [newBreakpointOp, setNewBreakpointOp] = useState('');
   const [newBreakpointCondition, setNewBreakpointCondition] = useState('');
+  const [newBreakpointFileName, setNewBreakpointFileName] = useState('');
+  const [newBreakpointLineNumber, setNewBreakpointLineNumber] = useState<number | undefined>();
+  const [newBreakpointModules, setNewBreakpointModules] = useState<string[]>([]);
+  const [newBreakpointAvoidOps, setNewBreakpointAvoidOps] = useState<string[]>([]);
+  const [newBreakpointAction, setNewBreakpointAction] = useState<'break' | 'log' | 'skip'>('break');
+  
+  // File change tracking for versioning
+  const [unsavedChanges, setUnsavedChanges] = useState<Record<string, string[]>>({});
   const [newBreakpointStep, setNewBreakpointStep] = useState<number | undefined>();
   
   // Dialog states
@@ -489,6 +567,52 @@ export const StrategyTabV7 = ({ onRunStrategy, isExecuting = false, onNavigateTo
       localStorage.setItem(EXECUTION_HISTORY_KEY, JSON.stringify(executionHistory));
     }
   }, [executionHistory]);
+
+  // File change detection for versioning
+  useEffect(() => {
+    // Check if any strategy's files have changed since last version
+    strategies.forEach(strategy => {
+      const versions = strategyVersions.filter(v => v.strategyId === strategy.id).sort((a, b) => b.version - a.version);
+      if (versions.length === 0) return; // No versions saved yet
+      
+      const lastVersion = versions[0];
+      if (!lastVersion.fileHashes) return; // Old version format
+      
+      const allFiles = [
+        strategy.schedulerFile,
+        ...strategy.algorithmFiles,
+        ...strategy.scoringFiles,
+        ...strategy.policyFiles,
+        ...(strategy.customFiles || [])
+      ];
+      
+      // Get current hashes
+      const changedFiles: string[] = [];
+      allFiles.forEach(name => {
+        const file = files.find(f => f.name === name);
+        if (file) {
+          const currentHash = hashContent(file.content);
+          if (lastVersion.fileHashes[name] && currentHash !== lastVersion.fileHashes[name]) {
+            changedFiles.push(name);
+          }
+        }
+      });
+      
+      // Update unsaved changes state
+      if (changedFiles.length > 0) {
+        setUnsavedChanges(prev => ({
+          ...prev,
+          [strategy.id]: changedFiles
+        }));
+      } else {
+        setUnsavedChanges(prev => {
+          const updated = { ...prev };
+          delete updated[strategy.id];
+          return updated;
+        });
+      }
+    });
+  }, [files, strategies, strategyVersions]);
 
   // File filtering and sorting
   const filteredFiles = useMemo(() => {
@@ -724,6 +848,27 @@ export const StrategyTabV7 = ({ onRunStrategy, isExecuting = false, onNavigateTo
     const existingVersions = strategyVersions.filter(v => v.strategyId === strategy.id);
     const nextVersion = existingVersions.length + 1;
     
+    // Calculate file hashes for change tracking
+    const allFiles = [
+      strategy.schedulerFile,
+      ...strategy.algorithmFiles,
+      ...strategy.scoringFiles,
+      ...strategy.policyFiles,
+      ...(strategy.customFiles || [])
+    ];
+    
+    const fileHashes: Record<string, string> = {};
+    allFiles.forEach(name => {
+      const file = files.find(f => f.name === name);
+      if (file) fileHashes[name] = hashContent(file.content);
+    });
+    
+    // Detect changed files from previous version
+    const lastVersion = existingVersions[0];
+    const changedFiles = lastVersion 
+      ? Object.keys(fileHashes).filter(name => fileHashes[name] !== lastVersion.fileHashes?.[name])
+      : allFiles;
+    
     const newVersion: StrategyVersion = {
       id: `ver_${Date.now()}`,
       strategyId: strategy.id,
@@ -731,15 +876,25 @@ export const StrategyTabV7 = ({ onRunStrategy, isExecuting = false, onNavigateTo
       snapshot: { ...strategy },
       timestamp: Date.now(),
       message: versionMessage,
+      fileHashes,
+      changedFiles,
     };
     
     setStrategyVersions(prev => [...prev, newVersion]);
     setStrategies(prev => prev.map(s => 
       s.id === strategy.id ? { ...s, version: nextVersion } : s
     ));
+    
+    // Clear unsaved changes indicator
+    setUnsavedChanges(prev => {
+      const updated = { ...prev };
+      delete updated[strategy.id];
+      return updated;
+    });
+    
     setVersionMessage('');
     setShowVersionDialog(false);
-    toast.success(`Version ${nextVersion} saved`);
+    toast.success(`Version ${nextVersion} saved (${changedFiles.length} files tracked)`);
   };
 
   const handleRestoreVersion = (version: StrategyVersion) => {
@@ -761,25 +916,52 @@ export const StrategyTabV7 = ({ onRunStrategy, isExecuting = false, onNavigateTo
 
   // --- BREAKPOINT MANAGEMENT ---
   const handleAddBreakpoint = () => {
-    if (!newBreakpointOp.trim() || !selectedStrategy) {
+    if (!selectedStrategy) {
+      toast.error('No strategy selected');
+      return;
+    }
+    
+    // Validate based on type
+    if (newBreakpointType === 'operation' && !newBreakpointOp.trim()) {
       toast.error('Select an operation for the breakpoint');
+      return;
+    }
+    if (newBreakpointType === 'line' && (!newBreakpointFileName || !newBreakpointLineNumber)) {
+      toast.error('Select a file and line number');
+      return;
+    }
+    if (newBreakpointType === 'module' && newBreakpointModules.length === 0) {
+      toast.error('Select at least one module');
       return;
     }
     
     const newBreakpoint: Breakpoint = {
       id: `bp_${Date.now()}`,
       strategyId: selectedStrategy.id,
-      operation: newBreakpointOp,
-      stepIndex: newBreakpointStep,
+      type: newBreakpointType,
+      operation: newBreakpointType === 'operation' ? newBreakpointOp : undefined,
+      avoidOperations: newBreakpointAvoidOps.length > 0 ? newBreakpointAvoidOps : undefined,
+      fileName: newBreakpointType === 'line' ? newBreakpointFileName : undefined,
+      lineNumber: newBreakpointType === 'line' ? newBreakpointLineNumber : undefined,
       condition: newBreakpointCondition || undefined,
+      conditionType: newBreakpointCondition ? 'custom' : undefined,
+      moduleNames: newBreakpointType === 'module' ? newBreakpointModules : undefined,
       enabled: true,
       hitCount: 0,
+      action: newBreakpointAction,
     };
     
     setBreakpoints(prev => [...prev, newBreakpoint]);
+    
+    // Reset form
     setNewBreakpointOp('');
     setNewBreakpointCondition('');
-    setNewBreakpointStep(undefined);
+    setNewBreakpointFileName('');
+    setNewBreakpointLineNumber(undefined);
+    setNewBreakpointModules([]);
+    setNewBreakpointAvoidOps([]);
+    setNewBreakpointAction('break');
+    setNewBreakpointType('operation');
     setShowBreakpointDialog(false);
     toast.success('Breakpoint added');
   };
@@ -954,12 +1136,53 @@ export const StrategyTabV7 = ({ onRunStrategy, isExecuting = false, onNavigateTo
     </Card>
   );
 
+  // Local validation function for strategies (replaces pythonModuleSystem.validateStrategy)
+  const validateStrategyLocal = useCallback((strategy: EnhancedStrategy): { valid: boolean; errors: string[] } => {
+    const errors: string[] = [];
+    
+    // Check scheduler exists
+    if (!files.find(f => f.name === strategy.schedulerFile)) {
+      errors.push(`Scheduler "${strategy.schedulerFile}" not found`);
+    }
+    
+    // Check algorithms
+    strategy.algorithmFiles.forEach(name => {
+      if (!files.find(f => f.name === name)) {
+        errors.push(`Algorithm "${name}" not found`);
+      }
+    });
+    
+    // Check scoring
+    strategy.scoringFiles.forEach(name => {
+      if (!files.find(f => f.name === name)) {
+        errors.push(`Scoring "${name}" not found`);
+      }
+    });
+    
+    // Check policies
+    strategy.policyFiles.forEach(name => {
+      if (!files.find(f => f.name === name)) {
+        errors.push(`Policy "${name}" not found`);
+      }
+    });
+    
+    // Check custom files
+    (strategy.customFiles || []).forEach(name => {
+      if (!files.find(f => f.name === name)) {
+        errors.push(`Custom file "${name}" not found`);
+      }
+    });
+    
+    return { valid: errors.length === 0, errors };
+  }, [files]);
+
   // Strategy Card Component
   const StrategyCard = ({ strategy }: { strategy: EnhancedStrategy }) => {
-    const validation = pythonModuleSystem.validateStrategy(strategy.id);
+    const validation = validateStrategyLocal(strategy);
     const isExpanded = expandedStrategy === strategy.id;
     const totalFiles = 1 + strategy.algorithmFiles.length + strategy.scoringFiles.length + 
                       strategy.policyFiles.length + (strategy.customFiles?.length || 0);
+    const hasUnsaved = unsavedChanges[strategy.id]?.length > 0;
     
     return (
       <Card className={`border transition-colors ${
@@ -988,6 +1211,11 @@ export const StrategyTabV7 = ({ onRunStrategy, isExecuting = false, onNavigateTo
                   )}
                 </Button>
                 <h3 className="font-medium text-sm">{strategy.name}</h3>
+                {hasUnsaved && (
+                  <Badge className="text-[9px] h-4 bg-amber-500/20 text-amber-400 border-amber-500/30">
+                    Unsaved
+                  </Badge>
+                )}
                 {!validation.valid && (
                   <AlertCircle className="w-3 h-3 text-destructive" />
                 )}
@@ -1526,7 +1754,7 @@ export const StrategyTabV7 = ({ onRunStrategy, isExecuting = false, onNavigateTo
                     </CardHeader>
                     <CardContent className="p-3">
                       {(() => {
-                        const eta = estimateETA(selectedStrategy, selectedDataFileSize, enableParallel);
+                        const eta = estimateETA(selectedStrategy, selectedDataFileSize, enableParallel, executionHistory);
                         return (
                           <>
                             <div className="text-center mb-3">
@@ -2071,12 +2299,32 @@ export const StrategyTabV7 = ({ onRunStrategy, isExecuting = false, onNavigateTo
                               className="scale-75"
                             />
                             <div className="flex-1 min-w-0">
-                              <p className="text-xs font-mono truncate">{bp.operation}</p>
+                              <div className="flex items-center gap-1 mb-1">
+                                <Badge variant="outline" className="text-[9px] h-4 capitalize">
+                                  {bp.type}
+                                </Badge>
+                                <Badge className={`text-[9px] h-4 ${
+                                  bp.action === 'break' ? 'bg-red-500/20 text-red-400 border-red-500/30' :
+                                  bp.action === 'log' ? 'bg-blue-500/20 text-blue-400 border-blue-500/30' :
+                                  'bg-amber-500/20 text-amber-400 border-amber-500/30'
+                                }`}>
+                                  {bp.action}
+                                </Badge>
+                              </div>
+                              {bp.type === 'operation' && bp.operation && (
+                                <p className="text-xs font-mono truncate">{bp.operation}</p>
+                              )}
+                              {bp.type === 'line' && bp.fileName && (
+                                <p className="text-xs truncate">{bp.fileName}:{bp.lineNumber}</p>
+                              )}
+                              {bp.type === 'module' && bp.moduleNames && (
+                                <p className="text-xs truncate">{bp.moduleNames.length} module(s)</p>
+                              )}
                               {bp.condition && (
                                 <p className="text-[10px] text-muted-foreground">if: {bp.condition}</p>
                               )}
-                              {bp.stepIndex !== undefined && (
-                                <p className="text-[10px] text-muted-foreground">Step: {bp.stepIndex}</p>
+                              {bp.avoidOperations && bp.avoidOperations.length > 0 && (
+                                <p className="text-[10px] text-muted-foreground">avoid: {bp.avoidOperations.join(', ')}</p>
                               )}
                             </div>
                             <Button
@@ -2294,52 +2542,151 @@ export const StrategyTabV7 = ({ onRunStrategy, isExecuting = false, onNavigateTo
       
       {/* Breakpoint Dialog */}
       <Dialog open={showBreakpointDialog} onOpenChange={setShowBreakpointDialog}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="text-sm flex items-center gap-2">
               <AlertCircle className="w-4 h-4 text-red-400" />
               Add Breakpoint
             </DialogTitle>
             <DialogDescription className="text-xs">
-              Pause execution when this operation is reached
+              Configure when to pause or log during execution
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
+            {/* Breakpoint Type */}
             <div className="space-y-2">
-              <Label className="text-xs">Operation Name</Label>
-              <Input
-                value={newBreakpointOp}
-                onChange={(e) => setNewBreakpointOp(e.target.value)}
-                placeholder="e.g. XOR, ROTATE_LEFT, SWAP"
-                className="h-8 font-mono"
-              />
+              <Label className="text-xs">Breakpoint Type</Label>
+              <Select value={newBreakpointType} onValueChange={(v: any) => setNewBreakpointType(v)}>
+                <SelectTrigger className="h-8">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="operation">Operation</SelectItem>
+                  <SelectItem value="line">File/Line</SelectItem>
+                  <SelectItem value="condition">Condition</SelectItem>
+                  <SelectItem value="module">Module</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-            <div className="space-y-2">
-              <Label className="text-xs">Step Index (Optional)</Label>
-              <Input
-                type="number"
-                value={newBreakpointStep || ''}
-                onChange={(e) => setNewBreakpointStep(e.target.value ? parseInt(e.target.value) : undefined)}
-                placeholder="Leave empty for all occurrences"
-                className="h-8"
-              />
-            </div>
+
+            {/* Operation-based fields */}
+            {newBreakpointType === 'operation' && (
+              <div className="space-y-2">
+                <Label className="text-xs">Operation Name</Label>
+                <Input
+                  value={newBreakpointOp}
+                  onChange={(e) => setNewBreakpointOp(e.target.value)}
+                  placeholder="e.g. XOR, NOT, ROTATE"
+                  className="h-8 font-mono"
+                />
+              </div>
+            )}
+
+            {/* Line-based fields */}
+            {newBreakpointType === 'line' && (
+              <>
+                <div className="space-y-2">
+                  <Label className="text-xs">File</Label>
+                  <Select value={newBreakpointFileName} onValueChange={setNewBreakpointFileName}>
+                    <SelectTrigger className="h-8">
+                      <SelectValue placeholder="Select a file..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {files.map(f => (
+                        <SelectItem key={f.id} value={f.name}>{f.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs">Line Number</Label>
+                  <Input
+                    type="number"
+                    value={newBreakpointLineNumber || ''}
+                    onChange={(e) => setNewBreakpointLineNumber(e.target.value ? parseInt(e.target.value) : undefined)}
+                    placeholder="Enter line number..."
+                    className="h-8"
+                  />
+                </div>
+              </>
+            )}
+
+            {/* Module-based fields */}
+            {newBreakpointType === 'module' && (
+              <div className="space-y-2">
+                <Label className="text-xs">Modules to Break On</Label>
+                <div className="flex flex-wrap gap-1 p-2 border rounded max-h-24 overflow-y-auto">
+                  {files.map(f => (
+                    <Badge
+                      key={f.id}
+                      className={`cursor-pointer ${
+                        newBreakpointModules.includes(f.name) 
+                          ? 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30' 
+                          : 'bg-muted/50 text-muted-foreground opacity-50'
+                      }`}
+                      onClick={() => setNewBreakpointModules(prev => 
+                        prev.includes(f.name) ? prev.filter(n => n !== f.name) : [...prev, f.name]
+                      )}
+                    >
+                      {f.name}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Condition (always available) */}
             <div className="space-y-2">
               <Label className="text-xs">Condition (Optional)</Label>
               <Input
                 value={newBreakpointCondition}
                 onChange={(e) => setNewBreakpointCondition(e.target.value)}
-                placeholder="e.g. entropy < 0.5"
+                placeholder="e.g. entropy < 0.5 or budget < 100"
                 className="h-8 font-mono text-xs"
               />
               <p className="text-[10px] text-muted-foreground">
                 Break only when this condition is true
               </p>
             </div>
+
+            {/* Operations to Avoid (for operation type) */}
+            {newBreakpointType === 'operation' && (
+              <div className="space-y-2">
+                <Label className="text-xs">Operations to Avoid (Optional)</Label>
+                <Input
+                  value={newBreakpointAvoidOps.join(', ')}
+                  onChange={(e) => setNewBreakpointAvoidOps(e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
+                  placeholder="e.g. BUFFER, IDENTITY (comma-separated)"
+                  className="h-8 font-mono text-xs"
+                />
+              </div>
+            )}
+
+            {/* Action */}
+            <div className="space-y-2">
+              <Label className="text-xs">Action</Label>
+              <Select value={newBreakpointAction} onValueChange={(v: any) => setNewBreakpointAction(v)}>
+                <SelectTrigger className="h-8">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="break">Break (Pause Execution)</SelectItem>
+                  <SelectItem value="log">Log (Continue)</SelectItem>
+                  <SelectItem value="skip">Skip (Don't Execute)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowBreakpointDialog(false)}>Cancel</Button>
-            <Button onClick={handleAddBreakpoint} disabled={!newBreakpointOp.trim()}>
+            <Button 
+              onClick={handleAddBreakpoint} 
+              disabled={
+                (newBreakpointType === 'operation' && !newBreakpointOp.trim()) ||
+                (newBreakpointType === 'line' && (!newBreakpointFileName || !newBreakpointLineNumber)) ||
+                (newBreakpointType === 'module' && newBreakpointModules.length === 0)
+              }
+            >
               <Plus className="w-4 h-4 mr-2" />
               Add Breakpoint
             </Button>
