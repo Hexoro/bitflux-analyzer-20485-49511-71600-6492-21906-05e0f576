@@ -84,6 +84,8 @@ import {
   Tag,
   Star,
   StarOff,
+  Pin,
+  PinOff,
   Copy,
   MoreVertical,
   Edit,
@@ -186,6 +188,7 @@ interface Breakpoint {
 interface EnhancedStrategy extends Omit<StrategyConfig, 'created'> {
   tags: string[];
   starred: boolean;
+  pinned?: boolean;
   customFiles: string[];
   description?: string;
   createdAt: number;
@@ -374,7 +377,7 @@ export const StrategyTabV7 = ({ onRunStrategy, isExecuting = false, onNavigateTo
   
   // View tab state
   const [strategySearch, setStrategySearch] = useState('');
-  const [viewFilter, setViewFilter] = useState<'all' | 'starred' | 'recent'>('all');
+  const [viewFilter, setViewFilter] = useState<'all' | 'starred' | 'pinned' | 'recent'>('all');
   const [tagFilter, setTagFilter] = useState<string | null>(null);
   const [expandedStrategy, setExpandedStrategy] = useState<string | null>(null);
   
@@ -661,6 +664,7 @@ export const StrategyTabV7 = ({ onRunStrategy, isExecuting = false, onNavigateTo
                            s.description?.toLowerCase().includes(strategySearch.toLowerCase());
       const matchesView = viewFilter === 'all' || 
                          (viewFilter === 'starred' && s.starred) ||
+                         (viewFilter === 'pinned' && !!s.pinned) ||
                          (viewFilter === 'recent' && s.lastRun && Date.now() - s.lastRun < 7 * 24 * 60 * 60 * 1000);
       const matchesTag = !tagFilter || s.tags.includes(tagFilter);
       return matchesSearch && matchesView && matchesTag;
@@ -726,6 +730,7 @@ export const StrategyTabV7 = ({ onRunStrategy, isExecuting = false, onNavigateTo
       customFiles: selectedCustomFiles,
       tags: selectedTags,
       starred: false,
+      pinned: false,
       createdAt: Date.now(),
       runCount: 0,
       created: new Date(),
@@ -775,6 +780,10 @@ export const StrategyTabV7 = ({ onRunStrategy, isExecuting = false, onNavigateTo
     setStrategies(prev => prev.map(s => 
       s.id === id ? { ...s, starred: !s.starred } : s
     ));
+  };
+
+  const handleTogglePin = (id: string) => {
+    setStrategies(prev => prev.map(s => (s.id === id ? { ...s, pinned: !s.pinned } : s)));
   };
 
   const handleRunStrategy = async () => {
@@ -1227,25 +1236,61 @@ export const StrategyTabV7 = ({ onRunStrategy, isExecuting = false, onNavigateTo
               )}
             </div>
             
-            <DropdownMenu>
+            <DropdownMenu modal={false}>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-6 w-6">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
+                  onClick={(e) => e.stopPropagation()}
+                >
                   <MoreVertical className="w-3 h-3" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => setEditingStrategy(strategy)}>
+                <DropdownMenuItem
+                  onSelect={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setEditingStrategy(strategy);
+                  }}
+                >
                   <Edit className="w-3 h-3 mr-2" />
                   Edit
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleDuplicateStrategy(strategy)}>
+                <DropdownMenuItem
+                  onSelect={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleDuplicateStrategy(strategy);
+                  }}
+                >
                   <Copy className="w-3 h-3 mr-2" />
                   Duplicate
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleTogglePin(strategy.id);
+                  }}
+                >
+                  {strategy.pinned ? (
+                    <PinOff className="w-3 h-3 mr-2" />
+                  ) : (
+                    <Pin className="w-3 h-3 mr-2" />
+                  )}
+                  {strategy.pinned ? 'Unpin' : 'Pin'}
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem 
                   className="text-destructive"
-                  onClick={() => handleDeleteStrategy(strategy.id)}
+                  onSelect={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleDeleteStrategy(strategy.id);
+                  }}
                 >
                   <Trash2 className="w-3 h-3 mr-2" />
                   Delete
@@ -1295,9 +1340,18 @@ export const StrategyTabV7 = ({ onRunStrategy, isExecuting = false, onNavigateTo
           </div>
           
           {/* Expanded view */}
-          <Collapsible open={isExpanded} onOpenChange={() => setExpandedStrategy(isExpanded ? null : strategy.id)}>
+          <Collapsible
+            open={isExpanded}
+            onOpenChange={(open) => setExpandedStrategy(open ? strategy.id : null)}
+          >
             <CollapsibleTrigger asChild>
-              <Button variant="ghost" size="sm" className="w-full mt-2 h-6 text-xs">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="w-full mt-2 h-6 text-xs"
+                onClick={(e) => e.stopPropagation()}
+              >
                 {isExpanded ? <ChevronUp className="w-3 h-3 mr-1" /> : <ChevronDown className="w-3 h-3 mr-1" />}
                 {isExpanded ? 'Hide' : 'Show'} details
               </Button>
@@ -1436,6 +1490,7 @@ export const StrategyTabV7 = ({ onRunStrategy, isExecuting = false, onNavigateTo
                   <SelectContent>
                     <SelectItem value="all">All</SelectItem>
                     <SelectItem value="starred">Starred</SelectItem>
+                    <SelectItem value="pinned">Pinned</SelectItem>
                     <SelectItem value="recent">Recent</SelectItem>
                   </SelectContent>
                 </Select>
