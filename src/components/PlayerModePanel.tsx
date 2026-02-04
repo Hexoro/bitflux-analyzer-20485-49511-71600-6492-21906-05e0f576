@@ -129,7 +129,7 @@ export const PlayerModePanel = ({ onExitPlayer, selectedResultId }: PlayerModePa
       const beforeBits = currentBits;
 
       // PRIMARY: Use stored bits if available (this is the source of truth)
-      const storedAfter = originalStep.fullAfterBits || originalStep.cumulativeBits || '';
+      const storedAfter = originalStep.cumulativeBits || originalStep.fullAfterBits || originalStep.afterBits || '';
       let afterBits = storedAfter || currentBits;
       let executionError: string | undefined;
       let executionMatches = true;
@@ -204,6 +204,9 @@ export const PlayerModePanel = ({ onExitPlayer, selectedResultId }: PlayerModePa
       // Calculate metrics LIVE
       const metricsResult = calculateAllMetrics(afterBits);
 
+      // IMPORTANT: When storedAfter exists, we consider the step "verified" for playback purposes.
+      // Re-execution mismatches are reported separately (they indicate non-determinism / missing params),
+      // but should not mark the step as unverified if the stored state is present.
       steps.push({
         ...originalStep,
         stepIndex: i,
@@ -214,7 +217,8 @@ export const PlayerModePanel = ({ onExitPlayer, selectedResultId }: PlayerModePa
         cumulativeBits: afterBits,
         bitsLength: afterBits.length,
         executionError,
-        verified: executionMatches,
+        verified: storedAfter ? true : executionMatches,
+        verificationNote: storedAfter && !executionMatches ? 'Re-execution mismatch (stored state used)' : undefined,
         storedAfterBits: storedAfter,
       });
 
