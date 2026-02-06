@@ -285,34 +285,35 @@ const estimateETA = (
   }
   
   // Fallback to heuristic based on file complexity
-  const fileCount = 1 + strategy.algorithmFiles.length + strategy.scoringFiles.length + 
+  const fileCount = 1 + strategy.algorithmFiles.length + strategy.scoringFiles.length +
                    strategy.policyFiles.length + (strategy.customFiles?.length || 0);
-  
-  // More realistic: log-scaled size multiplier
-  const sizeMultiplier = dataFileSize > 0 ? Math.log10(dataFileSize + 1) * 0.3 : 0.1;
-  
-  // Base: ~50ms per file, plus data size overhead
-  const baseTimeMs = fileCount * 50 * (1 + sizeMultiplier);
-  let totalMs = baseTimeMs;
-  
-  // Parallel reduces time
+
+  // Bits length (not bytes). Use log2 so file-size growth feels realistic.
+  const sizeLog2 = dataFileSize > 0 ? Math.log2(dataFileSize) : 0;
+  const sizeSeconds = Math.max(0, sizeLog2 - 10) * 0.4; // starts scaling after ~1K bits
+
+  // Base time per file (scheduler+modules) + size overhead.
+  let totalSeconds = (fileCount * 0.35) + sizeSeconds;
+
+  // Parallel reduces time a bit, but not below a minimum.
   if (parallelEnabled && strategy.algorithmFiles.length > 1) {
-    totalMs *= 0.6;
+    totalSeconds *= 0.7;
   }
-  
-  const totalSeconds = totalMs / 1000;
-  
+
+  // Avoid "0s" ETAs (they’re useless) and keep UI stable.
+  totalSeconds = Math.max(2, totalSeconds);
+
   const breakdown = [
-    { phase: 'Scheduler', seconds: 0.05 * (1 + sizeMultiplier) },
-    { phase: 'Algorithms', seconds: strategy.algorithmFiles.length * 0.05 * (parallelEnabled ? 0.5 : 1) },
-    { phase: 'Scoring', seconds: strategy.scoringFiles.length * 0.025 },
-    { phase: 'Policies', seconds: strategy.policyFiles.length * 0.015 },
+    { phase: 'Scheduler', seconds: Math.max(0.2, 0.25 + sizeSeconds * 0.1) },
+    { phase: 'Algorithms', seconds: Math.max(0.3, strategy.algorithmFiles.length * 0.35 * (parallelEnabled ? 0.7 : 1)) },
+    { phase: 'Scoring', seconds: Math.max(0.1, strategy.scoringFiles.length * 0.15) },
+    { phase: 'Policies', seconds: Math.max(0.05, strategy.policyFiles.length * 0.1) },
   ];
-  
+
   if (strategy.customFiles?.length) {
-    breakdown.push({ phase: 'Custom', seconds: strategy.customFiles.length * 0.05 });
+    breakdown.push({ phase: 'Custom', seconds: Math.max(0.1, strategy.customFiles.length * 0.2) });
   }
-  
+
   return {
     minutes: Math.floor(totalSeconds / 60),
     seconds: Math.round(totalSeconds % 60),
@@ -1208,6 +1209,7 @@ export const StrategyTabV7 = ({ onRunStrategy, isExecuting = false, onNavigateTo
                   variant="ghost"
                   size="icon"
                   className="h-5 w-5"
+                  onPointerDown={(e) => e.stopPropagation()}
                   onClick={(e) => {
                     e.stopPropagation();
                     handleToggleStar(strategy.id);
@@ -1243,6 +1245,7 @@ export const StrategyTabV7 = ({ onRunStrategy, isExecuting = false, onNavigateTo
                   variant="ghost"
                   size="icon"
                   className="h-6 w-6"
+                  onPointerDown={(e) => e.stopPropagation()}
                   onClick={(e) => e.stopPropagation()}
                 >
                   <MoreVertical className="w-3 h-3" />
@@ -1350,9 +1353,9 @@ export const StrategyTabV7 = ({ onRunStrategy, isExecuting = false, onNavigateTo
                 variant="ghost"
                 size="sm"
                 className="w-full mt-2 h-6 text-xs"
+                onPointerDown={(e) => e.stopPropagation()}
                 onClick={(e) => {
                   e.stopPropagation();
-                  // Manually toggle since stopPropagation prevents Radix from handling it
                   setExpandedStrategy(isExpanded ? null : strategy.id);
                 }}
               >
