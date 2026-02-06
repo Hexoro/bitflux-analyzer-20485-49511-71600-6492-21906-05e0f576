@@ -130,6 +130,85 @@ export const StrategyTimelineV3 = ({ isExecuting = false }: StrategyTimelineV3Pr
   });
   const [showCodeContext, setShowCodeContext] = useState(false);
 
+
+  const persistRuns = (allRuns: ExecutionRun[]) => {
+    try {
+      // Keep last MAX_RUNS (but keep all pinned)
+      const pinned = allRuns.filter(r => r.pinned && !r.deletedAt);
+      const unpinned = allRuns
+        .filter(r => !r.pinned && !r.deletedAt)
+        .slice(0, Math.max(0, MAX_RUNS - pinned.length));
+      const toSave = [...pinned, ...unpinned];
+      localStorage.setItem(TIMELINE_STORAGE_KEY, JSON.stringify(toSave));
+      return toSave;
+    } catch (e) {
+      console.error('Failed to persist timeline:', e);
+      return allRuns.filter(r => !r.deletedAt);
+    }
+  };
+
+  const convertResultToRun = (result: ExecutionPipelineResult): ExecutionRun => {
+    const runId = result.resultId
+      ? `run-${result.resultId}`
+      : `run-${result.startTime?.getTime?.() ?? Date.now()}`;
+
+    const convertedSteps: ExecutionStep[] = (result.steps || []).map((s, idx) => {
+      const reasoning: ReasoningEntry = {
+        condition: `Step ${idx} trigger condition`,
+        conditionValue: s.metrics || {},
+        result: true,
+        explanation: `${s.stepType} step executed ${s.fileName} which applied ${s.transformations?.length || 0} transformations`,
+        branchTaken: 'execute',
+        alternatives: s.transformations?.length === 0 ? ['Could have applied different operations'] : [],
+      };
+
+      return {
+        id: `${runId}-step-${idx}`,
+        operation: s.fileName || s.stepType || 'Unknown',
+        status: 'completed',
+        duration: s.duration || 0,
+        cost: s.transformations?.reduce((sum, t) => sum + (t.cost || 0), 0) || 0,
+        bitRange: s.transformations?.[0]?.bitRanges?.[0]
+          ? { start: s.transformations[0].bitRanges[0].start, end: s.transformations[0].bitRanges[0].end }
+          : undefined,
+        params: s.transformations?.[0]?.params || {},
+        afterBits: s.bits?.slice(0, 100),
+        metricsSnapshot: s.metrics || {},
+        codeContext: {
+          fileName: s.fileName,
+          lineNumber: 1,
+          lineContent: `execute(bits, budget)`,
+          contextBefore: ['# Strategy step'],
+          contextAfter: ['# End step'],
+        },
+        reasoning,
+      };
+    });
+
+    return {
+      id: runId,
+      strategyName: result.strategyName || 'Unknown Strategy',
+      timestamp: result.endTime ? new Date(result.endTime) : new Date(),
+      steps: convertedSteps,
+      totalDuration: result.totalDuration || 0,
+      success: !!result.success,
+      score: result.totalScore || 0,
+      initialBits: result.initialBits?.slice(0, 200),
+      finalBits: result.finalBits?.slice(0, 200),
+      pinned: false,
+    };
+  };
+
+  const upsertRun = (run: ExecutionRun) => {
+    setRuns(prev => {
+      const deduped = prev.filter(r => r.id !== run.id);
+      const next = [run, ...deduped];
+      return persistRuns(next);
+    });
+    setSelectedRunId(run.id);
+    setCurrentStepIndex(0);
+  };
+
   // Load runs from storage (excluding soft-deleted)
   useEffect(() => {
     try {
@@ -147,80 +226,35 @@ export const StrategyTimelineV3 = ({ isExecuting = false }: StrategyTimelineV3Pr
     } catch (e) {
       console.error('Failed to load timeline:', e);
     }
+
+    // If we navigated to Timeline after completion, the component may have missed
+    // the completion event. Recover from the latest engine state.
+    const current = strategyExecutionEngine.getCurrentRun();
+    if (current?.steps && current.steps.length > 0) {
+      const run = convertResultToRun(current);
+      setRuns(prev => {
+        const exists = prev.some(r => r.id === run.id);
+        if (exists) return prev;
+        const next = [run, ...prev];
+        return persistRuns(next);
+      });
+      setSelectedRunId(prev => prev || run.id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Save runs to storage
-  const saveRuns = (newRuns: ExecutionRun[]) => {
-    setRuns(newRuns.filter(r => !r.deletedAt));
-    // Keep last MAX_RUNS (but keep all pinned)
-    const pinned = newRuns.filter(r => r.pinned);
-    const unpinned = newRuns.filter(r => !r.pinned).slice(0, MAX_RUNS - pinned.length);
-    const toSave = [...pinned, ...unpinned];
-    localStorage.setItem(TIMELINE_STORAGE_KEY, JSON.stringify(toSave));
-  };
-
-  // Subscribe to execution engine
+  // Subscribe to execution engine (functional update to avoid stale closures)
   useEffect(() => {
     const unsubscribe = strategyExecutionEngine.subscribe((result, status) => {
-      if (result?.steps && status === 'completed') {
-        // Generate reasoning for each step
-        const convertedSteps: ExecutionStep[] = result.steps.map((s, idx) => {
-          // Simulate reasoning based on step data
-          const reasoning: ReasoningEntry = {
-            condition: `Step ${idx} trigger condition`,
-            conditionValue: s.metrics || {},
-            result: true,
-            explanation: `${s.stepType} step executed ${s.fileName} which applied ${s.transformations?.length || 0} transformations`,
-            branchTaken: 'execute',
-            alternatives: s.transformations?.length === 0 ? ['Could have applied different operations'] : [],
-          };
-
-          return {
-            id: `step-${idx}-${Date.now()}`,
-            operation: s.fileName || s.stepType || 'Unknown',
-            status: 'completed' as const,
-            duration: s.duration || 0,
-            cost: s.transformations?.reduce((sum, t) => sum + (t.cost || 0), 0) || 0,
-            bitRange: s.transformations?.[0]?.bitRanges?.[0] 
-              ? { start: s.transformations[0].bitRanges[0].start, end: s.transformations[0].bitRanges[0].end }
-              : undefined,
-            params: s.transformations?.[0]?.params || {},
-            beforeBits: (s as any).initialBits?.slice(0, 100),
-            afterBits: s.bits?.slice(0, 100),
-            metricsSnapshot: s.metrics || {},
-            codeContext: {
-              fileName: s.fileName,
-              lineNumber: 1,
-              lineContent: `execute(bits, budget)`,
-              contextBefore: ['# Strategy step'],
-              contextAfter: ['# End step'],
-            },
-            reasoning,
-          };
-        });
-        
-        const newRun: ExecutionRun = {
-          id: `run-${Date.now()}`,
-          strategyName: result.strategyName || 'Unknown Strategy',
-          timestamp: new Date(),
-          steps: convertedSteps,
-          totalDuration: result.totalDuration || 0,
-          success: result.success,
-          score: result.totalScore || 0,
-          initialBits: result.initialBits?.slice(0, 200),
-          finalBits: result.finalBits?.slice(0, 200),
-          pinned: false,
-        };
-        
-        const newRuns = [newRun, ...runs];
-        saveRuns(newRuns);
-        setSelectedRunId(newRun.id);
-        setCurrentStepIndex(0);
-      }
+      if (!result) return;
+      if (status !== 'completed' && status !== 'failed') return;
+      if (!result.steps || result.steps.length === 0) return;
+      upsertRun(convertResultToRun(result));
     });
 
     return () => unsubscribe();
-  }, [runs]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const selectedRun = runs.find(r => r.id === selectedRunId);
   const steps = selectedRun?.steps || [];

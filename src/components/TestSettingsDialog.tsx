@@ -211,6 +211,7 @@ export function TestSettingsDialog({
   const handleExportFailures = useCallback(() => {
     const exportData = {
       timestamp: new Date().toISOString(),
+      type: 'failures',
       summary: {
         totalTests,
         totalPassed,
@@ -224,7 +225,7 @@ export function TestSettingsDialog({
       },
       failures: allFailures,
     };
-    
+
     const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -233,6 +234,46 @@ export function TestSettingsDialog({
     a.click();
     URL.revokeObjectURL(url);
   }, [allFailures, totalTests, totalPassed, totalFailed, smokePassed, smokeFailed, corePassed, coreFailed, extendedPassed, extendedFailed]);
+
+  const handleExportReport = useCallback(() => {
+    const exportData = {
+      timestamp: new Date().toISOString(),
+      type: 'report',
+      summary: {
+        totalTests,
+        totalPassed,
+        totalFailed,
+        smoke: smokeResults,
+        core: coreResults,
+        extended: {
+          total: extendedTotal,
+          passed: extendedPassed,
+          failed: extendedFailed,
+          durationMs: extendedDuration,
+        },
+      },
+      failures: allFailures,
+    };
+
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `test-report-${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [
+    totalTests,
+    totalPassed,
+    totalFailed,
+    smokeResults,
+    coreResults,
+    extendedTotal,
+    extendedPassed,
+    extendedFailed,
+    extendedDuration,
+    allFailures,
+  ]);
 
   const handleSettingChange = <K extends keyof TestSchedulerSettings>(
     key: K,
@@ -446,6 +487,15 @@ export function TestSettingsDialog({
                   )}
                 </div>
                 <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleExportReport}
+                    disabled={totalTests === 0}
+                  >
+                    <Download className="w-4 h-4 mr-2" />
+                    Export Report
+                  </Button>
                   {isAnyRunning ? (
                     <Button variant="destructive" size="sm" onClick={onCancel}>
                       <Pause className="w-4 h-4 mr-2" />

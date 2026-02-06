@@ -72,8 +72,8 @@ self.onmessage = async (ev: MessageEvent<RunMessage | CancelMessage>) => {
       const avgMs = current > 0 ? elapsed / current : 50;
       const remaining = total - current;
       const etaMs = remaining * avgMs;
-      const etaSec = Math.ceil(etaMs / 1000);
-      const eta = etaSec >= 60 
+      const etaSec = Math.max(1, Math.ceil(etaMs / 1000));
+      const eta = etaSec >= 60
         ? `${Math.floor(etaSec / 60)}m ${etaSec % 60}s`
         : `${etaSec}s`;
 

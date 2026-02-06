@@ -114,8 +114,8 @@ self.onmessage = async (ev: MessageEvent<RunMessage | CancelMessage | ResumeMess
       const avgMsPerTest = effectiveCurrent > 0 ? elapsed / effectiveCurrent : 10;
       const remaining = effectiveTotal - effectiveCurrent;
       const etaMs = remaining * avgMsPerTest;
-      const etaSec = Math.ceil(etaMs / 1000);
-      const eta = etaSec >= 60 
+      const etaSec = Math.max(1, Math.ceil(etaMs / 1000));
+      const eta = etaSec >= 60
         ? `${Math.floor(etaSec / 60)}m ${etaSec % 60}s`
         : `${etaSec}s`;
       
