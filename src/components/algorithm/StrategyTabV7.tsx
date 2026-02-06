@@ -1350,7 +1350,11 @@ export const StrategyTabV7 = ({ onRunStrategy, isExecuting = false, onNavigateTo
                 variant="ghost"
                 size="sm"
                 className="w-full mt-2 h-6 text-xs"
-                onClick={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  // Manually toggle since stopPropagation prevents Radix from handling it
+                  setExpandedStrategy(isExpanded ? null : strategy.id);
+                }}
               >
                 {isExpanded ? <ChevronUp className="w-3 h-3 mr-1" /> : <ChevronDown className="w-3 h-3 mr-1" />}
                 {isExpanded ? 'Hide' : 'Show'} details

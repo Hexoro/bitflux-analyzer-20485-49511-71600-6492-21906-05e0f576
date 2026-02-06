@@ -59,23 +59,33 @@ function generateDeterministicMask(length: number, seed: string): string {
 
 // Operations that require masks - these need default masks stored for replay
 const OPS_REQUIRING_MASK = new Set(['AND', 'OR', 'XOR', 'NAND', 'NOR', 'XNOR', 'IMPLY', 'NIMPLY', 'CONVERSE', 'MUX', 'MAJ', 'PDEP', 'PEXT', 'BLEND', 'FEISTEL']);
-const OPS_THAT_AUTOGENERATE_MASK = new Set<string>(); // No longer auto-generating random masks
+
+/**
+ * Generate a non-trivial mask that actually changes bits.
+ * Uses alternating pattern so operations produce visible results.
+ * For testing/verification purposes when no mask is provided.
+ */
+function generateNonTrivialMask(length: number): string {
+  // Use alternating 10101010 pattern - always changes ~50% of bits
+  let mask = '';
+  for (let i = 0; i < length; i++) {
+    mask += (i % 2 === 0) ? '1' : '0';
+  }
+  return mask;
+}
 
 // Map operation IDs to their implementations
-// DEFAULT MASKS: Use identity-preserving defaults for replay consistency
-// - AND: default all 1s (no change) - user must provide mask to filter
-// - OR: default all 0s (no change) - user must provide mask to add bits
-// - XOR: default all 0s (no change) - user must provide mask to toggle
-// - NAND/NOR/XNOR: similar identity-preserving defaults
+// DEFAULT MASKS: Use non-trivial defaults that produce visible changes
+// This ensures operations like XOR actually flip bits when testing
 const OPERATION_IMPLEMENTATIONS: Record<string, (bits: string, params: OperationParams) => string> = {
-  // Logic Gates - DEFAULT MASKS ARE IDENTITY-PRESERVING FOR REPLAY CONSISTENCY
+  // Logic Gates - DEFAULT MASKS produce visible bit changes for testing
   NOT: (bits) => LogicGates.NOT(bits),
-  AND: (bits, p) => LogicGates.AND(bits, p.mask || '1'.repeat(bits.length)),  // All 1s = no change (identity)
-  OR: (bits, p) => LogicGates.OR(bits, p.mask || '0'.repeat(bits.length)),    // All 0s = no change (identity)
-  XOR: (bits, p) => LogicGates.XOR(bits, p.mask || '0'.repeat(bits.length)),  // All 0s = no change (identity)
-  NAND: (bits, p) => LogicGates.NAND(bits, p.mask || '0'.repeat(bits.length)), // All 0s with NAND = all 1s (consistent)
-  NOR: (bits, p) => LogicGates.NOR(bits, p.mask || '0'.repeat(bits.length)),   // All 0s with NOR = NOT(bits) (consistent)
-  XNOR: (bits, p) => LogicGates.XNOR(bits, p.mask || '0'.repeat(bits.length)), // All 0s = NOT(bits) (consistent)
+  AND: (bits, p) => LogicGates.AND(bits, p.mask || generateNonTrivialMask(bits.length)),
+  OR: (bits, p) => LogicGates.OR(bits, p.mask || generateNonTrivialMask(bits.length)),
+  XOR: (bits, p) => LogicGates.XOR(bits, p.mask || generateNonTrivialMask(bits.length)),
+  NAND: (bits, p) => LogicGates.NAND(bits, p.mask || generateNonTrivialMask(bits.length)),
+  NOR: (bits, p) => LogicGates.NOR(bits, p.mask || generateNonTrivialMask(bits.length)),
+  XNOR: (bits, p) => LogicGates.XNOR(bits, p.mask || generateNonTrivialMask(bits.length)),
 
   // Extended Logic Gates
   IMPLY: (bits, p) => {
