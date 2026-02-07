@@ -251,7 +251,7 @@ const hashContent = (content: string): string => {
   return Math.abs(hash).toString(16).padStart(8, '0');
 };
 
-// Realistic ETA estimation with history-based calculation
+// Realistic ETA estimation with history-based calculation and file size scaling
 const estimateETA = (
   strategy: EnhancedStrategy, 
   dataFileSize: number, 
@@ -269,55 +269,67 @@ const estimateETA = (
     h.strategyName === strategy.name
   );
   
-  // If we have historical data, use it
-  if (similarRuns.length >= 3) {
+  // If we have historical data, use it with file size scaling
+  if (similarRuns.length >= 2) {
     const recentRuns = similarRuns.slice(0, 10);
     const avgDuration = recentRuns.reduce((sum, r) => sum + r.duration, 0) / recentRuns.length;
-    const adjustedTime = avgDuration * (parallelEnabled ? 0.7 : 1);
-    const totalSeconds = adjustedTime / 1000; // Convert ms to seconds
+    
+    // Scale by file size relative to typical execution
+    const sizeMultiplier = dataFileSize > 0 ? Math.max(1, Math.log2(dataFileSize) / 10) : 1;
+    const adjustedTime = avgDuration * sizeMultiplier * (parallelEnabled ? 0.7 : 1);
+    const totalSeconds = Math.max(2, adjustedTime / 1000);
     
     return {
       minutes: Math.floor(totalSeconds / 60),
       seconds: Math.round(totalSeconds % 60),
-      confidence: 'high',
-      breakdown: [{ phase: 'Based on history', seconds: totalSeconds }]
+      confidence: similarRuns.length >= 5 ? 'high' : 'medium',
+      breakdown: [
+        { phase: `Based on ${recentRuns.length} runs`, seconds: totalSeconds },
+        { phase: `File size factor`, seconds: sizeMultiplier },
+      ]
     };
   }
   
-  // Fallback to heuristic based on file complexity
+  // Fallback to heuristic — Pyodide + module loading is significant overhead
   const fileCount = 1 + strategy.algorithmFiles.length + strategy.scoringFiles.length +
                    strategy.policyFiles.length + (strategy.customFiles?.length || 0);
 
-  // Bits length (not bytes). Use log2 so file-size growth feels realistic.
+  const pyodideOverhead = 3; // Pyodide startup/context creation
+  const perFileTime = 1.5;   // Parse + execute each Python file
+
+  // Size scaling: log2-based, meaningful above 256 bits
   const sizeLog2 = dataFileSize > 0 ? Math.log2(dataFileSize) : 0;
-  const sizeSeconds = Math.max(0, sizeLog2 - 10) * 0.4; // starts scaling after ~1K bits
+  const sizeSeconds = Math.max(0, sizeLog2 - 8) * 0.8;
 
-  // Base time per file (scheduler+modules) + size overhead.
-  let totalSeconds = (fileCount * 0.35) + sizeSeconds;
+  let totalSeconds = pyodideOverhead + (fileCount * perFileTime) + sizeSeconds;
 
-  // Parallel reduces time a bit, but not below a minimum.
   if (parallelEnabled && strategy.algorithmFiles.length > 1) {
-    totalSeconds *= 0.7;
+    const algorithmTime = strategy.algorithmFiles.length * perFileTime;
+    totalSeconds -= algorithmTime * 0.3;
   }
 
-  // Avoid "0s" ETAs (they’re useless) and keep UI stable.
-  totalSeconds = Math.max(2, totalSeconds);
+  totalSeconds = Math.max(3, totalSeconds);
 
   const breakdown = [
-    { phase: 'Scheduler', seconds: Math.max(0.2, 0.25 + sizeSeconds * 0.1) },
-    { phase: 'Algorithms', seconds: Math.max(0.3, strategy.algorithmFiles.length * 0.35 * (parallelEnabled ? 0.7 : 1)) },
-    { phase: 'Scoring', seconds: Math.max(0.1, strategy.scoringFiles.length * 0.15) },
-    { phase: 'Policies', seconds: Math.max(0.05, strategy.policyFiles.length * 0.1) },
+    { phase: 'Pyodide Init', seconds: pyodideOverhead },
+    { phase: 'Scheduler', seconds: Math.max(0.5, perFileTime + sizeSeconds * 0.2) },
+    { phase: 'Algorithms', seconds: Math.max(1, strategy.algorithmFiles.length * perFileTime * (parallelEnabled ? 0.7 : 1)) },
+    { phase: 'Scoring', seconds: Math.max(0.3, strategy.scoringFiles.length * 0.5) },
+    { phase: 'Policies', seconds: Math.max(0.2, strategy.policyFiles.length * 0.3) },
   ];
 
+  if (sizeSeconds > 0) {
+    breakdown.push({ phase: `Data (${dataFileSize} bits)`, seconds: sizeSeconds });
+  }
+
   if (strategy.customFiles?.length) {
-    breakdown.push({ phase: 'Custom', seconds: Math.max(0.1, strategy.customFiles.length * 0.2) });
+    breakdown.push({ phase: 'Custom files', seconds: strategy.customFiles.length * 0.5 });
   }
 
   return {
     minutes: Math.floor(totalSeconds / 60),
     seconds: Math.round(totalSeconds % 60),
-    confidence: similarRuns.length > 0 ? 'medium' : 'low',
+    confidence: 'low',
     breakdown,
   };
 };
@@ -1345,7 +1357,6 @@ export const StrategyTabV7 = ({ onRunStrategy, isExecuting = false, onNavigateTo
           {/* Expanded view */}
           <Collapsible
             open={isExpanded}
-            onOpenChange={(open) => setExpandedStrategy(open ? strategy.id : null)}
           >
             <CollapsibleTrigger asChild>
               <Button
@@ -1356,6 +1367,7 @@ export const StrategyTabV7 = ({ onRunStrategy, isExecuting = false, onNavigateTo
                 onPointerDown={(e) => e.stopPropagation()}
                 onClick={(e) => {
                   e.stopPropagation();
+                  e.preventDefault();
                   setExpandedStrategy(isExpanded ? null : strategy.id);
                 }}
               >

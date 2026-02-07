@@ -31,7 +31,7 @@ import {
   FileText,
   Cog,
 } from 'lucide-react';
-import { FilesTabV3 } from './algorithm/FilesTabV3';
+import { FilesTabV4 } from './algorithm/FilesTabV4';
 import { StrategyTabV7 } from './algorithm/StrategyTabV7';
 import { StrategyTimelineV3 } from './algorithm/StrategyTimelineV3';
 import { ResultsTab } from './algorithm/ResultsTab';
@@ -124,7 +124,7 @@ export const AlgorithmPanel = () => {
 
       <div className="flex-1 overflow-hidden">
         <TabsContent value="files" className="h-full m-0">
-          <FilesTabV3 />
+          <FilesTabV4 />
         </TabsContent>
 
         <TabsContent value="strategy" className="h-full m-0">
