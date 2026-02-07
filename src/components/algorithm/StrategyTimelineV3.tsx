@@ -273,9 +273,10 @@ export const StrategyTimelineV3 = ({ isExecuting = false }: StrategyTimelineV3Pr
   const handleDeleteRun = (runId: string) => {
     // Soft delete
     const updated = runs.map(r => r.id === runId ? { ...r, deletedAt: Date.now() } : r);
-    saveRuns(updated);
+    const persisted = persistRuns(updated);
+    setRuns(persisted);
     if (selectedRunId === runId) {
-      const remaining = updated.filter(r => !r.deletedAt);
+      const remaining = persisted.filter(r => !r.deletedAt);
       setSelectedRunId(remaining[0]?.id || null);
     }
     toast.success('Run deleted');
@@ -284,14 +285,16 @@ export const StrategyTimelineV3 = ({ isExecuting = false }: StrategyTimelineV3Pr
   const handleClearAll = () => {
     // Keep pinned runs
     const pinned = runs.filter(r => r.pinned);
-    saveRuns(pinned);
-    setSelectedRunId(pinned[0]?.id || null);
+    const persisted = persistRuns(pinned);
+    setRuns(persisted);
+    setSelectedRunId(persisted[0]?.id || null);
     toast.success('Unpinned runs cleared');
   };
 
   const handleTogglePin = (runId: string) => {
     const updated = runs.map(r => r.id === runId ? { ...r, pinned: !r.pinned } : r);
-    saveRuns(updated);
+    const persisted = persistRuns(updated);
+    setRuns(persisted);
     toast.success(runs.find(r => r.id === runId)?.pinned ? 'Unpinned' : 'Pinned');
   };
 
