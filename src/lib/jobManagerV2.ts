@@ -196,19 +196,32 @@ class JobManagerV2 {
   }
 
   /**
-   * Calculate ETA based on progress and elapsed time
+   * Calculate ETA based on progress, elapsed time, and file size
    */
   private calculateETA(job: Job): ETAEstimate | null {
-    if (!job.startTime || job.progress <= 0 || job.progress >= 100) return null;
+    if (!job.startTime || job.progress >= 100) return null;
     
     const elapsedMs = Date.now() - job.startTime.getTime();
-    const msPerPercent = job.avgMsPerPercent ?? (elapsedMs / job.progress);
-    const remainingPercent = 100 - job.progress;
-    const estimatedMs = remainingPercent * msPerPercent;
+    let estimatedMs: number;
+    
+    if (job.progress <= 0) {
+      // No progress yet — estimate from file size and preset count
+      const dataFile = fileSystemManager.getFiles().find(f => f.id === job.dataFileId);
+      const fileSizeBits = dataFile?.state?.model?.getBits()?.length || 1024;
+      const sizeMultiplier = Math.max(1, Math.log2(fileSizeBits) - 8); // log2 scaling
+      const totalIterations = job.presets.reduce((sum, p) => sum + p.iterations, 0);
+      const baseEstimateMs = Math.max(2000, totalIterations * sizeMultiplier * 500);
+      estimatedMs = baseEstimateMs;
+    } else {
+      const msPerPercent = job.avgMsPerPercent ?? (elapsedMs / job.progress);
+      const remainingPercent = 100 - job.progress;
+      estimatedMs = Math.max(1000, remainingPercent * msPerPercent);
+    }
+    
     const estimatedCompletion = new Date(Date.now() + estimatedMs);
     
     // Format as human readable
-    const secs = Math.ceil(estimatedMs / 1000);
+    const secs = Math.max(1, Math.ceil(estimatedMs / 1000));
     let formatted: string;
     if (secs < 60) {
       formatted = `${secs}s`;
@@ -224,7 +237,7 @@ class JobManagerV2 {
     
     // Confidence based on progress
     const confidence: 'low' | 'medium' | 'high' = 
-      job.progress < 10 ? 'low' : job.progress < 50 ? 'medium' : 'high';
+      job.progress < 5 ? 'low' : job.progress < 50 ? 'medium' : 'high';
     
     return { estimatedMs, estimatedCompletion, formatted, confidence };
   }
@@ -521,6 +534,8 @@ class JobManagerV2 {
     job.lastProgressUpdate = new Date();
     job.results = [];
     job.queuePosition = undefined;
+    // Calculate initial ETA estimate based on file size
+    job.eta = this.calculateETA(job) || undefined;
     this.updateQueuePositions();
     this.saveToStorage();
     this.notifyListeners();
