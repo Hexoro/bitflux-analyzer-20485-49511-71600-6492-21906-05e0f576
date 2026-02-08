@@ -1263,28 +1263,18 @@ export function executeOperation(operationId: string, bits: string, params: Oper
     // Always work on a copy so we can persist auto-generated params deterministically
     const paramsUsed: OperationParams = { ...params };
 
-    // For operations requiring mask, ensure we store the actual mask used (even if default)
-    // This ensures replay uses the exact same mask
+    // For operations requiring mask, store the actual mask used for deterministic replay.
+    // CRITICAL: Use generateNonTrivialMask (alternating 1010) so operations produce visible
+    // bit changes. Identity masks (all-zeros/all-ones) cause no-ops for XOR, AND, OR, etc.
     if (OPS_REQUIRING_MASK.has(operationId) && !paramsUsed.mask) {
-      // Store the default mask that will be used by the operation
-      // This prevents replay mismatches from default mask differences
-      const defaultMasks: Record<string, string> = {
-        'AND': '1'.repeat(bits.length),   // Identity: no filtering
-        'OR': '0'.repeat(bits.length),    // Identity: no adding
-        'XOR': '0'.repeat(bits.length),   // Identity: no toggling
-        'NAND': '0'.repeat(bits.length),  // Consistent default
-        'NOR': '0'.repeat(bits.length),   // Consistent default
-        'XNOR': '0'.repeat(bits.length),  // Consistent default
-        'IMPLY': '0'.repeat(bits.length),
-        'NIMPLY': '0'.repeat(bits.length),
-        'CONVERSE': '0'.repeat(bits.length),
-        'MUX': '1'.repeat(bits.length),   // Select input (identity)
-        'PDEP': '1'.repeat(bits.length),
-        'PEXT': '1'.repeat(bits.length),
-        'BLEND': '1'.repeat(bits.length), // Select input (identity)
-        'FEISTEL': '0'.repeat(bits.length),
-      };
-      paramsUsed.mask = defaultMasks[operationId] || '0'.repeat(bits.length);
+      // Some operations have identity-preserving defaults in their implementations
+      const IDENTITY_DEFAULT_OPS = new Set(['MUX', 'PDEP', 'PEXT', 'BLEND']);
+      if (IDENTITY_DEFAULT_OPS.has(operationId)) {
+        paramsUsed.mask = '1'.repeat(bits.length);
+      } else {
+        // Use non-trivial mask that actually flips/filters bits
+        paramsUsed.mask = generateNonTrivialMask(bits.length);
+      }
     }
 
     // CRITICAL: For SHUFFLE, UNSHUFFLE, LFSR - compute and store the seed if not provided

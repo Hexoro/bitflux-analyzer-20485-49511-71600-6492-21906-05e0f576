@@ -1355,27 +1355,23 @@ export const StrategyTabV7 = ({ onRunStrategy, isExecuting = false, onNavigateTo
           </div>
           
           {/* Expanded view */}
-          <Collapsible
-            open={isExpanded}
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="w-full mt-2 h-6 text-xs"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              setExpandedStrategy(isExpanded ? null : strategy.id);
+            }}
           >
-            <CollapsibleTrigger asChild>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="w-full mt-2 h-6 text-xs"
-                onPointerDown={(e) => e.stopPropagation()}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  e.preventDefault();
-                  setExpandedStrategy(isExpanded ? null : strategy.id);
-                }}
-              >
-                {isExpanded ? <ChevronUp className="w-3 h-3 mr-1" /> : <ChevronDown className="w-3 h-3 mr-1" />}
-                {isExpanded ? 'Hide' : 'Show'} details
-              </Button>
-            </CollapsibleTrigger>
-            <CollapsibleContent className="mt-2 space-y-2">
+            {isExpanded ? <ChevronUp className="w-3 h-3 mr-1" /> : <ChevronDown className="w-3 h-3 mr-1" />}
+            {isExpanded ? 'Hide' : 'Show'} details
+          </Button>
+          {isExpanded && (
+            <div className="mt-2 space-y-2">
               {/* Scheduler */}
               <div className="p-2 rounded bg-blue-500/10 border border-blue-500/20">
                 <div className="flex items-center gap-2 text-xs">
@@ -1444,8 +1440,8 @@ export const StrategyTabV7 = ({ onRunStrategy, isExecuting = false, onNavigateTo
                   </div>
                 </div>
               )}
-            </CollapsibleContent>
-          </Collapsible>
+            </div>
+          )}
         </CardContent>
       </Card>
     );
@@ -1607,10 +1603,11 @@ export const StrategyTabV7 = ({ onRunStrategy, isExecuting = false, onNavigateTo
           </TabsContent>
 
           {/* EXECUTE TAB */}
-          <TabsContent value="execute" className="h-full m-0 p-3">
+          <TabsContent value="execute" className="h-full m-0 p-3 overflow-hidden">
             <div className="h-full flex gap-3">
               {/* Left: Selection & Config */}
-              <div className="w-1/2 flex flex-col gap-3">
+              <ScrollArea className="w-1/2">
+              <div className="flex flex-col gap-3 pr-2">
                 {/* Strategy Selection */}
                 <Card>
                   <CardHeader className="py-2 px-3">
@@ -1814,6 +1811,7 @@ export const StrategyTabV7 = ({ onRunStrategy, isExecuting = false, onNavigateTo
                   )}
                 </Button>
               </div>
+              </ScrollArea>
               
               {/* Right: ETA & Status */}
               <div className="w-1/2 flex flex-col gap-3">
