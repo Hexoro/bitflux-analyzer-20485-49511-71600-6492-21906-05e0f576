@@ -4,6 +4,7 @@
  */
 
 import { useState, useEffect } from 'react';
+import { validateSyntax, validateCode } from '@/lib/sandboxedExec';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -119,10 +120,14 @@ export const GenerationTab = () => {
 
     // Validate code if code-based
     if (form.isCodeBased && form.code) {
-      try {
-        new Function('length', 'seed', 'probability', form.code);
-      } catch (e) {
-        toast.error(`Invalid code syntax: ${(e as Error).message}`);
+      const codeCheck = validateCode(form.code);
+      if (!codeCheck.safe) {
+        toast.error(`Code uses restricted APIs: ${codeCheck.violations.join(', ')}`);
+        return;
+      }
+      const syntaxCheck = validateSyntax(['length', 'seed', 'probability'], form.code);
+      if (!syntaxCheck.valid) {
+        toast.error(`Invalid code syntax: ${syntaxCheck.error}`);
         return;
       }
     }

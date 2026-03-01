@@ -4,6 +4,7 @@
  */
 
 import { useState, useEffect } from 'react';
+import { safeExecute } from '@/lib/sandboxedExec';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -1029,8 +1030,7 @@ export const OperationsCodeEditor = () => {
     }
 
     try {
-      const fn = new Function('bits', 'params', editForm.code + '\nreturn execute(bits, params);');
-      const result = fn(testBits, params);
+      const result = safeExecute<string>(['bits', 'params'], editForm.code + '\nreturn execute(bits, params);', [testBits, params]);
       if (typeof result !== 'string') {
         setTestResult({ success: false, error: `Must return a string, got ${typeof result}` });
       } else {
@@ -1359,8 +1359,7 @@ export const OperationsCodeEditor = () => {
                           let params = {};
                           try { params = JSON.parse(testParams); } catch {}
                           try {
-                            const fn = new Function('bits', 'params', BUILTIN_OPERATION_CODE[selectedOp.id] + '\nreturn execute(bits, params);');
-                            const result = fn(testBits, params);
+                            const result = safeExecute<string>(['bits', 'params'], BUILTIN_OPERATION_CODE[selectedOp.id] + '\nreturn execute(bits, params);', [testBits, params]);
                             setTestResult({ success: true, result: result.slice(0, 50) + (result.length > 50 ? '...' : '') });
                           } catch (e) {
                             setTestResult({ success: false, error: (e as Error).message });

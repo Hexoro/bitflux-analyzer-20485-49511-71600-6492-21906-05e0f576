@@ -8,6 +8,7 @@
  */
 
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { validateCode } from '@/lib/sandboxedExec';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -443,6 +444,11 @@ Example:
         
         try {
           // Create function with context
+          const codeValidation = validateCode(code);
+          if (!codeValidation.safe) {
+            addEntry('error', `Blocked: code uses restricted APIs (${codeValidation.violations.join(', ')})`);
+            return;
+          }
           const fn = new Function(...Object.keys(jsContext), `
             "use strict";
             ${code}

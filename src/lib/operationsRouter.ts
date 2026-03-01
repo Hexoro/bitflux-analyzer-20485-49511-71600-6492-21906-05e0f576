@@ -3,6 +3,7 @@
  * Connects predefinedManager (database) to binaryOperations (implementations)
  */
 
+import { safeExecute } from './sandboxedExec';
 import {
   LogicGates,
   ShiftOperations,
@@ -1299,8 +1300,7 @@ export function executeOperation(operationId: string, bits: string, params: Oper
     // Check if operation has code-based implementation in predefinedManager
     if (opDef?.isCodeBased && opDef.code) {
       try {
-        const fn = new Function('bits', 'params', opDef.code + '\nreturn execute(bits, params);');
-        const result = fn(bits, paramsUsed);
+        const result = safeExecute<string>(['bits', 'params'], opDef.code + '\nreturn execute(bits, params);', [bits, paramsUsed]);
         if (typeof result !== 'string') {
           return {
             success: false,

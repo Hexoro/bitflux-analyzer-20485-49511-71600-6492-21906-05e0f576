@@ -4,6 +4,7 @@
  */
 
 import { useState, useEffect } from 'react';
+import { validateSyntax, validateCode } from '@/lib/sandboxedExec';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -109,11 +110,14 @@ export const AnomaliesTab = () => {
       return;
     }
 
-    try {
-      // Validate the function syntax
-      new Function('bits', 'minLength', form.detectFn);
-    } catch (e) {
-      toast.error(`Invalid function syntax: ${(e as Error).message}`);
+    const codeCheck = validateCode(form.detectFn);
+    if (!codeCheck.safe) {
+      toast.error(`Code uses restricted APIs: ${codeCheck.violations.join(', ')}`);
+      return;
+    }
+    const syntaxCheck = validateSyntax(['bits', 'minLength'], form.detectFn);
+    if (!syntaxCheck.valid) {
+      toast.error(`Invalid function syntax: ${syntaxCheck.error}`);
       return;
     }
 

@@ -3,6 +3,8 @@
  * Allows adding custom anomaly detection code via Backend mode
  */
 
+import { safeExecute } from './sandboxedExec';
+
 export interface AnomalyDefinition {
   id: string;
   name: string;
@@ -409,12 +411,8 @@ class AnomaliesManager {
     if (!def || !def.enabled) return [];
 
     try {
-      // Create a safe function from the stored code
-      const detectFn = new Function('bits', 'minLength', `
-        ${def.detectFn}
-        return detect(bits, minLength);
-      `);
-      return detectFn(bits, def.minLength) || [];
+      // Execute via sandboxed executor
+      return safeExecute<Array<{ position: number; length: number }>>(['bits', 'minLength'], `${def.detectFn}\nreturn detect(bits, minLength);`, [bits, def.minLength]) || [];
     } catch (e) {
       console.error(`Error executing anomaly detection "${def.name}":`, e);
       return [];

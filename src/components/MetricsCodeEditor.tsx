@@ -4,6 +4,7 @@
  */
 
 import { useState, useEffect } from 'react';
+import { safeExecute } from '@/lib/sandboxedExec';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -1043,8 +1044,7 @@ export const MetricsCodeEditor = () => {
     }
 
     try {
-      const fn = new Function('bits', editForm.code + '\nreturn calculate(bits);');
-      const value = fn(testBits);
+      const value = safeExecute<number>(['bits'], editForm.code + '\nreturn calculate(bits);', [testBits]);
       if (typeof value !== 'number') {
         setTestResult({ success: false, error: `Must return a number, got ${typeof value}` });
       } else {
@@ -1319,8 +1319,7 @@ export const MetricsCodeEditor = () => {
                             testBits = activeFile.state.model.getBits().slice(0, 1000);
                           }
                           try {
-                            const fn = new Function('bits', BUILTIN_METRIC_CODE[selectedMetric.id] + '\nreturn calculate(bits);');
-                            const value = fn(testBits);
+                            const value = safeExecute<number>(['bits'], BUILTIN_METRIC_CODE[selectedMetric.id] + '\nreturn calculate(bits);', [testBits]);
                             setTestResult({ success: true, value });
                           } catch (e) {
                             setTestResult({ success: false, error: (e as Error).message });

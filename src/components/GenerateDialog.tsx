@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { safeExecute } from '@/lib/sandboxedExec';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -149,8 +150,7 @@ return generate(length, seed, probability);`);
   const executeCustomCode = (): string => {
     try {
       // Create a safe execution context
-      const fn = new Function('length', 'seed', 'probability', customCode);
-      const result = fn(length, seed, probability);
+      const result = safeExecute<string>(['length', 'seed', 'probability'], customCode, [length, seed, probability]);
       
       // Validate result
       if (typeof result !== 'string') {

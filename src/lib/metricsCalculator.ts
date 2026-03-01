@@ -8,6 +8,7 @@ import { AdvancedMetricsCalculator } from './advancedMetrics';
 import { AdvancedBitOperations } from './binaryOperations';
 import { IdealityMetrics } from './idealityMetrics';
 import { predefinedManager } from './predefinedManager';
+import { safeExecute } from './sandboxedExec';
 
 export interface MetricResult {
   success: boolean;
@@ -1135,8 +1136,7 @@ export function calculateMetric(metricId: string, bits: string): MetricResult {
     if (metricDef?.isCodeBased && metricDef.code) {
       try {
         // Execute user-defined JavaScript code
-        const fn = new Function('bits', metricDef.code + '\nreturn calculate(bits);');
-        const value = fn(bits);
+        const value = safeExecute<number>(['bits'], metricDef.code + '\nreturn calculate(bits);', [bits]);
         if (typeof value !== 'number') {
           return {
             success: false,
