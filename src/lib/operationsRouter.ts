@@ -166,7 +166,10 @@ const OPERATION_IMPLEMENTATIONS: Record<string, (bits: string, params: Operation
 
   // Bit Manipulation
   INSERT: (bits, p) => BitManipulation.insertBits(bits, p.position || 0, p.bits || ''),
-  DELETE: (bits, p) => BitManipulation.deleteBits(bits, p.start || 0, (p.start || 0) + (p.count || 1)),
+  DELETE: (bits, p) => {
+    const result = BitManipulation.deleteBits(bits, p.start || 0, (p.start || 0) + (p.count || 1));
+    return result.padEnd(bits.length, '0');
+  },
   REPLACE: (bits, p) => BitManipulation.replaceBits(bits, p.start || 0, p.bits || ''),
   MOVE: (bits, p) => BitManipulation.moveBits(bits, p.source || 0, (p.source || 0) + (p.count || 1), p.dest || 0),
   TRUNCATE: (bits, p) => BitManipulation.truncate(bits, p.count || bits.length),
@@ -352,8 +355,8 @@ const OPERATION_IMPLEMENTATIONS: Record<string, (bits: string, params: Operation
   
   WSWAP: (bits) => {
     const words: string[] = [];
-    for (let i = 0; i < bits.length; i += 32) {
-      words.push(bits.slice(i, i + 32));
+    for (let i = 0; i < bits.length; i += 16) {
+      words.push(bits.slice(i, i + 16));
     }
     return words.reverse().join('');
   },
@@ -552,10 +555,10 @@ const OPERATION_IMPLEMENTATIONS: Record<string, (bits: string, params: Operation
     return result;
   },
 
-  // Concat/extend with value
+  // Concat/extend with value - extends by appending from extension pattern
   EXTEND: (bits, p) => {
     const extension = p.value || '0'.repeat(8);
-    return (bits + extension).slice(0, bits.length);
+    return bits + extension.slice(0, bits.length);
   },
 
   // Checksum (8-bit)
@@ -764,10 +767,10 @@ const OPERATION_IMPLEMENTATIONS: Record<string, (bits: string, params: Operation
 
   // === Additional Data Operations ===
   
-  // Concat with value
+  // Concat with value - full concatenation
   CONCAT: (bits, p) => {
     const data = p.value || '';
-    return (bits + data).slice(0, bits.length);
+    return bits + data;
   },
 
   // Splice data at position
@@ -1032,9 +1035,10 @@ const OPERATION_IMPLEMENTATIONS: Record<string, (bits: string, params: Operation
   // Bit deposit (PDEP-like)
   BDEPOSIT: (bits, p) => {
     const mask = p.mask || '1'.repeat(bits.length);
+    const targetLen = Math.max(bits.length, mask.length);
     let result = '';
     let srcIdx = 0;
-    for (let i = 0; i < mask.length && result.length < bits.length; i++) {
+    for (let i = 0; i < mask.length; i++) {
       if (mask[i] === '1') {
         result += bits[srcIdx] || '0';
         srcIdx++;
@@ -1042,7 +1046,7 @@ const OPERATION_IMPLEMENTATIONS: Record<string, (bits: string, params: Operation
         result += '0';
       }
     }
-    return result.padEnd(bits.length, '0');
+    return result.padEnd(targetLen, '0');
   },
 
   // Bit gather (PEXT-like)

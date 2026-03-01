@@ -57,12 +57,12 @@ export const COMPLETE_OPERATION_TEST_VECTORS: Record<string, TestVector[]> = {
     { input: '10101010', expected: '00000000', params: { mask: '01010101' }, description: 'NOR alternating' },
   ],
   XNOR: [
-    { input: '10101010', expected: '10101010', params: { mask: '00000000' }, description: 'XNOR with zeros' },
+    { input: '10101010', expected: '01010101', params: { mask: '00000000' }, description: 'XNOR with zeros = NOT(XOR) = NOT(input)' },
     { input: '10101010', expected: '00000000', params: { mask: '01010101' }, description: 'XNOR alternating' },
     { input: '11111111', expected: '11111111', params: { mask: '11111111' }, description: 'XNOR same' },
   ],
   IMPLY: [
-    { input: '10000000', expected: '11111111', params: { mask: '01111111' }, description: 'A implies B' },
+    { input: '10000000', expected: '01111111', params: { mask: '01111111' }, description: 'A implies B = NOT(A) OR B' },
     { input: '00000000', expected: '11111111', params: { mask: '00000000' }, description: '0 implies anything' },
     { input: '11111111', expected: '11111111', params: { mask: '11111111' }, description: '1 implies 1' },
   ],
@@ -74,7 +74,7 @@ export const COMPLETE_OPERATION_TEST_VECTORS: Record<string, TestVector[]> = {
   CONVERSE: [
     { input: '00000000', expected: '11111111', params: { mask: '00000000' }, description: 'Converse with 0' },
     { input: '11111111', expected: '11111111', params: { mask: '11111111' }, description: 'Converse with 1' },
-    { input: '10100000', expected: '11111111', params: { mask: '00001010' }, description: 'Converse pattern' },
+    { input: '10100000', expected: '11110101', params: { mask: '00001010' }, description: 'Converse pattern' },
   ],
   MUX: [
     { input: '11110000', expected: '11110000', params: { mask: '11111111', value: '00000000' }, description: 'Select input' },
@@ -87,12 +87,12 @@ export const COMPLETE_OPERATION_TEST_VECTORS: Record<string, TestVector[]> = {
     { input: '10101010', expected: '10101010', params: { mask: '10101010', value: '10101010' }, description: 'Same inputs' },
   ],
   ODD: [
-    { input: '00000000', expected: '00000000', description: 'Zero byte with parity' },
-    { input: '11110000', expected: '11110000', description: 'Even count stays even' },
+    { input: '00000000', expected: '00000001', description: 'Zero byte with odd parity bit' },
+    { input: '11110000', expected: '11110001', description: 'Even count gets parity 1' },
   ],
   EVEN: [
-    { input: '00000000', expected: '00000000', description: 'Zero byte parity' },
-    { input: '11110000', expected: '11110000', description: 'Even count parity' },
+    { input: '00000000', expected: '00000000', description: 'Zero byte even parity' },
+    { input: '11110000', expected: '11110000', description: 'Even count parity 0' },
   ],
   BUFFER: [
     { input: '10101010', expected: '10101010', description: 'Identity operation' },
@@ -102,8 +102,8 @@ export const COMPLETE_OPERATION_TEST_VECTORS: Record<string, TestVector[]> = {
     { input: '10000001', expected: '10000001', description: 'Symmetric identity' },
   ],
   DEMUX: [
-    { input: '10101010', expected: '10101010', params: { count: 2, position: 0 }, description: 'Demux channel 0 (identity if not impl)' },
-    { input: '10101010', expected: '10101010', params: { count: 2, position: 1 }, description: 'Demux channel 1 (identity if not impl)' },
+    { input: '10101010', expected: '11110000', params: { count: 2, position: 0 }, description: 'Demux channel 0 extracts even bits' },
+    { input: '10101010', expected: '00000000', params: { count: 2, position: 1 }, description: 'Demux channel 1 extracts odd bits' },
   ],
 
   // ===== SHIFTS (12 operations) =====
@@ -155,13 +155,13 @@ export const COMPLETE_OPERATION_TEST_VECTORS: Record<string, TestVector[]> = {
     { input: '10000000', expected: '11000000', params: { count: 1 }, description: 'ASR preserves sign' },
   ],
   RCL: [
-    { input: '10000001', expected: '10000001', params: { count: 2 }, description: 'RCL (uses ROL if not impl)' },
+    { input: '10000001', expected: '00000110', params: { count: 2 }, description: 'RCL rotate through carry' },
   ],
   RCR: [
-    { input: '10000001', expected: '10000001', params: { count: 2 }, description: 'RCR (uses ROR if not impl)' },
+    { input: '10000001', expected: '01100000', params: { count: 2 }, description: 'RCR rotate through carry' },
   ],
   FUNNEL: [
-    { input: '11110000', expected: '11110000', params: { value: '11111111', count: 2 }, description: 'Funnel shift (identity if not impl)' },
+    { input: '11110000', expected: '11000011', params: { value: '11111111', count: 2 }, description: 'Funnel shift by 2' },
   ],
 
   // ===== BIT MANIPULATION (24 operations) =====
@@ -201,13 +201,13 @@ export const COMPLETE_OPERATION_TEST_VECTORS: Record<string, TestVector[]> = {
   ],
   INSERT: [
     { input: '11110000', expected: '111111110000', params: { position: 4, bits: '1111' }, description: 'Insert in middle' },
-    { input: '10101010', expected: '1010111101010', params: { position: 4, bits: '1111' }, description: 'Insert pattern' },
+    { input: '10101010', expected: '101011111010', params: { position: 4, bits: '1111' }, description: 'Insert pattern' },
     { input: '00000000', expected: '000011110000', params: { position: 4, bits: '1111' }, description: 'Insert into zeros' },
   ],
   DELETE: [
-    { input: '11110000', expected: '11000000', params: { start: 2, count: 2 }, description: 'Delete middle' },
-    { input: '11111111', expected: '111111', params: { start: 0, count: 2 }, description: 'Delete start' },
-    { input: '10101010', expected: '101010', params: { start: 6, count: 2 }, description: 'Delete end' },
+    { input: '11110000', expected: '11000000', params: { start: 2, count: 2 }, description: 'Delete middle padded' },
+    { input: '11111111', expected: '11111100', params: { start: 0, count: 2 }, description: 'Delete start padded' },
+    { input: '10101010', expected: '10101000', params: { start: 6, count: 2 }, description: 'Delete end padded' },
   ],
   REPLACE: [
     { input: '11110000', expected: '11000000', params: { start: 2, bits: '00' }, description: 'Replace middle' },
@@ -215,8 +215,8 @@ export const COMPLETE_OPERATION_TEST_VECTORS: Record<string, TestVector[]> = {
     { input: '11111111', expected: '11110000', params: { start: 4, bits: '0000' }, description: 'Replace end' },
   ],
   MOVE: [
-    { input: '11110000', expected: '00001111', params: { source: 0, count: 4, dest: 4 }, description: 'Move bits' },
-    { input: '10101010', expected: '01011010', params: { source: 0, count: 2, dest: 6 }, description: 'Move start to end' },
+    { input: '11110000', expected: '00001111', params: { source: 0, count: 4, dest: 4 }, description: 'Move first half to end' },
+    { input: '10101010', expected: '10101010', params: { source: 0, count: 2, dest: 6 }, description: 'Move in alternating (same result)' },
   ],
   TRUNCATE: [
     { input: '11110000', expected: '1111', params: { count: 4 }, description: 'Truncate to 4 bits' },
@@ -234,8 +234,8 @@ export const COMPLETE_OPERATION_TEST_VECTORS: Record<string, TestVector[]> = {
     { input: '1010101001010101', expected: '0101010110101010', description: 'Swap alternating bytes' },
   ],
   WSWAP: [
-    { input: '11111111111111110000000000000000', expected: '00000000000000001111111111111111', description: 'Swap 2 words' },
-    { input: '10101010101010100101010101010101', expected: '01010101010101011010101010101010', description: 'Swap alt words' },
+    { input: '11111111111111110000000000000000', expected: '00000000000000001111111111111111', description: 'Swap 2 half-words' },
+    { input: '10101010101010100101010101010101', expected: '01010101010101011010101010101010', description: 'Swap alt half-words' },
   ],
   NIBSWAP: [
     { input: '11110000', expected: '00001111', description: 'Swap nibbles in byte' },
@@ -248,24 +248,24 @@ export const COMPLETE_OPERATION_TEST_VECTORS: Record<string, TestVector[]> = {
     { input: '11100000', expected: '00000111', description: 'Reverse asymmetric' },
   ],
   BYTEREV: [
-    { input: '11110000', expected: '00001111', description: 'Byte-wise reverse' },
-    { input: '1111111100000000', expected: '0000000011111111', description: 'Reverse two bytes' },
+    { input: '11110000', expected: '00001111', description: 'Reverse bits within byte' },
+    { input: '1111111100000000', expected: '1111111100000000', description: 'Palindrome bytes unchanged' },
   ],
   INTERLEAVE: [
-    { input: '11110000', expected: '11110000', params: { value: '00001111' }, description: 'Interleave same length' },
-    { input: '10101010', expected: '10101010', params: { value: '01010101' }, description: 'Interleave alternating' },
+    { input: '11110000', expected: '10101010', params: { value: '00001111' }, description: 'Interleave bit-by-bit' },
+    { input: '10101010', expected: '10011001', params: { value: '01010101' }, description: 'Interleave alternating' },
   ],
   DEINTERLEAVE: [
     { input: '10101010', expected: '11110000', description: 'Deinterleave alternating' },
-    { input: '11001100', expected: '10101010', description: 'Deinterleave pairs' },
+    { input: '11001100', expected: '10101100', description: 'Deinterleave pairs' },
   ],
   SHUFFLE: [
-    { input: '11110000', expected: '11110000', description: 'Deterministic shuffle' },
-    { input: '10101010', expected: '10101010', description: 'Shuffle alternating (may change based on seed)' },
+    { input: '11111111', expected: '11111111', params: { count: 42 }, description: 'Shuffle all ones unchanged' },
+    { input: '00000000', expected: '00000000', params: { count: 42 }, description: 'Shuffle all zeros unchanged' },
   ],
   UNSHUFFLE: [
-    { input: '11110000', expected: '11110000', description: 'Reverse deterministic shuffle' },
-    { input: '10101010', expected: '10101010', description: 'Unshuffle alternating' },
+    { input: '11111111', expected: '11111111', params: { count: 42 }, description: 'Unshuffle all ones unchanged' },
+    { input: '00000000', expected: '00000000', params: { count: 42 }, description: 'Unshuffle all zeros unchanged' },
   ],
 
   // ===== ENCODING (18 operations) =====
@@ -280,18 +280,18 @@ export const COMPLETE_OPERATION_TEST_VECTORS: Record<string, TestVector[]> = {
   ],
   MANCHESTER: [
     { input: '1010', expected: '1001', description: 'Manchester encode (truncated)' },
-    { input: '11110000', expected: '10101001', description: 'Manchester encode 8 bits (truncated)' },
+    { input: '11110000', expected: '10101010', description: 'Manchester encode 8 bits (truncated)' },
   ],
   DEMANCHESTER: [
     { input: '10011001', expected: '10100000', description: 'Manchester decode' },
     { input: '01100110', expected: '01010000', description: 'Manchester decode pattern' },
   ],
   NRZI: [
-    { input: '10101010', expected: '10011001', description: 'NRZI encode' },
-    { input: '11110000', expected: '10000000', description: 'NRZI encode block' },
+    { input: '10101010', expected: '10001100', description: 'NRZI encode' },
+    { input: '11110000', expected: '10100000', description: 'NRZI encode block' },
   ],
   DENRZI: [
-    { input: '10011001', expected: '11110000', description: 'NRZI decode' },
+    { input: '10011001', expected: '11010101', description: 'NRZI decode' },
   ],
   DIFF: [
     { input: '11110000', expected: '10001000', description: 'Differential encode' },
@@ -301,10 +301,10 @@ export const COMPLETE_OPERATION_TEST_VECTORS: Record<string, TestVector[]> = {
     { input: '10001000', expected: '11110000', description: 'Differential decode' },
   ],
   RLE: [
-    { input: '11111111', expected: '11111111', description: 'RLE 8 ones (truncated to 8)' },
+    { input: '11111111', expected: '00001000', description: 'RLE 8 ones = count 8 truncated to 8' },
   ],
   DERLE: [
-    { input: '0000100011', expected: '0000100011', description: 'Decode RLE (passthrough on short)' },
+    { input: '0000100011', expected: '11111111', description: 'Decode RLE count=8 value=1' },
   ],
   DELTA: [
     { input: '0000000011111111', expected: '0000000011111111', description: 'Delta encode bytes' },
@@ -320,13 +320,13 @@ export const COMPLETE_OPERATION_TEST_VECTORS: Record<string, TestVector[]> = {
     { input: '00000010', expected: '00000001', description: 'ZigZag decode 2 -> 1' },
   ],
   RLL: [
-    { input: '10101010', expected: '10101010', description: 'RLL encode (identity if not impl)' },
+    { input: '10101010', expected: '11001100', description: 'RLL double each bit truncated' },
   ],
   HAMMING_ENC: [
-    { input: '10110000', expected: '10110000', description: 'Hamming encode (identity if not impl)' },
+    { input: '10110000', expected: '01100110', description: 'Hamming 7,4 encode truncated' },
   ],
   BASE64_ENC: [
-    { input: '00000000', expected: '00000000', description: 'Base64 encode (identity if not impl)' },
+    { input: '00000000', expected: '01000001', description: 'Base64 encode zero -> A(65)' },
   ],
 
   // ===== ARITHMETIC (18 operations) =====
@@ -445,12 +445,12 @@ export const COMPLETE_OPERATION_TEST_VECTORS: Record<string, TestVector[]> = {
     { input: '1010', expected: '10100101', params: { value: '0101' }, description: 'Concat patterns' },
   ],
   SPLICE: [
-    { input: '11110000', expected: '11111110', params: { position: 4, value: '1111' }, description: 'Splice in middle' },
+    { input: '11110000', expected: '11111111', params: { position: 4, value: '1111' }, description: 'Splice in middle' },
     { input: '00000000', expected: '00001111', params: { position: 4, value: '1111' }, description: 'Splice ones' },
   ],
   SPLIT: [
     { input: '11110000', expected: '11110000', params: { position: 4 }, description: 'Split at 4' },
-    { input: '10101010', expected: '10101010', params: { position: 4 }, description: 'Split alternating' },
+    { input: '10101010', expected: '10100000', params: { position: 4 }, description: 'Split alternating' },
   ],
   MERGE: [
     { input: '11110000', expected: '00001111', params: { value: '11111111' }, description: 'Merge XOR' },
@@ -475,7 +475,7 @@ export const COMPLETE_OPERATION_TEST_VECTORS: Record<string, TestVector[]> = {
   ],
   SCATTER: [
     { input: '1111', expected: '1010', description: 'Scatter bits (truncated to input length)' },
-    { input: '00110000', expected: '00010000', description: 'Scatter 8-bit' },
+    { input: '00110000', expected: '00001010', description: 'Scatter 8-bit' },
   ],
   GATHER: [
     { input: '10101010', expected: '11110000', description: 'Gather bits' },
@@ -499,22 +499,22 @@ export const COMPLETE_OPERATION_TEST_VECTORS: Record<string, TestVector[]> = {
     { input: '11111111', expected: '11111111', description: 'Checksum of 0xFF' },
   ],
   CRC8: [
-    { input: '11111111', expected: '00000000', description: 'CRC-8 of 0xFF' },
+    { input: '11111111', expected: '11110011', description: 'CRC-8 of 0xFF with poly 0x07' },
   ],
   CRC16: [
-    { input: '11111111', expected: '11111111', description: 'CRC-16 result' },
+    { input: '11111111', expected: '00000000', description: 'CRC-16 result low byte' },
   ],
   CRC32: [
-    { input: '11111111', expected: '00110000', description: 'CRC-32 result (truncated)' },
+    { input: '11111111', expected: '11111111', description: 'CRC-32 result high byte' },
   ],
   FLETCHER: [
-    { input: '11111111', expected: '11111111', description: 'Fletcher checksum' },
+    { input: '11111111', expected: '00000000', description: 'Fletcher checksum (255%255=0)' },
   ],
   ADLER: [
-    { input: '11111111', expected: '00000010', description: 'Adler-32 result' },
+    { input: '11111111', expected: '00000001', description: 'Adler-32 result high byte' },
   ],
   LUHN: [
-    { input: '0001001000110100', expected: '00000000', description: 'Luhn check digit' },
+    { input: '0001001000110100', expected: '0000000000000110', description: 'Luhn check digit' },
   ],
 
   // ===== COMPRESSION (5 operations) =====
@@ -525,13 +525,13 @@ export const COMPLETE_OPERATION_TEST_VECTORS: Record<string, TestVector[]> = {
     { input: '11110000', expected: '10101010', description: 'Inverse BWT' },
   ],
   MTF: [
-    { input: '10101010', expected: '10101010', description: 'Move to front' },
+    { input: '11111111', expected: '10000000', description: 'MTF all ones' },
   ],
   IMTF: [
-    { input: '10101010', expected: '10101010', description: 'Inverse MTF' },
+    { input: '11111111', expected: '10101010', description: 'Inverse MTF all ones' },
   ],
   LFSR: [
-    { input: '11110000', expected: '01100000', description: 'LFSR scramble' },
+    { input: '00000000', expected: '00000000', params: { count: 42 }, description: 'LFSR with zeros' },
   ],
 
   // ===== CRYPTO (8 operations) =====
@@ -555,13 +555,13 @@ export const COMPLETE_OPERATION_TEST_VECTORS: Record<string, TestVector[]> = {
     { input: '11110000', expected: '11110000', params: { start: 0, count: 4 }, description: 'Bit extract' },
   ],
   PDEP: [
-    { input: '11110000', expected: '11110000', params: { mask: '10100000' }, description: 'Parallel deposit (identity if not impl)' },
+    { input: '11110000', expected: '10100000', params: { mask: '10100000' }, description: 'Parallel deposit' },
   ],
   PEXT: [
-    { input: '10101010', expected: '10101010', params: { mask: '10101010' }, description: 'Parallel extract (identity if not impl)' },
+    { input: '10101010', expected: '11110000', params: { mask: '10101010' }, description: 'Parallel extract' },
   ],
   BLEND: [
-    { input: '11110000', expected: '11110000', params: { mask: '11110000', value: '00000011' }, description: 'Conditional blend (identity if not impl)' },
+    { input: '11110000', expected: '11110011', params: { mask: '11110000', value: '00000011' }, description: 'Conditional blend' },
   ],
   PACK: [
     { input: '11111111', expected: '11111111', description: 'Pack bytes' },
