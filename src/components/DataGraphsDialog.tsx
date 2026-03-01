@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
+import { safeExecute } from '@/lib/sandboxedExec';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
@@ -50,8 +51,7 @@ export const DataGraphsDialog = ({ open, onOpenChange, binaryData, partitions }:
     try {
       // Extract function body and execute
       const fnBody = graph.dataFn;
-      const getDataFn = new Function('bits', `${fnBody}\nreturn getData(bits);`);
-      const data = getDataFn(binaryData);
+      const data = safeExecute<any[]>(['bits'], `${fnBody}\nreturn getData(bits);`, [binaryData]);
       setCustomGraphData(data || []);
       setSelectedCustomGraph(graph);
     } catch (e) {

@@ -5,6 +5,7 @@
  */
 
 import { useState, useEffect } from 'react';
+import { validateSyntax, validateCode } from '@/lib/sandboxedExec';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -198,11 +199,14 @@ export const GraphsTab = () => {
       return;
     }
 
-    try {
-      // Validate function syntax
-      new Function('bits', form.dataFn);
-    } catch (e) {
-      toast.error(`Invalid function: ${(e as Error).message}`);
+    const codeCheck = validateCode(form.dataFn);
+    if (!codeCheck.safe) {
+      toast.error(`Code uses restricted APIs: ${codeCheck.violations.join(', ')}`);
+      return;
+    }
+    const syntaxCheck = validateSyntax(['bits'], form.dataFn);
+    if (!syntaxCheck.valid) {
+      toast.error(`Invalid function: ${syntaxCheck.error}`);
       return;
     }
 

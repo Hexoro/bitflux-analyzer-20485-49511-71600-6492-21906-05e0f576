@@ -9,6 +9,7 @@
  */
 
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { safeExecute, validateCode } from '@/lib/sandboxedExec';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
@@ -283,10 +284,11 @@ export const ConsoleTab = () => {
     const bits = activeFile?.state.model.getBits() || '01010101';
     
     try {
-      const fn = new Function('bits', 'fileSystemManager', 'pythonModuleSystem', 'console', `
-        const log = (...args) => console.log(args.map(a => String(a)).join(' '));
-        ${code}
-      `);
+      const validation = validateCode(code);
+      if (!validation.safe) {
+        addEntry(paneId, 'error', `Blocked: code uses restricted APIs (${validation.violations.join(', ')})`);
+        return;
+      }
       
       const logs: string[] = [];
       const mockConsole = {
@@ -294,6 +296,11 @@ export const ConsoleTab = () => {
         error: (...args: any[]) => logs.push('ERROR: ' + args.map(a => String(a)).join(' ')),
       };
       
+      const fn = new Function('bits', 'fileSystemManager', 'pythonModuleSystem', 'console', `
+        "use strict";
+        const log = (...args) => console.log(args.map(a => String(a)).join(' '));
+        ${code}
+      `);
       const result = fn(bits, fileSystemManager, pythonModuleSystem, mockConsole);
       logs.forEach(log => addEntry(paneId, 'output', log));
       if (result !== undefined) addEntry(paneId, 'output', String(result));

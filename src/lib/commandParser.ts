@@ -5,6 +5,7 @@
 
 import { executeOperation, getAvailableOperations, OperationParams } from './operationsRouter';
 import { calculateMetric, getAvailableMetrics } from './metricsCalculator';
+import { safeExecute } from './sandboxedExec';
 
 export interface ParsedCommand {
   type: 'operation' | 'pipeline' | 'loop' | 'conditional' | 'macro_def' | 'macro_call' | 'exec' | 'custom' | 'help';
@@ -265,8 +266,7 @@ export function executeCommand(command: ParsedCommand, bits: string): CommandRes
       case 'exec':
         if (command.customCode) {
           try {
-            const fn = new Function('bits', command.customCode);
-            const result = fn(currentBits);
+            const result = safeExecute<string>(['bits'], command.customCode, [currentBits]);
             if (typeof result === 'string' && /^[01]+$/.test(result)) {
               return {
                 success: true,
