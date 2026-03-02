@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Select,
@@ -37,7 +39,7 @@ import {
 } from 'lucide-react';
 import { Terminal } from 'lucide-react';
 import { toast } from 'sonner';
-import { jobManagerV2, Job, JobPreset, JobPriority } from '@/lib/jobManagerV2';
+import { jobManagerV2, Job, JobPreset, JobPriority, JobExecutionOptions } from '@/lib/jobManagerV2';
 import { fileSystemManager } from '@/lib/fileSystemManager';
 import { pythonModuleSystem } from '@/lib/pythonModuleSystem';
 import { BatchJobsUI } from './BatchJobsUI';
@@ -60,6 +62,15 @@ export const JobsDialog = ({ open, onOpenChange }: JobsDialogProps) => {
   const [selectedStrategyId, setSelectedStrategyId] = useState<string>('');
   const [presetIterations, setPresetIterations] = useState(1);
   const [selectedPriority, setSelectedPriority] = useState<JobPriority>('normal');
+  
+  // Advanced execution options state
+  const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
+  const [execOptions, setExecOptions] = useState<JobExecutionOptions>(() => {
+    try {
+      const saved = localStorage.getItem('bitwise_job_exec_options');
+      return saved ? JSON.parse(saved) : {};
+    } catch { return {}; }
+  });
   
   // Expanded job details
   const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
@@ -124,9 +135,13 @@ export const JobsDialog = ({ open, onOpenChange }: JobsDialogProps) => {
     }
 
     try {
-      // Create job with priority
+      // Persist advanced options
+      localStorage.setItem('bitwise_job_exec_options', JSON.stringify(execOptions));
+      
+      // Create job with priority and execution options
       const job = jobManagerV2.createJob(jobName, selectedFileId, presets, {
         priority: selectedPriority,
+        executionOptions: Object.keys(execOptions).length > 0 ? execOptions : undefined,
       });
       toast.success(`Job "${jobName}" created - Click play to start`);
       
@@ -698,6 +713,143 @@ export const JobsDialog = ({ open, onOpenChange }: JobsDialogProps) => {
                         </SelectContent>
                       </Select>
                     </div>
+
+                    {/* Advanced Execution Options */}
+                    <Collapsible open={showAdvancedOptions} onOpenChange={setShowAdvancedOptions}>
+                      <CollapsibleTrigger asChild>
+                        <Button variant="ghost" className="w-full justify-between text-sm">
+                          <span className="flex items-center gap-2">
+                            <Settings2 className="w-4 h-4" />
+                            Advanced Execution Options
+                          </span>
+                          {showAdvancedOptions ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                        </Button>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent className="space-y-3 pt-2">
+                        <div className="space-y-3 p-3 border border-border rounded-lg bg-muted/20">
+                          {/* Seed */}
+                          <div className="space-y-1">
+                            <Label className="text-xs">Deterministic Seed</Label>
+                            <Input
+                              value={execOptions.seed || ''}
+                              onChange={e => setExecOptions(prev => ({ ...prev, seed: e.target.value || undefined }))}
+                              placeholder="Auto-generated if empty"
+                              className="h-8 text-xs"
+                            />
+                          </div>
+
+                          {/* Toggles */}
+                          <div className="grid grid-cols-2 gap-2">
+                            <div className="flex items-center justify-between p-2 bg-card rounded border border-border">
+                              <Label className="text-xs">Verify After Step</Label>
+                              <Switch
+                                checked={execOptions.verifyAfterStep ?? false}
+                                onCheckedChange={v => setExecOptions(prev => ({ ...prev, verifyAfterStep: v }))}
+                              />
+                            </div>
+                            <div className="flex items-center justify-between p-2 bg-card rounded border border-border">
+                              <Label className="text-xs">Save Masks/Params</Label>
+                              <Switch
+                                checked={execOptions.saveMasksAndParams ?? true}
+                                onCheckedChange={v => setExecOptions(prev => ({ ...prev, saveMasksAndParams: v }))}
+                              />
+                            </div>
+                            <div className="flex items-center justify-between p-2 bg-card rounded border border-border">
+                              <Label className="text-xs">Log Detailed Metrics</Label>
+                              <Switch
+                                checked={execOptions.logDetailedMetrics ?? false}
+                                onCheckedChange={v => setExecOptions(prev => ({ ...prev, logDetailedMetrics: v }))}
+                              />
+                            </div>
+                            <div className="flex items-center justify-between p-2 bg-card rounded border border-border">
+                              <Label className="text-xs">Store Full History</Label>
+                              <Switch
+                                checked={execOptions.storeFullHistory ?? false}
+                                onCheckedChange={v => setExecOptions(prev => ({ ...prev, storeFullHistory: v }))}
+                              />
+                            </div>
+                          </div>
+
+                          {/* Numeric options */}
+                          <div className="grid grid-cols-3 gap-2">
+                            <div className="space-y-1">
+                              <Label className="text-xs">Timeout (ms)</Label>
+                              <Input
+                                type="number"
+                                value={execOptions.timeout || ''}
+                                onChange={e => setExecOptions(prev => ({ ...prev, timeout: parseInt(e.target.value) || undefined }))}
+                                placeholder="30000"
+                                className="h-8 text-xs"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs">Memory Limit (MB)</Label>
+                              <Input
+                                type="number"
+                                value={execOptions.memoryLimit || ''}
+                                onChange={e => setExecOptions(prev => ({ ...prev, memoryLimit: parseInt(e.target.value) || undefined }))}
+                                placeholder="256"
+                                className="h-8 text-xs"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs">Budget Override</Label>
+                              <Input
+                                type="number"
+                                value={execOptions.budgetOverride || ''}
+                                onChange={e => setExecOptions(prev => ({ ...prev, budgetOverride: parseInt(e.target.value) || undefined }))}
+                                placeholder="Auto"
+                                className="h-8 text-xs"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Step Mode */}
+                          <div className="space-y-1">
+                            <Label className="text-xs">Step Mode</Label>
+                            <Select
+                              value={execOptions.stepMode || 'continuous'}
+                              onValueChange={v => setExecOptions(prev => ({ ...prev, stepMode: v as any }))}
+                            >
+                              <SelectTrigger className="h-8 text-xs">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent className="bg-popover border border-border z-50">
+                                <SelectItem value="continuous">Continuous</SelectItem>
+                                <SelectItem value="step_by_step">Step-by-Step</SelectItem>
+                                <SelectItem value="breakpoints">Breakpoints</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          {/* Iteration count & Retry */}
+                          <div className="grid grid-cols-2 gap-2">
+                            <div className="space-y-1">
+                              <Label className="text-xs">Iteration Count</Label>
+                              <Input
+                                type="number"
+                                min={1}
+                                value={execOptions.iterationCount || ''}
+                                onChange={e => setExecOptions(prev => ({ ...prev, iterationCount: parseInt(e.target.value) || undefined }))}
+                                placeholder="1"
+                                className="h-8 text-xs"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs">Retry on Failure</Label>
+                              <Input
+                                type="number"
+                                min={0}
+                                value={execOptions.retryOnFailure || ''}
+                                onChange={e => setExecOptions(prev => ({ ...prev, retryOnFailure: parseInt(e.target.value) || undefined }))}
+                                placeholder="0"
+                                className="h-8 text-xs"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </CollapsibleContent>
+                    </Collapsible>
 
                     <Button
                       className="w-full"

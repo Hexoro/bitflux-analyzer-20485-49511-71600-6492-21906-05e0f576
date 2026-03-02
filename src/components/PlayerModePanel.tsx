@@ -43,6 +43,9 @@ import {
   Database,
   Code,
   BookOpen,
+  Shield,
+  Key,
+  Eye,
 } from 'lucide-react';
 import { fileSystemManager } from '@/lib/fileSystemManager';
 import { resultsManager, ExecutionResultV2 } from '@/lib/resultsManager';
@@ -56,6 +59,11 @@ import { EnhancedMaskView } from './player/EnhancedMaskView';
 import { EnhancedStepDetails } from './player/EnhancedStepDetails';
 import { EnhancedDataView } from './player/EnhancedDataView';
 import { CodeContextView } from './player/CodeContextView';
+// Phase 4: Verification components
+import { VerificationDashboard } from './player/VerificationDashboard';
+import { ParameterInspector } from './player/ParameterInspector';
+import { BitFieldViewer } from './player/BitFieldViewer';
+import { ErrorSummaryBar } from './player/ErrorSummaryBar';
 
 interface PlayerModePanelProps {
   onExitPlayer: () => void;
@@ -487,6 +495,11 @@ export const PlayerModePanel = ({ onExitPlayer, selectedResultId }: PlayerModePa
             </CardContent>
           </Card>
 
+          {/* Error Summary Bar */}
+          {reconstructedSteps.length > 0 && (
+            <ErrorSummaryBar steps={reconstructedSteps} />
+          )}
+
           {/* Progress */}
           <div>
             <Progress value={progress} className="h-2" />
@@ -564,10 +577,22 @@ export const PlayerModePanel = ({ onExitPlayer, selectedResultId }: PlayerModePa
           {/* Step Details - Enhanced */}
           <div className="flex-1 overflow-hidden">
             <Tabs defaultValue="details" className="h-full flex flex-col">
-              <TabsList className="grid grid-cols-6 w-full">
+              <TabsList className="grid grid-cols-9 w-full">
                 <TabsTrigger value="details" className="text-xs gap-1">
                   <Zap className="w-3 h-3" />
                   Step
+                </TabsTrigger>
+                <TabsTrigger value="verify" className="text-xs gap-1">
+                  <Shield className="w-3 h-3" />
+                  Verify
+                </TabsTrigger>
+                <TabsTrigger value="params" className="text-xs gap-1">
+                  <Key className="w-3 h-3" />
+                  Params
+                </TabsTrigger>
+                <TabsTrigger value="bitfield" className="text-xs gap-1">
+                  <Eye className="w-3 h-3" />
+                  Bits
                 </TabsTrigger>
                 <TabsTrigger value="code" className="text-xs gap-1">
                   <Code className="w-3 h-3" />
@@ -611,6 +636,56 @@ export const PlayerModePanel = ({ onExitPlayer, selectedResultId }: PlayerModePa
                     totalSteps={reconstructedSteps.length}
                     previousMetrics={currentStep > 0 ? reconstructedSteps[currentStep - 1]?.metrics : undefined}
                   />
+                </ScrollArea>
+              </TabsContent>
+
+              {/* Verification Dashboard */}
+              <TabsContent value="verify" className="flex-1 overflow-auto mt-2">
+                <ScrollArea className="h-[calc(100vh-400px)]">
+                  <VerificationDashboard
+                    steps={reconstructedSteps}
+                    currentStep={currentStep}
+                    initialBits={selectedResult?.initialBits || ''}
+                    finalBits={selectedResult?.finalBits || ''}
+                    overallStatus={verificationStatus}
+                    onJumpToStep={setCurrentStep}
+                    onReverifyAll={() => {
+                      if (selectedResult) {
+                        setSelectedResult({ ...selectedResult });
+                      }
+                    }}
+                  />
+                </ScrollArea>
+              </TabsContent>
+
+              {/* Parameter Inspector */}
+              <TabsContent value="params" className="flex-1 overflow-auto mt-2">
+                <ScrollArea className="h-[calc(100vh-400px)]">
+                  <ParameterInspector
+                    steps={reconstructedSteps}
+                    currentStep={currentStep}
+                    seedChain={selectedResult?.seedChain}
+                  />
+                </ScrollArea>
+              </TabsContent>
+
+              {/* Bit Field Viewer */}
+              <TabsContent value="bitfield" className="flex-1 overflow-auto mt-2">
+                <ScrollArea className="h-[calc(100vh-400px)]">
+                  {step ? (
+                    <BitFieldViewer
+                      beforeBits={step.fullBeforeBits || ''}
+                      afterBits={step.fullAfterBits || ''}
+                      operationName={step.operation}
+                      params={step.params}
+                      mask={step.params?.mask}
+                    />
+                  ) : (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <Eye className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                      <p>Select a step to view bit field</p>
+                    </div>
+                  )}
                 </ScrollArea>
               </TabsContent>
 
