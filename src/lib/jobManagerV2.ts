@@ -48,6 +48,23 @@ export interface ETAEstimate {
   confidence: 'low' | 'medium' | 'high';
 }
 
+export interface JobExecutionOptions {
+  seed?: string;
+  stepMode?: 'continuous' | 'step_by_step' | 'breakpoints';
+  verifyAfterStep?: boolean;
+  saveMasksAndParams?: boolean;
+  logDetailedMetrics?: boolean;
+  storeFullHistory?: boolean;
+  timeout?: number;
+  memoryLimit?: number;
+  maxWorkers?: number;
+  budgetOverride?: number;
+  iterationCount?: number;
+  retryOnFailure?: number;
+  operationWhitelist?: string[];
+  operationBlacklist?: string[];
+}
+
 export interface Job {
   id: string;
   name: string;
@@ -80,6 +97,8 @@ export interface Job {
   dependsOn?: string[];
   // Batch ID for grouped jobs
   batchId?: string;
+  // Advanced execution options (Phase 3)
+  executionOptions?: JobExecutionOptions;
 }
 
 export interface JobQueueStats {
@@ -351,6 +370,7 @@ class JobManagerV2 {
       maxRetries?: number;
       dependsOn?: string[];
       batchId?: string;
+      executionOptions?: JobExecutionOptions;
     }
   ): Job {
     const validation = this.validateJobRequirements(dataFileId, presets);
@@ -378,6 +398,7 @@ class JobManagerV2 {
       retryCount: 0,
       dependsOn: options?.dependsOn,
       batchId: options?.batchId,
+      executionOptions: options?.executionOptions,
     };
 
     this.jobs.set(job.id, job);

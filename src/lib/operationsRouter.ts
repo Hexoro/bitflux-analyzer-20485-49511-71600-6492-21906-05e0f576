@@ -27,6 +27,7 @@ export interface OperationParams {
   value?: string;
   alignment?: number;
   word_size?: number;
+  seed?: string; // Deterministic seed for reproducible mask/randomization
 }
 
 export interface OperationResult {
@@ -35,6 +36,7 @@ export interface OperationResult {
   error?: string;
   operationId: string;
   params: OperationParams;
+  seed?: string; // The seed used for this operation (for replay)
 }
 
 /**
@@ -1268,17 +1270,23 @@ export function executeOperation(operationId: string, bits: string, params: Oper
     // Always work on a copy so we can persist auto-generated params deterministically
     const paramsUsed: OperationParams = { ...params };
 
-    // For operations requiring mask, store the actual mask used for deterministic replay.
-    // CRITICAL: Use generateNonTrivialMask (alternating 1010) so operations produce visible
-    // bit changes. Identity masks (all-zeros/all-ones) cause no-ops for XOR, AND, OR, etc.
+    // Phase 2: Auto-generate deterministic seed if not provided
+    // This seed drives mask generation and randomization for 100% replay accuracy
+    let operationSeed = paramsUsed.seed;
+    if (!operationSeed) {
+      operationSeed = `${Date.now()}_${operationId}_${bits.length}`;
+      paramsUsed.seed = operationSeed;
+    }
+
+    // For operations requiring mask, generate deterministic mask from seed
+    // CRITICAL: Use seed-based generation so replay produces identical masks
     if (OPS_REQUIRING_MASK.has(operationId) && !paramsUsed.mask) {
-      // Some operations have identity-preserving defaults in their implementations
       const IDENTITY_DEFAULT_OPS = new Set(['MUX', 'PDEP', 'PEXT', 'BLEND']);
       if (IDENTITY_DEFAULT_OPS.has(operationId)) {
         paramsUsed.mask = '1'.repeat(bits.length);
       } else {
-        // Use non-trivial mask that actually flips/filters bits
-        paramsUsed.mask = generateNonTrivialMask(bits.length);
+        // Use deterministic mask from seed for reproducible results
+        paramsUsed.mask = generateDeterministicMask(bits.length, operationSeed);
       }
     }
 
@@ -1298,7 +1306,7 @@ export function executeOperation(operationId: string, bits: string, params: Oper
     if (customOperations.has(operationId)) {
       const impl = customOperations.get(operationId)!;
       const result = impl(bits, paramsUsed);
-      return { success: true, bits: result, operationId, params: paramsUsed };
+      return { success: true, bits: result, operationId, params: paramsUsed, seed: operationSeed };
     }
 
     // Check if operation has code-based implementation in predefinedManager
@@ -1312,9 +1320,10 @@ export function executeOperation(operationId: string, bits: string, params: Oper
             error: `Operation '${operationId}' code must return a string, got ${typeof result}`,
             operationId,
             params: paramsUsed,
+            seed: operationSeed,
           };
         }
-        return { success: true, bits: result, operationId, params: paramsUsed };
+        return { success: true, bits: result, operationId, params: paramsUsed, seed: operationSeed };
       } catch (codeError) {
         return {
           success: false,
@@ -1322,6 +1331,7 @@ export function executeOperation(operationId: string, bits: string, params: Oper
           error: `Operation '${operationId}' code error: ${(codeError as Error).message}`,
           operationId,
           params: paramsUsed,
+          seed: operationSeed,
         };
       }
     }
@@ -1335,11 +1345,12 @@ export function executeOperation(operationId: string, bits: string, params: Oper
         error: `No implementation for operation '${operationId}'`,
         operationId,
         params: paramsUsed,
+        seed: operationSeed,
       };
     }
 
     const result = impl(bits, paramsUsed);
-    return { success: true, bits: result, operationId, params: paramsUsed };
+    return { success: true, bits: result, operationId, params: paramsUsed, seed: operationSeed };
   } catch (error) {
     return {
       success: false,

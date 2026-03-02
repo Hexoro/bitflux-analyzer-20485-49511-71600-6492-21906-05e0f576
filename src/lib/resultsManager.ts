@@ -51,6 +51,9 @@ export interface ExecutionResultV2 {
   // Transformations
   steps: TransformationStep[];
 
+  // Seed chain for deterministic replay (Phase 2)
+  seedChain?: string[];
+
   // Benchmarks
   benchmarks: {
     cpuTime: number;

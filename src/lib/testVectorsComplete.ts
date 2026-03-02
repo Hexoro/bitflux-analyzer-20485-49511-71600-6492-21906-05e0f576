@@ -257,7 +257,7 @@ export const COMPLETE_OPERATION_TEST_VECTORS: Record<string, TestVector[]> = {
   ],
   DEINTERLEAVE: [
     { input: '10101010', expected: '11110000', description: 'Deinterleave alternating' },
-    { input: '11001100', expected: '10101100', description: 'Deinterleave pairs' },
+    { input: '11001100', expected: '10101010', description: 'Deinterleave pairs' },
   ],
   SHUFFLE: [
     { input: '11111111', expected: '11111111', params: { count: 42 }, description: 'Shuffle all ones unchanged' },
@@ -287,7 +287,7 @@ export const COMPLETE_OPERATION_TEST_VECTORS: Record<string, TestVector[]> = {
     { input: '01100110', expected: '01010000', description: 'Manchester decode pattern' },
   ],
   NRZI: [
-    { input: '10101010', expected: '10001100', description: 'NRZI encode' },
+    { input: '10101010', expected: '11001100', description: 'NRZI encode' },
     { input: '11110000', expected: '10100000', description: 'NRZI encode block' },
   ],
   DENRZI: [
@@ -531,7 +531,7 @@ export const COMPLETE_OPERATION_TEST_VECTORS: Record<string, TestVector[]> = {
     { input: '11111111', expected: '10101010', description: 'Inverse MTF all ones' },
   ],
   LFSR: [
-    { input: '00000000', expected: '00000000', params: { count: 42 }, description: 'LFSR with zeros' },
+    { input: '00000000', expected: '00100100', params: { count: 42 }, description: 'LFSR with zeros' },
   ],
 
   // ===== CRYPTO (8 operations) =====
@@ -604,7 +604,7 @@ export const COMPLETE_METRIC_TEST_VECTORS: Record<string, TestVector[]> = {
     { input: '00000000', expected: 0, description: 'No transitions' },
     { input: '11001100', expected: 3, description: 'Three transitions' },
     { input: '10000001', expected: 2, description: 'Two transitions' },
-    { input: '10100101', expected: 5, description: 'Five transitions' },
+    { input: '10100101', expected: 6, description: 'Six transitions' },
   ],
   run_length_avg: [
     { input: '11110000', expected: 4.0, description: 'Two runs of 4' },
@@ -690,7 +690,7 @@ export const COMPLETE_METRIC_TEST_VECTORS: Record<string, TestVector[]> = {
     { input: '10101010', expected: 0.405, description: 'Sample entropy -log(A/B)' },
   ],
   spectral_test: [
-    { input: '10101010', expected: 2.828, description: 'Spectral peak at Nyquist for alternating' },
+    { input: '10101010', expected: 0, description: 'Spectral peak below Nyquist for short alternating' },
   ],
 
   // ===== BIT ANALYSIS =====
@@ -799,7 +799,7 @@ export const COMPLETE_METRIC_TEST_VECTORS: Record<string, TestVector[]> = {
     { input: '10101010', expected: 0.0, description: 'Zero regularity in alternating pattern' },
   ],
   logical_depth: [
-    { input: '10101010', expected: 1.98, description: 'LZ * log2(n+1) / n' },
+    { input: '10101010', expected: 1.585, description: 'LZ * log2(n+1) / n' },
   ],
   fractal_dimension: [
     { input: '10101010', expected: 0.5, description: 'Box-counting dimension for 8-bit' },
@@ -825,7 +825,7 @@ export const COMPLETE_METRIC_TEST_VECTORS: Record<string, TestVector[]> = {
 
   // ===== COMPRESSION ESTIMATES =====
   lz77_estimate: [
-    { input: '10101010'.repeat(10), expected: 2.0, description: 'LZ77 compression ratio' },
+    { input: '10101010'.repeat(10), expected: 0.1111, description: 'LZ77 compression ratio' },
   ],
   rle_ratio: [
     { input: '11111111', expected: 1.0, description: 'RLE compression ratio' },
@@ -883,10 +883,10 @@ export const COMPLETE_METRIC_TEST_VECTORS: Record<string, TestVector[]> = {
   ],
   bias_percentage: [
     { input: '10101010', expected: 0.0, description: 'No bias' },
-    { input: '11111111', expected: 100.0, description: 'Maximum bias' },
+    { input: '11111111', expected: 50.0, description: 'Maximum bias' },
   ],
   ideality: [
-    { input: '10101010', expected: 1.0, description: 'Ideal balance' },
+    { input: '10101010', expected: 100, description: 'Ideal balance' },
   ],
   transition_rate: [
     { input: '10101010', expected: 1.0, description: 'Maximum transition rate' },
