@@ -444,12 +444,28 @@ except SyntaxError as e:
           continue;
         }
         
-        // Handle apply_operation calls
-        const opMatch = trimmed.match(/apply_operation\s*\(\s*["'](\w+)["']/);
+        // Handle apply_operation calls - enhanced to extract params
+        const opMatch = trimmed.match(/apply_operation\s*\(\s*["'](\w+)["']\s*(?:,\s*([^,)]+))?\s*(?:,\s*(\{[^}]*\}|\w+))?\s*\)/);
         if (opMatch) {
           const opName = opMatch[1];
-          bridgeObj.bridge.apply_operation(opName, '', {});
-          logs.push(`Applied: ${opName}`);
+          // Parse params dict if provided (e.g., {'mask': '1010', 'seed': 'abc'})
+          let parsedParams: Record<string, any> = {};
+          if (opMatch[3]) {
+            try {
+              // Convert Python dict syntax to JSON: {'key': 'val'} -> {"key": "val"}
+              const jsonStr = opMatch[3]
+                .replace(/'/g, '"')
+                .replace(/True/g, 'true')
+                .replace(/False/g, 'false')
+                .replace(/None/g, 'null');
+              parsedParams = JSON.parse(jsonStr);
+            } catch {
+              // If parse fails, still proceed with empty params
+              console.warn(`Failed to parse params for ${opName}: ${opMatch[3]}`);
+            }
+          }
+          bridgeObj.bridge.apply_operation(opName, '', parsedParams);
+          logs.push(`Applied: ${opName}${Object.keys(parsedParams).length > 0 ? ` (params: ${JSON.stringify(parsedParams)})` : ''}`);
           continue;
         }
         

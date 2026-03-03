@@ -1272,8 +1272,9 @@ export function executeOperation(operationId: string, bits: string, params: Oper
 
     // Phase 2: Auto-generate deterministic seed if not provided
     // This seed drives mask generation and randomization for 100% replay accuracy
+    // CRITICAL FIX: Preserve existing seed from stored params to ensure replay determinism
     let operationSeed = paramsUsed.seed;
-    if (!operationSeed) {
+    if (!operationSeed || operationSeed === '') {
       operationSeed = `${Date.now()}_${operationId}_${bits.length}`;
       paramsUsed.seed = operationSeed;
     }
