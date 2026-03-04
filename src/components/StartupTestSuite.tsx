@@ -23,6 +23,7 @@ import {
   TestSchedulerSettings,
 } from '@/lib/testScheduler';
 import { TestSettingsDialog, TestState, VectorTestResult } from '@/components/TestSettingsDialog';
+import { runPlayerTestSuite, PlayerTestReport } from '@/lib/playerTestSuite';
 import { toast } from 'sonner';
 
 // Import workers using Vite's ?worker syntax for proper bundling
@@ -65,6 +66,8 @@ export const StartupTestSuite = ({
   const [lastRunTime, setLastRunTime] = useState<Date | null>(null);
   const [stallCount, setStallCount] = useState(0);
   const [isStalled, setIsStalled] = useState(false);
+  const [playerResults, setPlayerResults] = useState<PlayerTestReport | null>(null);
+  const [isPlayerRunning, setIsPlayerRunning] = useState(false);
 
   // Refs
   const coreWorkerRef = useRef<Worker | null>(null);
@@ -85,14 +88,16 @@ export const StartupTestSuite = ({
   const totalFailed = (smokeResults?.failed ?? 0) + 
     (coreResults?.failed ?? 0) + 
     vectorSummary.opFailed + 
-    vectorSummary.metricFailed;
+    vectorSummary.metricFailed +
+    (playerResults?.failed ?? 0);
   
   const totalPassed = (smokeResults?.passed ?? 0) + 
     (coreResults?.passed ?? 0) + 
     vectorSummary.opPassed + 
-    vectorSummary.metricPassed;
+    vectorSummary.metricPassed +
+    (playerResults?.passed ?? 0);
 
-  const hasResults = smokeResults !== null || coreResults !== null || 
+  const hasResults = smokeResults !== null || coreResults !== null || playerResults !== null ||
     (vectorSummary.opPassed + vectorSummary.opFailed + vectorSummary.metricPassed + vectorSummary.metricFailed) > 0;
 
   // Stop stall checker
@@ -323,6 +328,18 @@ export const StartupTestSuite = ({
     });
   }, [settings.maxTrackedFailures, settings.extendedBatchSize, startStallChecker, stopStallChecker]);
 
+  // Run player tests (sync, runs on main thread)
+  const runPlayerTests = useCallback(() => {
+    setIsPlayerRunning(true);
+    // Use setTimeout to not block UI
+    setTimeout(() => {
+      const report = runPlayerTestSuite();
+      setPlayerResults(report);
+      setIsPlayerRunning(false);
+      setLastRunTime(new Date());
+    }, 10);
+  }, []);
+
   // Run all tests in sequence
   const runAll = useCallback(async () => {
     hasRunOnce.current = true;
@@ -331,12 +348,15 @@ export const StartupTestSuite = ({
     // Smoke first (instant)
     runSmoke();
     
+    // Player tests (sync but deferred)
+    runPlayerTests();
+    
     // Then core in worker
     await runCore();
     
-    // Then extended in worker (runCore sets phase to extended-pending, so we start immediately)
+    // Then extended in worker
     await runExtended();
-  }, [cancelAll, runSmoke, runCore, runExtended]);
+  }, [cancelAll, runSmoke, runCore, runExtended, runPlayerTests]);
 
   // Schedule tests based on idle detection
   useEffect(() => {
@@ -388,6 +408,8 @@ export const StartupTestSuite = ({
     vectorFailures,
     isExtendedRunning,
     extendedDuration,
+    playerResults,
+    isPlayerRunning,
     lastRunTime,
   };
 
@@ -489,6 +511,10 @@ export const StartupTestSuite = ({
         onRunExtended={() => {
           hasRunOnce.current = true;
           runExtended();
+        }}
+        onRunPlayer={() => {
+          hasRunOnce.current = true;
+          runPlayerTests();
         }}
         onRunAll={runAll}
         onCancel={() => {

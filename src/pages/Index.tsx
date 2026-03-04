@@ -22,12 +22,16 @@ import { Toolbar, AppMode } from '@/components/Toolbar';
 import { AlgorithmPanel } from '@/components/AlgorithmPanel';
 import { BackendPanel } from '@/components/BackendPanel';
 import { PlayerModePanel } from '@/components/PlayerModePanel';
+import { AIModePanel } from '@/components/AIModePanel';
 import { DataGraphsDialog } from '@/components/DataGraphsDialog';
 import { AudioVisualizerDialog } from '@/components/AudioVisualizerDialog';
 import { PatternHeatmapDialog } from '@/components/PatternHeatmapDialog';
 import { BitSelectionDialog } from '@/components/BitSelectionDialog';
 import { JobsDialog } from '@/components/JobsDialog';
+import { ReportViewerDialog } from '@/components/ReportViewerDialog';
+import { PluginsDialog } from '@/components/PluginsDialog';
 import { StartupTestSuite } from '@/components/StartupTestSuite';
+import { pluginManager } from '@/lib/pluginManager';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 import { toast } from 'sonner';
@@ -53,6 +57,9 @@ const Index = () => {
   const [audioDialogOpen, setAudioDialogOpen] = useState(false);
   const [heatmapDialogOpen, setHeatmapDialogOpen] = useState(false);
   const [jobsDialogOpen, setJobsDialogOpen] = useState(false);
+  const [reportViewerOpen, setReportViewerOpen] = useState(false);
+  const [pluginsDialogOpen, setPluginsDialogOpen] = useState(false);
+  const [pluginCount, setPluginCount] = useState(pluginManager.getStats().enabled);
   const [idealBitIndices, setIdealBitIndices] = useState<number[]>([]);
   const [appMode, setAppMode] = useState<AppMode>('analysis');
   const [isPlayerMode, setIsPlayerMode] = useState(false);
@@ -60,6 +67,11 @@ const Index = () => {
   const viewerRef = useRef<any>(null);
   const currentYear = new Date().getFullYear();
 
+  // Track plugin count
+  useEffect(() => {
+    const unsub = pluginManager.subscribe(() => setPluginCount(pluginManager.getStats().enabled));
+    return unsub;
+  }, []);
   // Subscribe to file system changes
   useEffect(() => {
     const updateActiveFile = () => {
@@ -459,11 +471,14 @@ const Index = () => {
         onAudioVisualizer={() => setAudioDialogOpen(true)}
         onPatternHeatmap={() => setHeatmapDialogOpen(true)}
         onJobs={() => setJobsDialogOpen(true)}
+        onReports={() => setReportViewerOpen(true)}
+        onPlugins={() => setPluginsDialogOpen(true)}
         canUndo={(activeFile.state.model as any).undoStack?.length > 0}
         canRedo={(activeFile.state.model as any).redoStack?.length > 0}
         editMode={editMode}
         currentMode={appMode}
         onModeChange={handleModeChange}
+        pluginCount={pluginCount}
       />
 
       {/* Main Content */}
@@ -500,6 +515,8 @@ const Index = () => {
               onExitPlayer={handleExitPlayerMode} 
               selectedResultId={playerResultId}
             />
+          ) : appMode === 'ai' ? (
+            <AIModePanel />
           ) : (
             <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
               <TabsList className="w-full justify-start rounded-none border-b overflow-x-auto flex-shrink-0">
@@ -652,6 +669,16 @@ const Index = () => {
       <JobsDialog
         open={jobsDialogOpen}
         onOpenChange={setJobsDialogOpen}
+      />
+
+      <ReportViewerDialog
+        open={reportViewerOpen}
+        onOpenChange={setReportViewerOpen}
+      />
+
+      <PluginsDialog
+        open={pluginsDialogOpen}
+        onOpenChange={setPluginsDialogOpen}
       />
     </div>
   );
