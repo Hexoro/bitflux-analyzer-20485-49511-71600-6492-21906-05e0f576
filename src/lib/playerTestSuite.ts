@@ -871,6 +871,429 @@ const errorClassTests: PlayerTest[] = [
   },
 ];
 
+// ============ STATISTICAL RIGOR TESTS ============
+
+const statisticalTests: PlayerTest[] = [
+  {
+    id: 'stat_not_100x', category: 'operation', name: 'NOT 100x deterministic',
+    description: 'NOT on same input 100 times should always produce same output',
+    run: () => {
+      const input = '10110100';
+      const expected = executeOperation('NOT', input).bits;
+      let allMatch = true;
+      for (let i = 0; i < 100; i++) {
+        const r = executeOperation('NOT', input);
+        if (r.bits !== expected) { allMatch = false; break; }
+      }
+      return { passed: allMatch, expected: 'all 100 match', actual: allMatch ? 'all match' : 'mismatch found' };
+    },
+  },
+  {
+    id: 'stat_xor_seed_100x', category: 'replay', name: 'XOR same seed 100x deterministic',
+    description: 'XOR with same seed 100 times should always produce same output',
+    run: () => {
+      const input = '10110100';
+      const seed = 'stat_test_seed';
+      const expected = executeOperation('XOR', input, { seed }).bits;
+      let allMatch = true;
+      for (let i = 0; i < 100; i++) {
+        const r = executeOperation('XOR', input, { seed });
+        if (r.bits !== expected) { allMatch = false; break; }
+      }
+      return { passed: allMatch, expected: 'all 100 match', actual: allMatch ? 'all match' : 'mismatch found' };
+    },
+  },
+  {
+    id: 'stat_and_seed_100x', category: 'replay', name: 'AND same seed 100x deterministic',
+    description: 'AND with same seed 100 times should always produce same output',
+    run: () => {
+      const input = '11001100';
+      const seed = 'and_stat_seed';
+      const expected = executeOperation('AND', input, { seed }).bits;
+      let allMatch = true;
+      for (let i = 0; i < 100; i++) {
+        const r = executeOperation('AND', input, { seed });
+        if (r.bits !== expected) { allMatch = false; break; }
+      }
+      return { passed: allMatch, expected: 'all 100 match', actual: allMatch ? 'all match' : 'mismatch found' };
+    },
+  },
+];
+
+// ============ ROUND-TRIP TESTS ============
+
+const roundTripTests: PlayerTest[] = [
+  {
+    id: 'rt_not_not', category: 'operation', name: 'NOT→NOT round trip',
+    description: 'NOT(NOT(x)) == x for multiple inputs',
+    run: () => {
+      const inputs = ['00000000', '11111111', '10101010', '11001100', '10000001'];
+      const allPass = inputs.every(input => {
+        const r1 = executeOperation('NOT', input);
+        const r2 = executeOperation('NOT', r1.bits);
+        return r2.bits === input;
+      });
+      return { passed: allPass, expected: 'all round trips pass', actual: allPass ? 'all pass' : 'some fail' };
+    },
+  },
+  {
+    id: 'rt_reverse_reverse', category: 'operation', name: 'REVERSE→REVERSE round trip',
+    description: 'REVERSE(REVERSE(x)) == x for multiple inputs',
+    run: () => {
+      const inputs = ['10000001', '11100000', '10101010', '11110000'];
+      const allPass = inputs.every(input => {
+        const r1 = executeOperation('REVERSE', input);
+        const r2 = executeOperation('REVERSE', r1.bits);
+        return r2.bits === input;
+      });
+      return { passed: allPass, expected: 'all pass', actual: allPass ? 'all pass' : 'some fail' };
+    },
+  },
+  {
+    id: 'rt_xor_xor', category: 'operation', name: 'XOR→XOR round trip with same mask',
+    description: '(A XOR B) XOR B == A for multiple masks',
+    run: () => {
+      const inputs = [
+        { bits: '10101010', mask: '11110000' },
+        { bits: '11001100', mask: '10101010' },
+        { bits: '00001111', mask: '11111111' },
+      ];
+      const allPass = inputs.every(({ bits, mask }) => {
+        const r1 = executeOperation('XOR', bits, { mask });
+        const r2 = executeOperation('XOR', r1.bits, { mask });
+        return r2.bits === bits;
+      });
+      return { passed: allPass, expected: 'all pass', actual: allPass ? 'all pass' : 'some fail' };
+    },
+  },
+  {
+    id: 'rt_swap_swap', category: 'operation', name: 'SWAP→SWAP round trip',
+    description: 'SWAP(SWAP(x)) == x',
+    run: () => {
+      const input = '11110000';
+      const r1 = executeOperation('SWAP', input);
+      const r2 = executeOperation('SWAP', r1.bits);
+      return { passed: r2.bits === input, expected: input, actual: r2.bits };
+    },
+  },
+  {
+    id: 'rt_rol_ror', category: 'operation', name: 'ROL→ROR round trip',
+    description: 'ROR(ROL(x, n), n) == x',
+    run: () => {
+      const input = '10110100';
+      const r1 = executeOperation('ROL', input, { count: 3 });
+      const r2 = executeOperation('ROR', r1.bits, { count: 3 });
+      return { passed: r2.bits === input, expected: input, actual: r2.bits };
+    },
+  },
+  {
+    id: 'rt_shl_shr_loss', category: 'edge_case', name: 'SHL→SHR loses bits (not round trip)',
+    description: 'SHR(SHL(x, n), n) != x (lost bits filled with 0)',
+    run: () => {
+      const input = '10000001';
+      const r1 = executeOperation('SHL', input, { count: 2 });
+      const r2 = executeOperation('SHR', r1.bits, { count: 2 });
+      // SHL drops MSBs, SHR drops LSBs - so not a round trip
+      return { passed: r2.bits !== input, expected: 'not equal (lossy)', actual: r2.bits === input ? 'equal (unexpected)' : 'not equal (correct)' };
+    },
+  },
+];
+
+// ============ COMPOSITION TESTS ============
+
+const compositionTests: PlayerTest[] = [
+  {
+    id: 'comp_demorgan_and', category: 'operation', name: "De Morgan's: NOT(A AND B) == NOT(A) OR NOT(B)",
+    description: 'Verify De Morgan law for AND',
+    run: () => {
+      const a = '10101010';
+      const b = '11001100';
+      // NOT(A AND B)
+      const andR = executeOperation('AND', a, { mask: b });
+      const lhs = executeOperation('NOT', andR.bits);
+      // NOT(A) OR NOT(B)
+      const notA = executeOperation('NOT', a);
+      const notB = executeOperation('NOT', b);
+      const rhs = executeOperation('OR', notA.bits, { mask: notB.bits });
+      return { passed: lhs.bits === rhs.bits, expected: lhs.bits, actual: rhs.bits };
+    },
+  },
+  {
+    id: 'comp_demorgan_or', category: 'operation', name: "De Morgan's: NOT(A OR B) == NOT(A) AND NOT(B)",
+    description: 'Verify De Morgan law for OR',
+    run: () => {
+      const a = '10101010';
+      const b = '11001100';
+      const orR = executeOperation('OR', a, { mask: b });
+      const lhs = executeOperation('NOT', orR.bits);
+      const notA = executeOperation('NOT', a);
+      const notB = executeOperation('NOT', b);
+      const rhs = executeOperation('AND', notA.bits, { mask: notB.bits });
+      return { passed: lhs.bits === rhs.bits, expected: lhs.bits, actual: rhs.bits };
+    },
+  },
+  {
+    id: 'comp_xor_commutative', category: 'operation', name: 'XOR commutativity',
+    description: 'A XOR B == B XOR A',
+    run: () => {
+      const a = '10101010';
+      const b = '11001100';
+      const r1 = executeOperation('XOR', a, { mask: b });
+      const r2 = executeOperation('XOR', b, { mask: a });
+      return { passed: r1.bits === r2.bits, expected: r1.bits, actual: r2.bits };
+    },
+  },
+  {
+    id: 'comp_and_commutative', category: 'operation', name: 'AND commutativity',
+    description: 'A AND B == B AND A',
+    run: () => {
+      const a = '10101010';
+      const b = '11001100';
+      const r1 = executeOperation('AND', a, { mask: b });
+      const r2 = executeOperation('AND', b, { mask: a });
+      return { passed: r1.bits === r2.bits, expected: r1.bits, actual: r2.bits };
+    },
+  },
+  {
+    id: 'comp_or_commutative', category: 'operation', name: 'OR commutativity',
+    description: 'A OR B == B OR A',
+    run: () => {
+      const a = '10101010';
+      const b = '11001100';
+      const r1 = executeOperation('OR', a, { mask: b });
+      const r2 = executeOperation('OR', b, { mask: a });
+      return { passed: r1.bits === r2.bits, expected: r1.bits, actual: r2.bits };
+    },
+  },
+  {
+    id: 'comp_xor_associative', category: 'operation', name: 'XOR associativity',
+    description: '(A XOR B) XOR C == A XOR (B XOR C)',
+    run: () => {
+      const a = '10101010';
+      const b = '11001100';
+      const c = '11110000';
+      const ab = executeOperation('XOR', a, { mask: b });
+      const lhs = executeOperation('XOR', ab.bits, { mask: c });
+      const bc = executeOperation('XOR', b, { mask: c });
+      const rhs = executeOperation('XOR', a, { mask: bc.bits });
+      return { passed: lhs.bits === rhs.bits, expected: lhs.bits, actual: rhs.bits };
+    },
+  },
+  {
+    id: 'comp_and_distributive_over_or', category: 'operation', name: 'AND distributes over OR',
+    description: 'A AND (B OR C) == (A AND B) OR (A AND C)',
+    run: () => {
+      const a = '10101010';
+      const b = '11001100';
+      const c = '11110000';
+      const bOrC = executeOperation('OR', b, { mask: c });
+      const lhs = executeOperation('AND', a, { mask: bOrC.bits });
+      const aAndB = executeOperation('AND', a, { mask: b });
+      const aAndC = executeOperation('AND', a, { mask: c });
+      const rhs = executeOperation('OR', aAndB.bits, { mask: aAndC.bits });
+      return { passed: lhs.bits === rhs.bits, expected: lhs.bits, actual: rhs.bits };
+    },
+  },
+];
+
+// ============ LARGE DATA TESTS ============
+
+const largeDataTests: PlayerTest[] = [
+  {
+    id: 'large_not_10k', category: 'edge_case', name: 'NOT on 10000-bit string',
+    description: 'NOT should handle very large inputs',
+    run: () => {
+      const input = '10'.repeat(5000);
+      const r = executeOperation('NOT', input);
+      const expected = '01'.repeat(5000);
+      return { passed: r.success && r.bits === expected, expected: 10000, actual: r.bits.length, details: r.bits === expected ? 'exact match' : 'mismatch' };
+    },
+  },
+  {
+    id: 'large_xor_1k', category: 'edge_case', name: 'XOR on 1000-bit string with mask',
+    description: 'XOR should work on large data with explicit mask',
+    run: () => {
+      const input = '1'.repeat(1000);
+      const mask = '0'.repeat(1000);
+      const r = executeOperation('XOR', input, { mask });
+      return { passed: r.success && r.bits === input, expected: 'identity (mask all zeros)', actual: r.bits === input ? 'identity' : 'changed' };
+    },
+  },
+  {
+    id: 'large_reverse_5k', category: 'edge_case', name: 'REVERSE on 5000-bit string',
+    description: 'REVERSE twice on large string should return original',
+    run: () => {
+      const input = Array.from({ length: 5000 }, () => Math.random() > 0.5 ? '1' : '0').join('');
+      const r1 = executeOperation('REVERSE', input);
+      const r2 = executeOperation('REVERSE', r1.bits);
+      return { passed: r2.bits === input, expected: 'round trip match', actual: r2.bits === input ? 'match' : 'mismatch' };
+    },
+  },
+];
+
+// ============ METRIC STABILITY TESTS ============
+
+const metricStabilityTests: PlayerTest[] = [
+  {
+    id: 'metric_hash_stability', category: 'verification', name: 'Hash stable across 100 calls',
+    description: 'hashBits should return same value every time for same input',
+    run: () => {
+      const input = '10110100';
+      const expected = hashBits(input);
+      let allMatch = true;
+      for (let i = 0; i < 100; i++) {
+        if (hashBits(input) !== expected) { allMatch = false; break; }
+      }
+      return { passed: allMatch, expected: 'all match', actual: allMatch ? 'all match' : 'drift detected' };
+    },
+  },
+  {
+    id: 'metric_hash_sensitive', category: 'verification', name: 'Hash sensitive to single bit flip',
+    description: 'Flipping one bit should change the hash',
+    run: () => {
+      const a = '10110100';
+      const b = '10110101'; // last bit flipped
+      const ha = hashBits(a);
+      const hb = hashBits(b);
+      return { passed: ha !== hb, expected: 'different', actual: ha === hb ? 'same (bad!)' : 'different' };
+    },
+  },
+];
+
+// ============ CROSS-OPERATION INTERFERENCE TESTS ============
+
+const interferenceTests: PlayerTest[] = [
+  {
+    id: 'interf_not_then_xor', category: 'replay', name: 'NOT then XOR: no interference',
+    description: 'Running NOT should not affect subsequent XOR seed generation',
+    run: () => {
+      const input = '10101010';
+      const seed = 'interf_test_seed';
+      // Run XOR alone
+      const xorOnly = executeOperation('XOR', input, { seed });
+      // Run NOT then XOR with same seed
+      executeOperation('NOT', '11110000'); // unrelated operation
+      const xorAfter = executeOperation('XOR', input, { seed });
+      return { passed: xorOnly.bits === xorAfter.bits, expected: xorOnly.bits, actual: xorAfter.bits };
+    },
+  },
+  {
+    id: 'interf_parallel_seeds', category: 'param_persistence', name: 'Different ops get different auto-seeds',
+    description: 'Auto-generated seeds should differ between operations',
+    run: () => {
+      const r1 = executeOperation('XOR', '10101010');
+      const r2 = executeOperation('AND', '10101010');
+      // Seeds should be different (different timestamps or inputs)
+      return { passed: r1.params?.seed !== r2.params?.seed, expected: 'different seeds', actual: r1.params?.seed === r2.params?.seed ? 'same (unlikely but possible)' : 'different' };
+    },
+  },
+];
+
+// ============ PARAMETER BOUNDARY TESTS ============
+
+const boundaryTests: PlayerTest[] = [
+  {
+    id: 'bound_rol_count_0', category: 'edge_case', name: 'ROL count=0 is identity',
+    description: 'ROL with count 0 should not change bits',
+    run: () => {
+      const input = '10110100';
+      const r = executeOperation('ROL', input, { count: 0 });
+      return { passed: r.bits === input, expected: input, actual: r.bits };
+    },
+  },
+  {
+    id: 'bound_ror_count_0', category: 'edge_case', name: 'ROR count=0 is identity',
+    description: 'ROR with count 0 should not change bits',
+    run: () => {
+      const input = '10110100';
+      const r = executeOperation('ROR', input, { count: 0 });
+      return { passed: r.bits === input, expected: input, actual: r.bits };
+    },
+  },
+  {
+    id: 'bound_shl_large_count', category: 'edge_case', name: 'SHL count > length',
+    description: 'SHL by more than length should give all zeros',
+    run: () => {
+      const r = executeOperation('SHL', '11111111', { count: 100 });
+      return { passed: r.bits === '00000000', expected: '00000000', actual: r.bits };
+    },
+  },
+  {
+    id: 'bound_shr_large_count', category: 'edge_case', name: 'SHR count > length',
+    description: 'SHR by more than length should give all zeros',
+    run: () => {
+      const r = executeOperation('SHR', '11111111', { count: 100 });
+      return { passed: r.bits === '00000000', expected: '00000000', actual: r.bits };
+    },
+  },
+  {
+    id: 'bound_2bit_ops', category: 'edge_case', name: 'Operations on 2-bit strings',
+    description: 'All basic ops should work on minimal 2-bit strings',
+    run: () => {
+      const ops = ['NOT', 'REVERSE', 'SWAP'];
+      const allPass = ops.every(op => {
+        const r = executeOperation(op, '10');
+        return r.success && r.bits.length === 2;
+      });
+      return { passed: allPass, expected: 'all succeed', actual: allPass ? 'all succeed' : 'some failed' };
+    },
+  },
+  {
+    id: 'bound_xor_mask_length_mismatch', category: 'edge_case', name: 'XOR mask shorter than input',
+    description: 'XOR with shorter mask should still work',
+    run: () => {
+      const r = executeOperation('XOR', '10101010', { mask: '1111' });
+      return { passed: r.success, expected: 'success', actual: r.success ? 'success' : 'failed' };
+    },
+  },
+];
+
+// ============ REPLAY CHAIN TESTS ============
+
+const replayChainTests: PlayerTest[] = [
+  {
+    id: 'chain_5_ops', category: 'replay', name: '5-step chain replay',
+    description: 'NOT→XOR→AND→ROL→REVERSE chain replay should match',
+    run: () => {
+      const input = '11001100';
+      const s1 = executeOperation('NOT', input);
+      const s2 = executeOperation('XOR', s1.bits);
+      const s3 = executeOperation('AND', s2.bits);
+      const s4 = executeOperation('ROL', s3.bits, { count: 2 });
+      const s5 = executeOperation('REVERSE', s4.bits);
+      // Replay
+      const r1 = executeOperation('NOT', input, s1.params);
+      const r2 = executeOperation('XOR', r1.bits, s2.params);
+      const r3 = executeOperation('AND', r2.bits, s3.params);
+      const r4 = executeOperation('ROL', r3.bits, s4.params);
+      const r5 = executeOperation('REVERSE', r4.bits, s5.params);
+      return { passed: s5.bits === r5.bits, expected: s5.bits, actual: r5.bits };
+    },
+  },
+  {
+    id: 'chain_10_nots', category: 'replay', name: '10 consecutive NOTs',
+    description: '10 NOTs should return to original (even number)',
+    run: () => {
+      let bits = '10110100';
+      const original = bits;
+      for (let i = 0; i < 10; i++) {
+        bits = executeOperation('NOT', bits).bits;
+      }
+      return { passed: bits === original, expected: original, actual: bits };
+    },
+  },
+  {
+    id: 'chain_rol_cumulative', category: 'operation', name: 'ROL(3) + ROL(5) == ROL(8) == identity for 8-bit',
+    description: 'Cumulative rotation should equal single rotation',
+    run: () => {
+      const input = '10110100';
+      const r1 = executeOperation('ROL', input, { count: 3 });
+      const r2 = executeOperation('ROL', r1.bits, { count: 5 });
+      return { passed: r2.bits === input, expected: input, actual: r2.bits };
+    },
+  },
+];
+
 // ============ ALL TESTS ============
 
 export const ALL_PLAYER_TESTS: PlayerTest[] = [
@@ -881,6 +1304,14 @@ export const ALL_PLAYER_TESTS: PlayerTest[] = [
   ...verificationTests,
   ...edgeCaseTests,
   ...errorClassTests,
+  ...statisticalTests,
+  ...roundTripTests,
+  ...compositionTests,
+  ...largeDataTests,
+  ...metricStabilityTests,
+  ...interferenceTests,
+  ...boundaryTests,
+  ...replayChainTests,
 ];
 
 /**

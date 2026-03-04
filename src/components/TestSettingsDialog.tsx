@@ -11,6 +11,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog';
+import { PlayerTestReport } from '@/lib/playerTestSuite';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -82,6 +83,10 @@ export interface TestState {
   isExtendedRunning: boolean;
   extendedDuration: number;
   
+  // Player tests
+  playerResults: PlayerTestReport | null;
+  isPlayerRunning: boolean;
+  
   // Overall
   lastRunTime: Date | null;
 }
@@ -93,6 +98,7 @@ interface TestSettingsDialogProps {
   onRunSmoke: () => void;
   onRunCore: () => void;
   onRunExtended: () => void;
+  onRunPlayer: () => void;
   onRunAll: () => void;
   onCancel: () => void;
   settings: TestSchedulerSettings;
@@ -106,6 +112,7 @@ export function TestSettingsDialog({
   onRunSmoke,
   onRunCore,
   onRunExtended,
+  onRunPlayer,
   onRunAll,
   onCancel,
   settings,
@@ -126,10 +133,12 @@ export function TestSettingsDialog({
     vectorFailures,
     isExtendedRunning,
     extendedDuration,
+    playerResults,
+    isPlayerRunning,
     lastRunTime,
   } = testState;
 
-  const isAnyRunning = isCoreRunning || isExtendedRunning;
+  const isAnyRunning = isCoreRunning || isExtendedRunning || isPlayerRunning;
 
   // Calculate totals
   const smokePassed = smokeResults?.passed ?? 0;
@@ -140,10 +149,13 @@ export function TestSettingsDialog({
   const extendedTotal = vectorSummary.opPassed + vectorSummary.opFailed + vectorSummary.metricPassed + vectorSummary.metricFailed;
   const extendedPassed = vectorSummary.opPassed + vectorSummary.metricPassed;
   const extendedFailed = vectorSummary.opFailed + vectorSummary.metricFailed;
+  const playerTotal = playerResults?.totalTests ?? 0;
+  const playerPassed = playerResults?.passed ?? 0;
+  const playerFailed = playerResults?.failed ?? 0;
 
-  const totalTests = (smokeResults?.total ?? 0) + coreTotal + extendedTotal;
-  const totalPassed = smokePassed + corePassed + extendedPassed;
-  const totalFailed = smokeFailed + coreFailed + extendedFailed;
+  const totalTests = (smokeResults?.total ?? 0) + coreTotal + extendedTotal + playerTotal;
+  const totalPassed = smokePassed + corePassed + extendedPassed + playerPassed;
+  const totalFailed = smokeFailed + coreFailed + extendedFailed + playerFailed;
 
   // Collect all failures for triage
   const allFailures = useMemo(() => {
@@ -357,10 +369,13 @@ export function TestSettingsDialog({
         )}
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
-          <TabsList className="mx-6 mt-4 grid w-auto grid-cols-4">
+          <TabsList className="mx-6 mt-4 grid w-auto grid-cols-5">
             <TabsTrigger value="overview" className="text-xs">Overview</TabsTrigger>
             <TabsTrigger value="failures" className="text-xs">
               Failures {totalFailed > 0 && `(${totalFailed})`}
+            </TabsTrigger>
+            <TabsTrigger value="player" className="text-xs">
+              Player {playerTotal > 0 && `(${playerPassed}/${playerTotal})`}
             </TabsTrigger>
             <TabsTrigger value="details" className="text-xs">Details</TabsTrigger>
             <TabsTrigger value="settings" className="text-xs">Settings</TabsTrigger>
@@ -369,7 +384,7 @@ export function TestSettingsDialog({
           <div className="flex-1 min-h-0 overflow-hidden">
             {/* Overview Tab */}
             <TabsContent value="overview" className="h-full m-0 p-6">
-              <div className="grid grid-cols-3 gap-4 mb-6">
+              <div className="grid grid-cols-4 gap-4 mb-6">
                 {/* Smoke Tests Card */}
                 <Card className={smokeFailed > 0 ? 'border-destructive/50' : smokeResults ? 'border-green-500/50' : ''}>
                   <CardHeader className="pb-2 pt-4 px-4">
@@ -475,6 +490,36 @@ export function TestSettingsDialog({
                         {formatDuration(extendedDuration)}
                       </p>
                     )}
+                  </CardContent>
+                </Card>
+
+                {/* Player Tests Card */}
+                <Card className={playerFailed > 0 ? 'border-destructive/50' : playerTotal > 0 ? 'border-green-500/50' : ''}>
+                  <CardHeader className="pb-2 pt-4 px-4">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <FlaskConical className="w-4 h-4" />
+                      Player Tests
+                      {isPlayerRunning && <Loader2 className="w-3 h-3 animate-spin" />}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="px-4 pb-4">
+                    <div className="flex items-baseline justify-between">
+                      <span className={`text-2xl font-bold ${
+                        playerFailed > 0 ? 'text-destructive' : 
+                        playerTotal > 0 ? 'text-green-500' : 'text-muted-foreground'
+                      }`}>
+                        {playerTotal > 0 ? `${playerPassed}/${playerTotal}` : isPlayerRunning ? '...' : '—'}
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 px-2"
+                        onClick={onRunPlayer}
+                        disabled={isAnyRunning}
+                      >
+                        <RefreshCw className="w-3 h-3" />
+                      </Button>
+                    </div>
                   </CardContent>
                 </Card>
               </div>
@@ -662,6 +707,67 @@ export function TestSettingsDialog({
                       </Card>
                     ))
                   )}
+                </div>
+              </ScrollArea>
+            </TabsContent>
+
+            {/* Player Tests Tab */}
+            <TabsContent value="player" className="h-full m-0 p-0">
+              <ScrollArea className="h-[400px]">
+                <div className="p-6">
+                  {!playerResults && !isPlayerRunning ? (
+                    <div className="text-center py-12 text-muted-foreground">
+                      <FlaskConical className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                      <p>No player tests run yet</p>
+                      <p className="text-xs mt-1">Player tests verify all operations, parameter persistence, and replay determinism</p>
+                    </div>
+                  ) : isPlayerRunning ? (
+                    <div className="text-center py-12">
+                      <Loader2 className="w-8 h-8 mx-auto mb-3 animate-spin text-primary" />
+                      <p className="text-sm">Running player tests...</p>
+                    </div>
+                  ) : playerResults ? (
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-sm font-semibold">Player Tests: {playerResults.passed}/{playerResults.totalTests}</h4>
+                        <Badge className={playerResults.failed === 0 ? 'bg-green-500/20 text-green-500' : 'bg-destructive/20 text-destructive'}>
+                          {playerResults.failed === 0 ? 'All Passed' : `${playerResults.failed} Failed`}
+                        </Badge>
+                      </div>
+                      {/* Category breakdown */}
+                      {Object.entries(playerResults.byCategory).map(([cat, stats]) => (
+                        <Card key={cat} className={stats.failed > 0 ? 'border-destructive/30' : 'border-green-500/30'}>
+                          <CardContent className="p-3">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                {stats.failed === 0 ? <CheckCircle className="w-3 h-3 text-green-500" /> : <XCircle className="w-3 h-3 text-destructive" />}
+                                <span className="text-sm font-medium capitalize">{cat.replace(/_/g, ' ')}</span>
+                              </div>
+                              <span className="text-xs font-mono">{stats.passed}/{stats.total}</span>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                      {/* Individual failures */}
+                      {playerResults.results.filter(r => !r.passed).length > 0 && (
+                        <div className="space-y-2 mt-4">
+                          <h5 className="text-xs font-semibold text-destructive">Failed Tests</h5>
+                          {playerResults.results.filter(r => !r.passed).map(r => (
+                            <Card key={r.id} className="border-destructive/30">
+                              <CardContent className="p-2 text-xs">
+                                <div className="font-medium">{r.name}</div>
+                                <div className="flex gap-4 font-mono text-[10px] mt-1">
+                                  <span><span className="text-muted-foreground">Expected: </span><span className="text-green-600">{String(r.expected).slice(0, 40)}</span></span>
+                                  <span><span className="text-muted-foreground">Actual: </span><span className="text-destructive">{String(r.actual).slice(0, 40)}</span></span>
+                                </div>
+                                {r.details && <p className="text-muted-foreground mt-1">{r.details}</p>}
+                              </CardContent>
+                            </Card>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ) : null}
                 </div>
               </ScrollArea>
             </TabsContent>

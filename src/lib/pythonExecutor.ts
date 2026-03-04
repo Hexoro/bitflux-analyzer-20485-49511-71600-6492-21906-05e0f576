@@ -430,8 +430,151 @@ except SyntaxError as e:
       // Parse simple commands from the Python code
       const lines = pythonCode.split('\n').filter(l => l.trim() && !l.trim().startsWith('#'));
       
+      // Variable tracker for resolving variable-based apply_operation calls
+      const varTracker: Record<string, string> = {};
+      // Track list/array variables for loop iteration
+      const listTracker: Record<string, string[]> = {};
+      // Track dict variables for param lookups
+      const dictTracker: Record<string, Record<string, any>> = {};
+      // Track current loop context
+      let loopVar = '';
+      let loopItems: string[] = [];
+      let loopBody: string[] = [];
+      let inLoop = false;
+      let loopIndent = 0;
+      
+      // First pass: collect variable assignments, dicts, and lists
       for (const line of lines) {
         const trimmed = line.trim();
+        
+        // Track simple variable assignments: var = 'value'
+        const assignMatch = trimmed.match(/^(\w+)\s*=\s*["'](\w+)["']\s*$/);
+        if (assignMatch) {
+          varTracker[assignMatch[1]] = assignMatch[2];
+          continue;
+        }
+        
+        // Track list assignments: var = ['A', 'B', 'C'] or operations = [...]
+        const listMatch = trimmed.match(/^(\w+)\s*=\s*\[(.*)\]\s*$/);
+        if (listMatch) {
+          const items = listMatch[2].match(/["'](\w+)["']/g);
+          if (items) {
+            listTracker[listMatch[1]] = items.map(i => i.replace(/["']/g, ''));
+          }
+        }
+        
+        // Track dict assignments: var = {'key': 'val', ...}  
+        const dictMatch = trimmed.match(/^(\w+)\s*=\s*(\{.*\})\s*$/);
+        if (dictMatch) {
+          try {
+            const jsonStr = dictMatch[2]
+              .replace(/'/g, '"')
+              .replace(/True/g, 'true')
+              .replace(/False/g, 'false')
+              .replace(/None/g, 'null');
+            dictTracker[dictMatch[1]] = JSON.parse(jsonStr);
+          } catch { /* skip unparseable dicts */ }
+        }
+      }
+      
+      // Helper: resolve a value that might be a variable name or a literal
+      const resolveValue = (val: string): string => {
+        const unquoted = val.trim().replace(/^["']|["']$/g, '');
+        return varTracker[unquoted] || unquoted;
+      };
+      
+      // Helper: resolve params that might be a variable, dict literal, or dict.get() call
+      const resolveParams = (paramsStr: string): Record<string, any> => {
+        const trimmedP = paramsStr.trim();
+        // Dict literal: {'key': 'val'}
+        if (trimmedP.startsWith('{')) {
+          try {
+            const jsonStr = trimmedP
+              .replace(/'/g, '"')
+              .replace(/True/g, 'true')
+              .replace(/False/g, 'false')
+              .replace(/None/g, 'null');
+            return JSON.parse(jsonStr);
+          } catch { return {}; }
+        }
+        // dict.get(key, {}) pattern
+        const getMatch = trimmedP.match(/(\w+)\.get\s*\(\s*(\w+)\s*(?:,\s*(\{[^}]*\}))?\s*\)/);
+        if (getMatch) {
+          const dictName = getMatch[1];
+          const key = resolveValue(getMatch[2]);
+          if (dictTracker[dictName] && dictTracker[dictName][key]) {
+            return dictTracker[dictName][key];
+          }
+          if (getMatch[3]) {
+            try { return JSON.parse(getMatch[3].replace(/'/g, '"')); } catch { return {}; }
+          }
+          return {};
+        }
+        // Variable name
+        if (dictTracker[trimmedP]) return dictTracker[trimmedP];
+        return {};
+      };
+      
+      // Execute a single apply_operation call with variable resolution
+      const executeApplyOp = (trimmed: string) => {
+        // Match both quoted and variable-based calls:
+        // apply_operation('NOT', bits, {'mask': '...'})
+        // apply_operation(op_id, bits, params)
+        // bitwise_api.apply_operation(...)
+        const opMatch = trimmed.match(/(?:bitwise_api\.)?apply_operation\s*\(\s*([^,)]+)\s*(?:,\s*([^,)]+))?\s*(?:,\s*(.+))?\s*\)/);
+        if (opMatch) {
+          const opName = resolveValue(opMatch[1]);
+          const parsedParams = opMatch[3] ? resolveParams(opMatch[3]) : {};
+          bridgeObj.bridge.apply_operation(opName, '', parsedParams);
+          logs.push(`Applied: ${opName}${Object.keys(parsedParams).length > 0 ? ` (params: ${JSON.stringify(parsedParams)})` : ''}`);
+          return true;
+        }
+        return false;
+      };
+      
+      // Second pass: execute
+      for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
+        const rawLine = lines[lineIdx];
+        const trimmed = rawLine.trim();
+        const indent = rawLine.search(/\S/);
+        
+        // Handle loop end (dedent)
+        if (inLoop && indent <= loopIndent && trimmed.length > 0) {
+          // Execute collected loop body for each item
+          for (const item of loopItems) {
+            varTracker[loopVar] = item;
+            for (const bodyLine of loopBody) {
+              const bodyTrimmed = bodyLine.trim();
+              if (bodyTrimmed.includes('apply_operation')) {
+                executeApplyOp(bodyTrimmed);
+              }
+            }
+          }
+          inLoop = false;
+          loopBody = [];
+        }
+        
+        // Collect loop body lines
+        if (inLoop) {
+          loopBody.push(rawLine);
+          continue;
+        }
+        
+        // Detect for loops: for var in list_var:
+        const forMatch = trimmed.match(/^for\s+(\w+)\s+in\s+(\w+)\s*:/);
+        if (forMatch) {
+          loopVar = forMatch[1];
+          const listName = forMatch[2];
+          loopItems = listTracker[listName] || [];
+          // Also check if it's a direct list of available operations
+          if (loopItems.length === 0 && listName === 'operations') {
+            loopItems = context.operations;
+          }
+          inLoop = true;
+          loopIndent = indent;
+          loopBody = [];
+          continue;
+        }
         
         // Handle print statements
         if (trimmed.startsWith('print(')) {
@@ -444,45 +587,45 @@ except SyntaxError as e:
           continue;
         }
         
-        // Handle apply_operation calls - enhanced to extract params
-        const opMatch = trimmed.match(/apply_operation\s*\(\s*["'](\w+)["']\s*(?:,\s*([^,)]+))?\s*(?:,\s*(\{[^}]*\}|\w+))?\s*\)/);
-        if (opMatch) {
-          const opName = opMatch[1];
-          // Parse params dict if provided (e.g., {'mask': '1010', 'seed': 'abc'})
-          let parsedParams: Record<string, any> = {};
-          if (opMatch[3]) {
-            try {
-              // Convert Python dict syntax to JSON: {'key': 'val'} -> {"key": "val"}
-              const jsonStr = opMatch[3]
-                .replace(/'/g, '"')
-                .replace(/True/g, 'true')
-                .replace(/False/g, 'false')
-                .replace(/None/g, 'null');
-              parsedParams = JSON.parse(jsonStr);
-            } catch {
-              // If parse fails, still proceed with empty params
-              console.warn(`Failed to parse params for ${opName}: ${opMatch[3]}`);
-            }
-          }
-          bridgeObj.bridge.apply_operation(opName, '', parsedParams);
-          logs.push(`Applied: ${opName}${Object.keys(parsedParams).length > 0 ? ` (params: ${JSON.stringify(parsedParams)})` : ''}`);
-          continue;
+        // Handle apply_operation calls (both quoted and variable-based)
+        if (trimmed.includes('apply_operation')) {
+          if (executeApplyOp(trimmed)) continue;
         }
         
         // Handle apply_operation_range calls
-        const rangeMatch = trimmed.match(/apply_operation_range\s*\(\s*["'](\w+)["']\s*,\s*(\d+)\s*,\s*(\d+)/);
+        const rangeMatch = trimmed.match(/(?:bitwise_api\.)?apply_operation_range\s*\(\s*["']?(\w+)["']?\s*,\s*(\d+)\s*,\s*(\d+)/);
         if (rangeMatch) {
-          const [, opName, startStr, endStr] = rangeMatch;
-          bridgeObj.bridge.apply_operation_range(opName, parseInt(startStr), parseInt(endStr));
-          logs.push(`Applied: ${opName} on [${startStr}:${endStr}]`);
+          const opName = resolveValue(rangeMatch[1]);
+          bridgeObj.bridge.apply_operation_range(opName, parseInt(rangeMatch[2]), parseInt(rangeMatch[3]));
+          logs.push(`Applied: ${opName} on [${rangeMatch[2]}:${rangeMatch[3]}]`);
+          continue;
+        }
+        
+        // Handle variable assignments (second pass updates)
+        const assignMatch = trimmed.match(/^(\w+)\s*=\s*["'](\w+)["']\s*$/);
+        if (assignMatch) {
+          varTracker[assignMatch[1]] = assignMatch[2];
           continue;
         }
         
         // Handle log calls
-        const logMatch = trimmed.match(/log\s*\(\s*["'](.*)["']\s*\)/);
+        const logMatch = trimmed.match(/(?:bitwise_api\.)?log\s*\(\s*["'](.*)["']\s*\)/);
         if (logMatch) {
           logs.push(logMatch[1]);
           continue;
+        }
+      }
+      
+      // Handle trailing loop body (loop at end of file)
+      if (inLoop && loopBody.length > 0) {
+        for (const item of loopItems) {
+          varTracker[loopVar] = item;
+          for (const bodyLine of loopBody) {
+            const bodyTrimmed = bodyLine.trim();
+            if (bodyTrimmed.includes('apply_operation')) {
+              executeApplyOp(bodyTrimmed);
+            }
+          }
         }
       }
       
