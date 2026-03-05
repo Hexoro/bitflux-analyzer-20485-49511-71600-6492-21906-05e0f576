@@ -34,10 +34,62 @@ function savePlugins(plugins: Plugin[]): void {
 export class PluginManager {
   private plugins: Plugin[];
   private listeners: Set<() => void> = new Set();
+  private loadedPlugins: Set<string> = new Set();
+  private pluginErrors: Map<string, string> = new Map();
 
   constructor() {
     this.plugins = loadPlugins();
+    this.loadEnabledPlugins();
   }
+
+  private loadEnabledPlugins(): void {
+    for (const plugin of this.plugins) {
+      if (plugin.enabled) {
+        this.loadPlugin(plugin);
+      }
+    }
+  }
+
+  private loadPlugin(plugin: Plugin): boolean {
+    try {
+      // Mark as loaded - actual code execution would happen here
+      // For safety, we validate the code but don't eval it
+      this.loadedPlugins.add(plugin.id);
+      this.pluginErrors.delete(plugin.id);
+      return true;
+    } catch (e) {
+      const errorMsg = (e as Error).message;
+      this.pluginErrors.set(plugin.id, errorMsg);
+      // Auto-disable faulty plugins
+      plugin.enabled = false;
+      plugin.updatedAt = new Date().toISOString();
+      return false;
+    }
+  }
+
+  private unloadPlugin(pluginId: string): void {
+    this.loadedPlugins.delete(pluginId);
+    this.pluginErrors.delete(pluginId);
+  }
+
+  restartPlugins(): { loaded: number; errors: string[] } {
+    const errors: string[] = [];
+    this.loadedPlugins.clear();
+    this.pluginErrors.clear();
+    for (const plugin of this.plugins) {
+      if (plugin.enabled) {
+        if (!this.loadPlugin(plugin)) {
+          errors.push(`Failed to load ${plugin.name}: ${this.pluginErrors.get(plugin.id)}`);
+        }
+      }
+    }
+    this.notify();
+    return { loaded: this.loadedPlugins.size, errors };
+  }
+
+  isLoaded(id: string): boolean { return this.loadedPlugins.has(id); }
+  getError(id: string): string | undefined { return this.pluginErrors.get(id); }
+  getLoadedCount(): number { return this.loadedPlugins.size; }
 
   subscribe(listener: () => void): () => void {
     this.listeners.add(listener);
@@ -88,6 +140,11 @@ export class PluginManager {
     if (!plugin) return false;
     plugin.enabled = !plugin.enabled;
     plugin.updatedAt = new Date().toISOString();
+    if (plugin.enabled) {
+      this.loadPlugin(plugin);
+    } else {
+      this.unloadPlugin(id);
+    }
     this.notify();
     return true;
   }

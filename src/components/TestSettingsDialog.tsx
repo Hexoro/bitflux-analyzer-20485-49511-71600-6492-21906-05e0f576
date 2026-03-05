@@ -248,6 +248,17 @@ export function TestSettingsDialog({
   }, [allFailures, totalTests, totalPassed, totalFailed, smokePassed, smokeFailed, corePassed, coreFailed, extendedPassed, extendedFailed]);
 
   const handleExportReport = useCallback(() => {
+    // Include player results and all failure details without truncation
+    const playerFailures = playerResults?.results.filter(r => !r.passed).map(r => ({
+      type: 'player' as const,
+      category: r.category,
+      id: r.id,
+      name: r.name,
+      description: r.details || '',
+      expected: r.expected,
+      actual: r.actual,
+    })) || [];
+
     const exportData = {
       timestamp: new Date().toISOString(),
       type: 'report',
@@ -256,15 +267,28 @@ export function TestSettingsDialog({
         totalPassed,
         totalFailed,
         smoke: smokeResults,
-        core: coreResults,
+        core: coreResults ? {
+          totalTests: coreResults.totalTests,
+          passed: coreResults.passed,
+          failed: coreResults.failed,
+          duration: coreResults.duration,
+        } : null,
         extended: {
           total: extendedTotal,
           passed: extendedPassed,
           failed: extendedFailed,
           durationMs: extendedDuration,
         },
+        player: playerResults ? {
+          totalTests: playerResults.totalTests,
+          passed: playerResults.passed,
+          failed: playerResults.failed,
+          byCategory: playerResults.byCategory,
+        } : null,
       },
-      failures: allFailures,
+      failures: [...allFailures, ...playerFailures],
+      // Full player results for journal export
+      playerResults: playerResults || null,
     };
 
     const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
@@ -285,6 +309,7 @@ export function TestSettingsDialog({
     extendedFailed,
     extendedDuration,
     allFailures,
+    playerResults,
   ]);
 
   const handleSettingChange = <K extends keyof TestSchedulerSettings>(

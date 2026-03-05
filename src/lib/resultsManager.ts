@@ -578,21 +578,33 @@ class ResultsManager {
     successRate: number;
     uniqueTags: string[];
   } {
-    const results = this.getAllResults();
-    const completed = results.filter(r => r.status === 'completed');
-    const allTags = new Set<string>();
-    results.forEach(r => r.tags.forEach(t => allTags.add(t)));
+    // Use cached results array to avoid repeated Map iterations
+    const resultArr = Array.from(this.results.values());
+    const total = resultArr.length;
+    if (total === 0) {
+      return { totalResults: 0, bookmarkedCount: 0, avgDuration: 0, successRate: 0, uniqueTags: [] };
+    }
+    
+    let bookmarked = 0;
+    let completedCount = 0;
+    let totalDuration = 0;
+    const tagSet = new Set<string>();
+    
+    for (const r of resultArr) {
+      if (r.bookmarked) bookmarked++;
+      if (r.status === 'completed') {
+        completedCount++;
+        totalDuration += r.duration;
+      }
+      for (const t of r.tags) tagSet.add(t);
+    }
 
     return {
-      totalResults: results.length,
-      bookmarkedCount: results.filter(r => r.bookmarked).length,
-      avgDuration: completed.length > 0 
-        ? completed.reduce((sum, r) => sum + r.duration, 0) / completed.length 
-        : 0,
-      successRate: results.length > 0 
-        ? (completed.length / results.length) * 100 
-        : 0,
-      uniqueTags: Array.from(allTags),
+      totalResults: total,
+      bookmarkedCount: bookmarked,
+      avgDuration: completedCount > 0 ? totalDuration / completedCount : 0,
+      successRate: (completedCount / total) * 100,
+      uniqueTags: Array.from(tagSet),
     };
   }
 

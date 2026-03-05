@@ -107,6 +107,8 @@ interface StrategyVersion {
   message: string;
   fileHashes: Record<string, string>;
   changedFiles?: string[];
+  fileContents?: Record<string, string>;
+  linkedFiles?: string[];
 }
 
 interface EnhancedStrategy {
@@ -452,7 +454,20 @@ export const StrategyTabV7 = ({ onRunStrategy, isExecuting = false, onNavigateTo
         policyFiles: selectedStrategy.policyFiles,
         created: createdDate,
       };
-      const result = await strategyExecutionEngine.executeStrategy(baseConfig, selectedDataFile);
+      const result = await strategyExecutionEngine.executeStrategy(baseConfig, selectedDataFile, {
+        seed: executionOptions.seed || undefined,
+        timeout: executionOptions.timeout,
+        memoryLimit: executionOptions.memoryLimit,
+        budgetOverride: executionOptions.budgetOverride,
+        verifyAfterStep: executionOptions.verifyAfterStep,
+        stepMode: executionOptions.stepMode,
+        logDetailedMetrics: executionOptions.logDetailedMetrics,
+        storeFullHistory: executionOptions.storeFullHistory,
+        saveMasksAndParams: executionOptions.saveMasksAndParams,
+        enableParallel: executionOptions.enableParallel,
+        maxWorkers: executionOptions.maxWorkers,
+        breakpoints: executionOptions.breakpoints,
+      });
       if (result.success) toast.success(`Score: ${result.totalScore.toFixed(2)}`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Execution failed');
@@ -475,29 +490,59 @@ export const StrategyTabV7 = ({ onRunStrategy, isExecuting = false, onNavigateTo
     toast.success('Template applied');
   }, []);
 
-  // Version management
+  // Version management - stores full file contents for git-like snapshots
   const handleSaveVersion = useCallback((strategy: EnhancedStrategy) => {
     if (!versionMessage.trim()) { toast.error('Please enter a version message'); return; }
     const existingVersions = strategyVersions.filter(v => v.strategyId === strategy.id);
     const nextVersion = existingVersions.length + 1;
     const allFileNames = [strategy.schedulerFile, ...strategy.algorithmFiles, ...strategy.scoringFiles, ...strategy.policyFiles, ...(strategy.customFiles || [])];
     const fileHashes: Record<string, string> = {};
-    allFileNames.forEach(name => { const file = files.find(f => f.name === name); if (file) fileHashes[name] = hashContent(file.content); });
+    const fileContents: Record<string, string> = {};
+    allFileNames.forEach(name => { 
+      const file = files.find(f => f.name === name); 
+      if (file) {
+        fileHashes[name] = hashContent(file.content);
+        fileContents[name] = file.content;
+      }
+    });
     const lastVersion = existingVersions.sort((a, b) => b.version - a.version)[0];
     const changedFiles = lastVersion ? Object.keys(fileHashes).filter(name => fileHashes[name] !== lastVersion.fileHashes?.[name]) : allFileNames;
 
-    const newVersion: StrategyVersion = { id: `ver_${Date.now()}`, strategyId: strategy.id, version: nextVersion, snapshot: { ...strategy }, timestamp: Date.now(), message: versionMessage, fileHashes, changedFiles };
+    const newVersion: StrategyVersion = { 
+      id: `ver_${Date.now()}`, 
+      strategyId: strategy.id, 
+      version: nextVersion, 
+      snapshot: { ...strategy }, 
+      timestamp: Date.now(), 
+      message: versionMessage, 
+      fileHashes, 
+      changedFiles,
+      fileContents,
+      linkedFiles: allFileNames,
+    };
     setStrategyVersions(prev => [...prev, newVersion]);
     setStrategies(prev => prev.map(s => s.id === strategy.id ? { ...s, version: nextVersion } : s));
     setUnsavedChanges(prev => { const u = { ...prev }; delete u[strategy.id]; return u; });
     setVersionMessage('');
     setShowVersionDialog(false);
-    toast.success(`Version ${nextVersion} saved`);
+    toast.success(`Version ${nextVersion} saved (full snapshot)`);
   }, [versionMessage, strategyVersions, files]);
 
-  const handleRestoreVersion = useCallback((version: StrategyVersion) => {
+  const handleRestoreVersion = useCallback((version: StrategyVersion, restoreContents: boolean = false) => {
     setStrategies(prev => prev.map(s => s.id === version.strategyId ? { ...version.snapshot, version: s.version } : s));
-    toast.success(`Restored to version ${version.version}`);
+    
+    if (restoreContents && version.fileContents) {
+      // Restore full file contents - git-like behavior
+      Object.entries(version.fileContents).forEach(([name, content]) => {
+        const file = pythonModuleSystem.getFileByName(name);
+        if (file) {
+          pythonModuleSystem.updateFile(file.id, { content });
+        }
+      });
+      toast.success(`Restored to version ${version.version} (files + links)`);
+    } else {
+      toast.success(`Restored to version ${version.version} (links only)`);
+    }
   }, []);
 
   const getStrategyVersions = useCallback((strategyId: string) => {
@@ -765,9 +810,14 @@ export const StrategyTabV7 = ({ onRunStrategy, isExecuting = false, onNavigateTo
                                   <span className="text-[10px] text-muted-foreground">{new Date(version.timestamp).toLocaleString()}</span>
                                 </div>
                                 <div className="flex items-center gap-1">
-                                  <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => handleRestoreVersion(version)}>
-                                    <RefreshCw className="w-3 h-3" />
+                                  <Button size="sm" variant="outline" className="h-6 text-[10px]" onClick={() => handleRestoreVersion(version, false)}>
+                                    Links Only
                                   </Button>
+                                  {version.fileContents && (
+                                    <Button size="sm" variant="default" className="h-6 text-[10px]" onClick={() => handleRestoreVersion(version, true)}>
+                                      Full Restore
+                                    </Button>
+                                  )}
                                   <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" onClick={() => setStrategyVersions(prev => prev.filter(v => v.id !== version.id))}>
                                     <Trash2 className="w-3 h-3" />
                                   </Button>

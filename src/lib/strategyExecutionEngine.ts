@@ -12,6 +12,25 @@ import { resultsManager, ExecutionResultV2, TransformationStep } from './results
 import { calculateAllMetrics } from './metricsCalculator';
 import { getAvailableOperations } from './operationsRouter';
 
+export interface ExecutionRuntimeOptions {
+  seed?: string;
+  timeout?: number;
+  memoryLimit?: number;
+  budgetOverride?: number | null;
+  verifyAfterStep?: boolean;
+  stepMode?: 'continuous' | 'step' | 'breakpoint' | 'step_by_step' | 'breakpoints';
+  logDetailedMetrics?: boolean;
+  storeFullHistory?: boolean;
+  saveMasksAndParams?: boolean;
+  iterationCount?: number;
+  retryOnFailure?: number;
+  operationWhitelist?: string[];
+  operationBlacklist?: string[];
+  maxWorkers?: number;
+  enableParallel?: boolean;
+  breakpoints?: any[];
+}
+
 export interface StepResult {
   stepIndex: number;
   stepType: 'scheduler' | 'algorithm' | 'scoring' | 'policy';
@@ -117,7 +136,8 @@ class StrategyExecutionEngine {
    */
   async executeStrategy(
     strategy: StrategyConfig,
-    sourceFileId: string
+    sourceFileId: string,
+    options?: ExecutionRuntimeOptions
   ): Promise<ExecutionPipelineResult> {
     if (this.isRunning) {
       throw new Error('An execution is already in progress');
@@ -151,6 +171,14 @@ class StrategyExecutionEngine {
         throw new Error('Source file is empty');
       }
 
+      // Apply runtime options
+      const runtimeBudget = options?.budgetOverride ?? DEFAULT_SCORING_CONFIG.initialBudget;
+      currentBudget = runtimeBudget;
+      
+      // Set up timeout if specified
+      const timeoutMs = (options?.timeout ?? 300) * 1000;
+      const executionDeadline = Date.now() + timeoutMs;
+
       const initialBits = currentBits;
       const initialMetricsResult = calculateAllMetrics(initialBits);
       const initialMetrics = initialMetricsResult.metrics;
@@ -177,6 +205,11 @@ class StrategyExecutionEngine {
       // Step 2: Run each Algorithm
       let stepIndex = 1;
       for (const algoFileName of strategy.algorithmFiles) {
+        // Check timeout
+        if (Date.now() > executionDeadline) {
+          throw new Error(`Execution timed out after ${options?.timeout ?? 300}s`);
+        }
+        
         this.notify(null, `running algorithm: ${algoFileName}`);
         
         const algoFile = pythonModuleSystem.getFileByName(algoFileName);

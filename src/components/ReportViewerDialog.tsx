@@ -21,14 +21,25 @@ type ReportType = 'verification' | 'transformation' | 'issues' | 'test' | 'repor
 
 function detectReportType(data: any): ReportType {
   if (!data || typeof data !== 'object') return 'unknown';
+  // Player report types (from playerReportGenerator): type is 'verification', 'transformation', 'issues'
+  if (data.type === 'verification') return 'verification';
+  if (data.type === 'transformation') return 'transformation';
+  if (data.type === 'issues') return 'issues';
+  // Prefixed types
   if (data.type === 'player-verification') return 'verification';
   if (data.type === 'player-transformation') return 'transformation';
   if (data.type === 'player-issues') return 'issues';
+  // Test report types
   if (data.type === 'report') return 'test';
   if (data.type === 'failures') return 'failures';
+  // Nested data detection (player reports wrap data under `data`)
+  if (data.data?.stepVerifications) return 'verification';
+  if (data.data?.steps) return 'transformation';
+  if (data.data?.issues) return 'issues';
+  // Flat detection
   if (data.byCategory) return 'test';
   if (data.stepResults) return 'verification';
-  if (data.steps) return 'transformation';
+  if (data.steps && data.totalCost !== undefined) return 'transformation';
   return 'unknown';
 }
 
@@ -53,8 +64,10 @@ const typeColors: Record<ReportType, string> = {
 };
 
 function VerificationView({ data }: { data: any }) {
-  const results = data.stepResults || [];
-  const passed = results.filter((r: any) => r.passed).length;
+  // Support nested data (player reports) and flat data
+  const reportData = data.data || data;
+  const results = reportData.stepVerifications || reportData.stepResults || [];
+  const passed = results.filter((r: any) => r.passed || r.verified).length;
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-3 gap-3">
@@ -71,45 +84,66 @@ function VerificationView({ data }: { data: any }) {
           <div className="text-xs text-muted-foreground">Total Steps</div>
         </CardContent></Card>
       </div>
-      {data.overallPassed !== undefined && (
-        <Badge className={data.overallPassed ? 'bg-green-500/20 text-green-500' : 'bg-destructive/20 text-destructive'}>
-          {data.overallPassed ? 'VERIFIED' : 'FAILED'}
-        </Badge>
+      {(reportData.overallPassed !== undefined || data.strategyName) && (
+        <div className="flex items-center gap-2">
+          {reportData.overallPassed !== undefined && (
+            <Badge className={reportData.overallPassed ? 'bg-green-500/20 text-green-500' : 'bg-destructive/20 text-destructive'}>
+              {reportData.overallPassed ? 'VERIFIED' : 'FAILED'}
+            </Badge>
+          )}
+          {data.strategyName && <Badge variant="outline">{data.strategyName}</Badge>}
+        </div>
       )}
-      <div className="space-y-1">
-        {results.map((r: any, i: number) => (
-          <div key={i} className="flex items-center gap-2 text-xs py-1 px-2 rounded hover:bg-muted/50">
-            {r.passed ? <CheckCircle className="w-3 h-3 text-green-500 shrink-0" /> : <XCircle className="w-3 h-3 text-destructive shrink-0" />}
-            <span className="font-mono">Step {r.stepIndex ?? i}</span>
-            <span className="text-muted-foreground">{r.operation}</span>
-            {r.mismatchCount > 0 && <Badge variant="destructive" className="text-[10px] ml-auto">{r.mismatchCount} mismatches</Badge>}
-          </div>
-        ))}
-      </div>
+      <ScrollArea className="h-[300px]">
+        <div className="space-y-1">
+          {results.map((r: any, i: number) => (
+            <div key={i} className="flex items-center gap-2 text-xs py-1 px-2 rounded hover:bg-muted/50">
+              {(r.passed || r.verified) ? <CheckCircle className="w-3 h-3 text-green-500 shrink-0" /> : <XCircle className="w-3 h-3 text-destructive shrink-0" />}
+              <span className="font-mono">Step {r.stepIndex ?? r.index ?? i}</span>
+              <span className="text-muted-foreground">{r.operation}</span>
+              {(r.mismatchCount > 0 || r.verificationNote) && (
+                <Badge variant="destructive" className="text-[10px] ml-auto">
+                  {r.mismatchCount > 0 ? `${r.mismatchCount} mismatches` : r.verificationNote}
+                </Badge>
+              )}
+              {r.hasSeed && <Badge variant="outline" className="text-[9px]">seed</Badge>}
+              {r.hasMask && <Badge variant="outline" className="text-[9px]">mask</Badge>}
+            </div>
+          ))}
+        </div>
+      </ScrollArea>
     </div>
   );
 }
 
 function TransformationView({ data }: { data: any }) {
-  const steps = data.steps || [];
+  const reportData = data.data || data;
+  const steps = reportData.steps || [];
+  const totalCost = reportData.totalCost ?? steps.reduce((s: number, st: any) => s + (st.cost || 0), 0);
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-4 gap-3">
         <Card><CardContent className="p-3 text-center"><div className="text-2xl font-bold">{steps.length}</div><div className="text-xs text-muted-foreground">Steps</div></CardContent></Card>
-        <Card><CardContent className="p-3 text-center"><div className="text-2xl font-bold">{data.totalBitsChanged?.toLocaleString() ?? '—'}</div><div className="text-xs text-muted-foreground">Bits Changed</div></CardContent></Card>
-        <Card><CardContent className="p-3 text-center"><div className="text-2xl font-bold">{data.totalCost ?? '—'}</div><div className="text-xs text-muted-foreground">Total Cost</div></CardContent></Card>
-        <Card><CardContent className="p-3 text-center"><div className="text-2xl font-bold">{data.totalDurationMs ? `${(data.totalDurationMs / 1000).toFixed(1)}s` : '—'}</div><div className="text-xs text-muted-foreground">Duration</div></CardContent></Card>
+        <Card><CardContent className="p-3 text-center"><div className="text-2xl font-bold">{steps.reduce((s: number, st: any) => s + (st.bitsChanged || 0), 0).toLocaleString()}</div><div className="text-xs text-muted-foreground">Bits Changed</div></CardContent></Card>
+        <Card><CardContent className="p-3 text-center"><div className="text-2xl font-bold">{totalCost}</div><div className="text-xs text-muted-foreground">Total Cost</div></CardContent></Card>
+        <Card><CardContent className="p-3 text-center"><div className="text-2xl font-bold">{reportData.totalDuration ? `${(reportData.totalDuration / 1000).toFixed(1)}s` : '—'}</div><div className="text-xs text-muted-foreground">Duration</div></CardContent></Card>
       </div>
-      <div className="space-y-1">
-        {steps.map((s: any, i: number) => (
-          <div key={i} className="flex items-center gap-2 text-xs py-1 px-2 rounded hover:bg-muted/50">
-            <span className="font-mono w-8 text-muted-foreground">#{i}</span>
-            <Badge variant="outline" className="text-[10px]">{s.operation}</Badge>
-            <span className="text-muted-foreground">{s.bitsChanged} bits changed</span>
-            <span className="ml-auto text-muted-foreground">cost: {s.cost}</span>
-          </div>
-        ))}
-      </div>
+      {data.strategyName && <Badge variant="outline">{data.strategyName}</Badge>}
+      <ScrollArea className="h-[300px]">
+        <div className="space-y-1">
+          {steps.map((s: any, i: number) => (
+            <div key={i} className="flex items-center gap-2 text-xs py-1 px-2 rounded hover:bg-muted/50">
+              <span className="font-mono w-8 text-muted-foreground">#{s.index ?? i}</span>
+              <Badge variant="outline" className="text-[10px]">{s.operation}</Badge>
+              <span className="text-muted-foreground">{s.bitsChanged || 0} bits changed</span>
+              {s.params && s.params.length > 0 && (
+                <Badge variant="secondary" className="text-[9px]">{s.params.length} params</Badge>
+              )}
+              <span className="ml-auto text-muted-foreground">cost: {s.cost || 0}</span>
+            </div>
+          ))}
+        </div>
+      </ScrollArea>
     </div>
   );
 }
@@ -148,20 +182,30 @@ function TestReportView({ data }: { data: any }) {
         <Card><CardContent className="p-3 text-center"><div className="text-2xl font-bold">{summary.totalTests ?? (summary.totalPassed ?? 0) + (summary.totalFailed ?? 0)}</div><div className="text-xs text-muted-foreground">Total</div></CardContent></Card>
       </div>
       {failures.length > 0 && (
-        <div className="space-y-1">
-          <h4 className="text-sm font-semibold text-destructive">Failures ({failures.length})</h4>
-          {failures.map((f: any, i: number) => (
-            <Card key={i} className="border-destructive/30"><CardContent className="p-2 text-xs">
-              <div className="font-medium">{f.name || f.id}</div>
-              {f.expected !== undefined && (
-                <div className="flex gap-4 font-mono text-[10px] mt-1">
-                  <span><span className="text-muted-foreground">Expected: </span><span className="text-green-600">{String(f.expected).slice(0, 40)}</span></span>
-                  <span><span className="text-muted-foreground">Actual: </span><span className="text-destructive">{String(f.actual).slice(0, 40)}</span></span>
-                </div>
-              )}
-            </CardContent></Card>
-          ))}
-        </div>
+        <ScrollArea className="h-[300px]">
+          <div className="space-y-1">
+            <h4 className="text-sm font-semibold text-destructive">Failures ({failures.length})</h4>
+            {failures.map((f: any, i: number) => (
+              <Card key={i} className="border-destructive/30"><CardContent className="p-2 text-xs">
+                <div className="font-medium">{f.name || f.id}</div>
+                {f.expected !== undefined && (
+                  <div className="mt-1 space-y-1">
+                    <div className="font-mono text-[10px]">
+                      <span className="text-muted-foreground">Expected: </span>
+                      <span className="text-green-600 break-all">{String(f.expected)}</span>
+                    </div>
+                    <div className="font-mono text-[10px]">
+                      <span className="text-muted-foreground">Actual: </span>
+                      <span className="text-destructive break-all">{String(f.actual)}</span>
+                    </div>
+                  </div>
+                )}
+                {f.message && <p className="text-[10px] text-muted-foreground mt-1">{f.message}</p>}
+                {f.description && <p className="text-[10px] text-muted-foreground mt-1">{f.description}</p>}
+              </CardContent></Card>
+            ))}
+          </div>
+        </ScrollArea>
       )}
     </div>
   );
