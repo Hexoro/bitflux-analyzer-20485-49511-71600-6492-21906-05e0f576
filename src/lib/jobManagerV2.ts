@@ -50,7 +50,7 @@ export interface ETAEstimate {
 
 export interface JobExecutionOptions {
   seed?: string;
-  stepMode?: 'continuous' | 'step_by_step' | 'breakpoints';
+  stepMode?: 'continuous' | 'step_by_step' | 'step' | 'breakpoints' | 'breakpoint';
   verifyAfterStep?: boolean;
   saveMasksAndParams?: boolean;
   logDetailedMetrics?: boolean;
@@ -634,10 +634,26 @@ class JobManagerV2 {
         this.notifyListeners();
 
         try {
-          // Real strategy execution using strategyExecutionEngine
+          // Real strategy execution using strategyExecutionEngine with options
           const pipelineResult = await strategyExecutionEngine.executeStrategy(
             strategy,
-            job.dataFileId
+            job.dataFileId,
+            job.executionOptions ? {
+              seed: job.executionOptions.seed,
+              timeout: job.executionOptions.timeout,
+              memoryLimit: job.executionOptions.memoryLimit,
+              budgetOverride: job.executionOptions.budgetOverride,
+              verifyAfterStep: job.executionOptions.verifyAfterStep,
+              stepMode: job.executionOptions.stepMode,
+              logDetailedMetrics: job.executionOptions.logDetailedMetrics,
+              storeFullHistory: job.executionOptions.storeFullHistory,
+              saveMasksAndParams: job.executionOptions.saveMasksAndParams,
+              maxWorkers: job.executionOptions.maxWorkers,
+              iterationCount: job.executionOptions.iterationCount,
+              retryOnFailure: job.executionOptions.retryOnFailure,
+              operationWhitelist: job.executionOptions.operationWhitelist,
+              operationBlacklist: job.executionOptions.operationBlacklist,
+            } : undefined
           );
 
           // Convert to JobExecutionResult

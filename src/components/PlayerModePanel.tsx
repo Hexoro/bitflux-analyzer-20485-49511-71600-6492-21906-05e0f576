@@ -194,6 +194,20 @@ export const PlayerModePanel = ({ onExitPlayer, selectedResultId }: PlayerModePa
 
       const metricsResult = calculateAllMetrics(afterBits);
 
+      // Count segment-level changes
+      const segmentBefore = originalStep.beforeBits || beforeBits;
+      const segmentAfter = originalStep.afterBits || afterBits;
+      let segmentBitsChanged = 0;
+      for (let j = 0; j < Math.min(segmentBefore.length, segmentAfter.length); j++) {
+        if (segmentBefore[j] !== segmentAfter[j]) segmentBitsChanged++;
+      }
+      
+      // Count full-file changes
+      let fullBitsChanged = 0;
+      for (let j = 0; j < Math.min(beforeBits.length, afterBits.length); j++) {
+        if (beforeBits[j] !== afterBits[j]) fullBitsChanged++;
+      }
+
       steps.push({
         ...originalStep,
         stepIndex: i,
@@ -204,9 +218,15 @@ export const PlayerModePanel = ({ onExitPlayer, selectedResultId }: PlayerModePa
         cumulativeBits: afterBits,
         bitsLength: afterBits.length,
         executionError,
-        verified: storedAfter ? true : executionMatches,
-        verificationNote: storedAfter && !executionMatches ? 'Re-execution mismatch (stored state used)' : undefined,
+        // Fix: verified must reflect actual re-execution match, not auto-true
+        verified: executionMatches,
+        verificationNote: !executionMatches 
+          ? `Re-execution mismatch${storedAfter ? ' (stored state used for playback)' : ''}` 
+          : undefined,
         storedAfterBits: storedAfter,
+        segmentBitsChanged,
+        fullBitsChanged,
+        isSegmentOnly: segmentBitsChanged > 0 && fullBitsChanged === 0,
       });
 
       currentBits = afterBits;
