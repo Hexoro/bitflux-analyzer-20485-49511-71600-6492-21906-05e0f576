@@ -33,12 +33,15 @@ export interface TransformationRecord {
   afterBits: string;
   bitRanges: { start: number; end: number }[];
   bitsChanged: number;
+  segmentBitsChanged: number;
   cost: number;
   duration: number;
   // Cumulative state for Player reconstruction
   cumulativeBits: string;
   // Metrics snapshot after this operation
   metricsSnapshot: Record<string, number>;
+  // Whether this was a segment-only operation (didn't modify full file state)
+  segmentOnly: boolean;
 }
 
 export interface PythonExecutionResult {
@@ -276,6 +279,8 @@ except SyntaxError as e:
               // Persist the *actual* params used by the router (critical for exact Player replay)
               const actualParams = result.params;
               
+              const segmentBitsChanged = this.countChangedBits(targetBits, result.bits);
+              
               transformations.push({
                 operation: opName,
                 params: actualParams,
@@ -287,10 +292,12 @@ except SyntaxError as e:
                   ? [{ start: rangeStart, end: rangeEnd }]
                   : [{ start: 0, end: targetBits.length }],
                 bitsChanged,
+                segmentBitsChanged,
                 cost: opCost,
                 duration: performance.now() - startTime,
                 cumulativeBits: currentBits,
                 metricsSnapshot: metricsResult.metrics,
+                segmentOnly: !isFullOperation,
               });
               
               return result.bits;
@@ -328,10 +335,12 @@ except SyntaxError as e:
                 afterBits: result.bits,
                 bitRanges: [{ start, end }],
                 bitsChanged,
+                segmentBitsChanged: bitsChanged,
                 cost: opCost,
                 duration: performance.now() - startTime,
                 cumulativeBits: currentBits,
                 metricsSnapshot: metricsResult.metrics,
+                segmentOnly: false,
               });
               
               return result.bits;
@@ -424,72 +433,119 @@ except SyntaxError as e:
    */
   private fallbackExecution(pythonCode: string, context: PythonContext, startTime: number): PythonExecutionResult {
     const bridgeObj = this.createBitwiseApiBridge(context);
-    const logs: string[] = ['[FALLBACK MODE] Pyodide unavailable, using limited JS execution'];
+    const logs: string[] = ['[FALLBACK MODE] Pyodide unavailable, using enhanced JS execution'];
     
     try {
-      // Parse simple commands from the Python code
-      const lines = pythonCode.split('\n').filter(l => l.trim() && !l.trim().startsWith('#'));
+      const lines = pythonCode.split('\n');
       
-      // Variable tracker for resolving variable-based apply_operation calls
-      const varTracker: Record<string, string> = {};
-      // Track list/array variables for loop iteration
-      const listTracker: Record<string, string[]> = {};
-      // Track dict variables for param lookups
-      const dictTracker: Record<string, Record<string, any>> = {};
-      // Track current loop context
-      let loopVar = '';
-      let loopItems: string[] = [];
-      let loopBody: string[] = [];
-      let inLoop = false;
-      let loopIndent = 0;
+      // Variable tracker
+      const vars: Record<string, any> = {};
+      // List tracker
+      const lists: Record<string, any[]> = {};
+      // Dict tracker
+      const dicts: Record<string, Record<string, any>> = {};
+      // Function definitions
+      const funcDefs: Record<string, { params: string[]; bodyStart: number; bodyEnd: number }> = {};
       
-      // First pass: collect variable assignments, dicts, and lists
-      for (const line of lines) {
-        const trimmed = line.trim();
-        
-        // Track simple variable assignments: var = 'value'
-        const assignMatch = trimmed.match(/^(\w+)\s*=\s*["'](\w+)["']\s*$/);
-        if (assignMatch) {
-          varTracker[assignMatch[1]] = assignMatch[2];
-          continue;
-        }
-        
-        // Track list assignments: var = ['A', 'B', 'C'] or operations = [...]
-        const listMatch = trimmed.match(/^(\w+)\s*=\s*\[(.*)\]\s*$/);
-        if (listMatch) {
-          const items = listMatch[2].match(/["'](\w+)["']/g);
-          if (items) {
-            listTracker[listMatch[1]] = items.map(i => i.replace(/["']/g, ''));
-          }
-        }
-        
-        // Track dict assignments: var = {'key': 'val', ...}  
-        const dictMatch = trimmed.match(/^(\w+)\s*=\s*(\{.*\})\s*$/);
-        if (dictMatch) {
-          try {
-            const jsonStr = dictMatch[2]
-              .replace(/'/g, '"')
-              .replace(/True/g, 'true')
-              .replace(/False/g, 'false')
-              .replace(/None/g, 'null');
-            dictTracker[dictMatch[1]] = JSON.parse(jsonStr);
-          } catch { /* skip unparseable dicts */ }
-        }
-      }
+      // Pre-populate known variables
+      vars['bits'] = context.bits;
+      vars['budget'] = context.budget;
+      lists['operations'] = [...context.operations];
+      lists['OPERATIONS'] = [...context.operations];
       
-      // Helper: resolve a value that might be a variable name or a literal
-      const resolveValue = (val: string): string => {
-        const unquoted = val.trim().replace(/^["']|["']$/g, '');
-        return varTracker[unquoted] || unquoted;
+      // Helper: get indentation level
+      const getIndent = (line: string): number => {
+        const match = line.match(/^(\s*)/);
+        return match ? match[1].length : 0;
       };
       
-      // Helper: resolve params that might be a variable, dict literal, or dict.get() call
+      // Helper: resolve a value
+      const resolveValue = (val: string): any => {
+        const trimmed = val.trim();
+        // String literal
+        if ((trimmed.startsWith("'") && trimmed.endsWith("'")) || (trimmed.startsWith('"') && trimmed.endsWith('"'))) {
+          return trimmed.slice(1, -1);
+        }
+        // Number
+        if (/^\d+(\.\d+)?$/.test(trimmed)) return parseFloat(trimmed);
+        // Boolean
+        if (trimmed === 'True') return true;
+        if (trimmed === 'False') return false;
+        if (trimmed === 'None') return null;
+        // Variable
+        if (vars[trimmed] !== undefined) return vars[trimmed];
+        // len() call
+        const lenMatch = trimmed.match(/^len\((\w+)\)$/);
+        if (lenMatch) {
+          const v = resolveValue(lenMatch[1]);
+          if (typeof v === 'string') return v.length;
+          if (Array.isArray(v)) return v.length;
+          if (lists[lenMatch[1]]) return lists[lenMatch[1]].length;
+          return 0;
+        }
+        // get_bits()
+        if (trimmed === 'get_bits()' || trimmed === 'bitwise_api.get_bits()') return bridgeObj.bridge.get_bits();
+        // get_available_operations()
+        if (trimmed.includes('get_available_operations()')) return context.operations;
+        // get_available_metrics()
+        if (trimmed.includes('get_available_metrics()')) return bridgeObj.bridge.get_available_metrics();
+        // get_budget()
+        if (trimmed.includes('get_budget()')) return bridgeObj.bridge.get_budget();
+        // get_bits_length()
+        if (trimmed.includes('get_bits_length()')) return bridgeObj.bridge.get_bits_length();
+        // list(x)[:N] pattern
+        const listSliceMatch = trimmed.match(/^list\((\w+)\)\s*\[\s*:(\d+)\s*\]$/);
+        if (listSliceMatch) {
+          const source = lists[listSliceMatch[1]] || (vars[listSliceMatch[1]] as any[]) || [];
+          return source.slice(0, parseInt(listSliceMatch[2]));
+        }
+        // list(x) pattern
+        const listWrapMatch = trimmed.match(/^list\((\w+)\)$/);
+        if (listWrapMatch) {
+          const source = lists[listWrapMatch[1]] || vars[listWrapMatch[1]];
+          return Array.isArray(source) ? [...source] : [];
+        }
+        // sorted(x)
+        const sortedMatch = trimmed.match(/^sorted\((\w+)\)$/);
+        if (sortedMatch) {
+          const source = lists[sortedMatch[1]] || vars[sortedMatch[1]] || [];
+          return [...(Array.isArray(source) ? source : [])].sort();
+        }
+        // x[:N] slice on variable
+        const varSliceMatch = trimmed.match(/^(\w+)\s*\[\s*(?:(\d+))?\s*:\s*(?:(\d+))?\s*\]$/);
+        if (varSliceMatch) {
+          const v = vars[varSliceMatch[1]] || lists[varSliceMatch[1]];
+          const start = varSliceMatch[2] ? parseInt(varSliceMatch[2]) : 0;
+          const end = varSliceMatch[3] ? parseInt(varSliceMatch[3]) : undefined;
+          if (typeof v === 'string') return v.slice(start, end);
+          if (Array.isArray(v)) return v.slice(start, end);
+        }
+        // dict.get(key, default)
+        const getMatch = trimmed.match(/^(\w+)\.get\s*\(\s*(.+?)\s*(?:,\s*(.+))?\s*\)$/);
+        if (getMatch) {
+          const d = dicts[getMatch[1]] || (vars[getMatch[1]] as Record<string, any>);
+          const key = resolveValue(getMatch[2]);
+          if (d && typeof d === 'object' && d[key] !== undefined) return d[key];
+          return getMatch[3] ? resolveValue(getMatch[3]) : undefined;
+        }
+        // x in y
+        const inMatch = trimmed.match(/^(.+)\s+in\s+(\w+)$/);
+        if (inMatch) {
+          const item = resolveValue(inMatch[1]);
+          const container = lists[inMatch[2]] || vars[inMatch[2]];
+          if (Array.isArray(container)) return container.includes(item);
+          if (typeof container === 'string') return container.includes(String(item));
+          return false;
+        }
+        return trimmed;
+      };
+      
+      // Resolve params from expression
       const resolveParams = (paramsStr: string): Record<string, any> => {
-        const trimmedP = paramsStr.trim();
-        // Dict literal: {'key': 'val'}
-        if (trimmedP.startsWith('{')) {
+        const trimmed = paramsStr.trim();
+        if (trimmed.startsWith('{')) {
           try {
-            const jsonStr = trimmedP
+            const jsonStr = trimmed
               .replace(/'/g, '"')
               .replace(/True/g, 'true')
               .replace(/False/g, 'false')
@@ -497,136 +553,390 @@ except SyntaxError as e:
             return JSON.parse(jsonStr);
           } catch { return {}; }
         }
-        // dict.get(key, {}) pattern
-        const getMatch = trimmedP.match(/(\w+)\.get\s*\(\s*(\w+)\s*(?:,\s*(\{[^}]*\}))?\s*\)/);
+        // dict.get() pattern
+        const getMatch = trimmed.match(/^(\w+)\.get\s*\(\s*(.+?)\s*(?:,\s*(.+))?\s*\)$/);
         if (getMatch) {
-          const dictName = getMatch[1];
-          const key = resolveValue(getMatch[2]);
-          if (dictTracker[dictName] && dictTracker[dictName][key]) {
-            return dictTracker[dictName][key];
-          }
-          if (getMatch[3]) {
-            try { return JSON.parse(getMatch[3].replace(/'/g, '"')); } catch { return {}; }
-          }
-          return {};
+          const result = resolveValue(trimmed);
+          return typeof result === 'object' && result !== null ? result : {};
         }
         // Variable name
-        if (dictTracker[trimmedP]) return dictTracker[trimmedP];
+        if (dicts[trimmed]) return { ...dicts[trimmed] };
+        if (vars[trimmed] && typeof vars[trimmed] === 'object') return { ...vars[trimmed] };
         return {};
       };
       
-      // Execute a single apply_operation call with variable resolution
-      const executeApplyOp = (trimmed: string) => {
-        // Match both quoted and variable-based calls:
-        // apply_operation('NOT', bits, {'mask': '...'})
-        // apply_operation(op_id, bits, params)
-        // bitwise_api.apply_operation(...)
+      // Execute an apply_operation call
+      const executeApplyOp = (trimmed: string): boolean => {
         const opMatch = trimmed.match(/(?:bitwise_api\.)?apply_operation\s*\(\s*([^,)]+)\s*(?:,\s*([^,)]+))?\s*(?:,\s*(.+))?\s*\)/);
         if (opMatch) {
-          const opName = resolveValue(opMatch[1]);
+          const opName = String(resolveValue(opMatch[1]));
+          const bitsArg = opMatch[2] ? String(resolveValue(opMatch[2])) : '';
           const parsedParams = opMatch[3] ? resolveParams(opMatch[3]) : {};
-          bridgeObj.bridge.apply_operation(opName, '', parsedParams);
-          logs.push(`Applied: ${opName}${Object.keys(parsedParams).length > 0 ? ` (params: ${JSON.stringify(parsedParams)})` : ''}`);
+          bridgeObj.bridge.apply_operation(opName, bitsArg, parsedParams);
           return true;
         }
         return false;
       };
       
-      // Second pass: execute
-      for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
-        const rawLine = lines[lineIdx];
-        const trimmed = rawLine.trim();
-        const indent = rawLine.search(/\S/);
-        
-        // Handle loop end (dedent)
-        if (inLoop && indent <= loopIndent && trimmed.length > 0) {
-          // Execute collected loop body for each item
-          for (const item of loopItems) {
-            varTracker[loopVar] = item;
-            for (const bodyLine of loopBody) {
-              const bodyTrimmed = bodyLine.trim();
-              if (bodyTrimmed.includes('apply_operation')) {
-                executeApplyOp(bodyTrimmed);
-              }
+      // Evaluate simple conditions
+      const evaluateCondition = (cond: string): boolean => {
+        const trimmed = cond.trim();
+        // x in y
+        const inMatch = trimmed.match(/^(.+)\s+in\s+(\w+)$/);
+        if (inMatch) {
+          const item = resolveValue(inMatch[1].trim());
+          const container = lists[inMatch[2]] || vars[inMatch[2]];
+          if (Array.isArray(container)) return container.includes(item);
+          return false;
+        }
+        // not x
+        if (trimmed.startsWith('not ')) return !evaluateCondition(trimmed.slice(4));
+        // x > N, x < N, x == N, x >= N, x <= N, x != N
+        const compMatch = trimmed.match(/^(.+?)\s*(>=|<=|!=|==|>|<)\s*(.+)$/);
+        if (compMatch) {
+          const left = resolveValue(compMatch[1].trim());
+          const right = resolveValue(compMatch[3].trim());
+          const a = typeof left === 'number' ? left : parseFloat(String(left));
+          const b = typeof right === 'number' ? right : parseFloat(String(right));
+          switch (compMatch[2]) {
+            case '>': return a > b;
+            case '<': return a < b;
+            case '>=': return a >= b;
+            case '<=': return a <= b;
+            case '==': return left === right || a === b;
+            case '!=': return left !== right;
+          }
+        }
+        // has_operation() / has_metric()
+        if (trimmed.includes('has_operation(')) {
+          const m = trimmed.match(/has_operation\(\s*(.+?)\s*\)/);
+          if (m) return bridgeObj.bridge.has_operation(String(resolveValue(m[1])));
+        }
+        if (trimmed.includes('has_metric(')) {
+          const m = trimmed.match(/has_metric\(\s*(.+?)\s*\)/);
+          if (m) return bridgeObj.bridge.has_metric(String(resolveValue(m[1])));
+        }
+        // Truthy check
+        const v = resolveValue(trimmed);
+        return !!v;
+      };
+      
+      // First pass: find function definitions
+      for (let i = 0; i < lines.length; i++) {
+        const trimmed = lines[i].trim();
+        const defMatch = trimmed.match(/^def\s+(\w+)\s*\(([^)]*)\)\s*:/);
+        if (defMatch) {
+          const funcName = defMatch[1];
+          const params = defMatch[2].split(',').map(p => p.trim().split('=')[0].trim()).filter(Boolean);
+          const bodyIndent = getIndent(lines[i]) + 4;
+          let bodyEnd = i;
+          for (let j = i + 1; j < lines.length; j++) {
+            const lineIndent = getIndent(lines[j]);
+            if (lines[j].trim().length === 0) continue;
+            if (lineIndent >= bodyIndent) {
+              bodyEnd = j;
+            } else {
+              break;
             }
           }
-          inLoop = false;
-          loopBody = [];
-        }
-        
-        // Collect loop body lines
-        if (inLoop) {
-          loopBody.push(rawLine);
-          continue;
-        }
-        
-        // Detect for loops: for var in list_var:
-        const forMatch = trimmed.match(/^for\s+(\w+)\s+in\s+(\w+)\s*:/);
-        if (forMatch) {
-          loopVar = forMatch[1];
-          const listName = forMatch[2];
-          loopItems = listTracker[listName] || [];
-          // Also check if it's a direct list of available operations
-          if (loopItems.length === 0 && listName === 'operations') {
-            loopItems = context.operations;
-          }
-          inLoop = true;
-          loopIndent = indent;
-          loopBody = [];
-          continue;
-        }
-        
-        // Handle print statements
-        if (trimmed.startsWith('print(')) {
-          const match = trimmed.match(/print\(["'](.*)["']\)/);
-          if (match) {
-            logs.push(match[1]);
-          } else if (trimmed.includes('get_bits()')) {
-            logs.push(`Bits: ${bridgeObj.bridge.get_bits().slice(0, 64)}...`);
-          }
-          continue;
-        }
-        
-        // Handle apply_operation calls (both quoted and variable-based)
-        if (trimmed.includes('apply_operation')) {
-          if (executeApplyOp(trimmed)) continue;
-        }
-        
-        // Handle apply_operation_range calls
-        const rangeMatch = trimmed.match(/(?:bitwise_api\.)?apply_operation_range\s*\(\s*["']?(\w+)["']?\s*,\s*(\d+)\s*,\s*(\d+)/);
-        if (rangeMatch) {
-          const opName = resolveValue(rangeMatch[1]);
-          bridgeObj.bridge.apply_operation_range(opName, parseInt(rangeMatch[2]), parseInt(rangeMatch[3]));
-          logs.push(`Applied: ${opName} on [${rangeMatch[2]}:${rangeMatch[3]}]`);
-          continue;
-        }
-        
-        // Handle variable assignments (second pass updates)
-        const assignMatch = trimmed.match(/^(\w+)\s*=\s*["'](\w+)["']\s*$/);
-        if (assignMatch) {
-          varTracker[assignMatch[1]] = assignMatch[2];
-          continue;
-        }
-        
-        // Handle log calls
-        const logMatch = trimmed.match(/(?:bitwise_api\.)?log\s*\(\s*["'](.*)["']\s*\)/);
-        if (logMatch) {
-          logs.push(logMatch[1]);
-          continue;
+          funcDefs[funcName] = { params, bodyStart: i + 1, bodyEnd };
         }
       }
       
-      // Handle trailing loop body (loop at end of file)
-      if (inLoop && loopBody.length > 0) {
-        for (const item of loopItems) {
-          varTracker[loopVar] = item;
-          for (const bodyLine of loopBody) {
-            const bodyTrimmed = bodyLine.trim();
-            if (bodyTrimmed.includes('apply_operation')) {
-              executeApplyOp(bodyTrimmed);
-            }
+      // First pass: collect variable/list/dict assignments
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (trimmed.startsWith('#') || trimmed.startsWith('def ') || trimmed.startsWith('import ') || trimmed.startsWith('from ')) continue;
+        
+        // Simple assignment: var = 'value'
+        const strAssign = trimmed.match(/^(\w+)\s*=\s*["'](.+?)["']\s*$/);
+        if (strAssign) { vars[strAssign[1]] = strAssign[2]; continue; }
+        
+        // Number assignment: var = 123
+        const numAssign = trimmed.match(/^(\w+)\s*=\s*(\d+(?:\.\d+)?)\s*$/);
+        if (numAssign) { vars[numAssign[1]] = parseFloat(numAssign[2]); continue; }
+        
+        // List assignment: var = [...]
+        const listMatch = trimmed.match(/^(\w+)\s*=\s*\[(.+)\]\s*$/);
+        if (listMatch) {
+          const items = listMatch[2].match(/["'](\w+)["']/g);
+          if (items) lists[listMatch[1]] = items.map(i => i.replace(/["']/g, ''));
+          continue;
+        }
+        
+        // List from function: var = get_available_operations()
+        if (trimmed.match(/^(\w+)\s*=\s*(?:bitwise_api\.)?get_available_operations\(\)/)) {
+          const name = trimmed.match(/^(\w+)/)?.[1];
+          if (name) lists[name] = [...context.operations];
+          continue;
+        }
+        
+        // Dict assignment: var = {...}
+        const dictMatch = trimmed.match(/^(\w+)\s*=\s*(\{.*\})\s*$/);
+        if (dictMatch) {
+          try {
+            const jsonStr = dictMatch[2]
+              .replace(/'/g, '"').replace(/True/g, 'true').replace(/False/g, 'false').replace(/None/g, 'null');
+            dicts[dictMatch[1]] = JSON.parse(jsonStr);
+          } catch { /* skip */ }
+          continue;
+        }
+        
+        // Variable from expression: var = expression
+        const exprAssign = trimmed.match(/^(\w+)\s*=\s*(.+)$/);
+        if (exprAssign && !trimmed.includes('apply_operation') && !trimmed.includes('def ')) {
+          const val = resolveValue(exprAssign[2]);
+          if (Array.isArray(val)) {
+            lists[exprAssign[1]] = val;
+          } else if (typeof val === 'object' && val !== null) {
+            dicts[exprAssign[1]] = val;
+          } else {
+            vars[exprAssign[1]] = val;
           }
         }
+      }
+      
+      // Execute a block of lines (recursive for nested structures)
+      const executeBlock = (startLine: number, endLine: number, blockIndent: number) => {
+        let i = startLine;
+        while (i <= endLine) {
+          const rawLine = lines[i];
+          const trimmed = rawLine.trim();
+          const indent = getIndent(rawLine);
+          
+          // Skip empty, comments, imports, def declarations
+          if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('import ') || trimmed.startsWith('from ') || trimmed.startsWith('def ')) {
+            // Skip function body
+            if (trimmed.startsWith('def ')) {
+              const defName = trimmed.match(/^def\s+(\w+)/)?.[1];
+              if (defName && funcDefs[defName]) {
+                i = funcDefs[defName].bodyEnd + 1;
+                continue;
+              }
+            }
+            i++;
+            continue;
+          }
+          
+          // Handle try/except
+          if (trimmed === 'try:') {
+            const tryIndent = indent;
+            // Find try body end
+            let tryEnd = i;
+            let exceptStart = -1;
+            for (let j = i + 1; j <= endLine; j++) {
+              const jTrimmed = lines[j].trim();
+              const jIndent = getIndent(lines[j]);
+              if (jTrimmed.length === 0) continue;
+              if (jIndent <= tryIndent && (jTrimmed.startsWith('except') || jTrimmed.startsWith('finally'))) {
+                exceptStart = j;
+                break;
+              }
+              if (jIndent <= tryIndent && !jTrimmed.startsWith('except') && !jTrimmed.startsWith('finally')) {
+                break;
+              }
+              tryEnd = j;
+            }
+            // Execute try body
+            try {
+              executeBlock(i + 1, tryEnd, tryIndent + 4);
+            } catch { /* swallow, like Python except: pass */ }
+            // Skip to after except block
+            if (exceptStart >= 0) {
+              let exceptEnd = exceptStart;
+              for (let j = exceptStart + 1; j <= endLine; j++) {
+                if (lines[j].trim().length === 0) continue;
+                if (getIndent(lines[j]) <= tryIndent) break;
+                exceptEnd = j;
+              }
+              i = exceptEnd + 1;
+            } else {
+              i = tryEnd + 1;
+            }
+            continue;
+          }
+          
+          // Handle for loops
+          const forMatch = trimmed.match(/^for\s+(\w+)\s+in\s+(.+)\s*:$/);
+          if (forMatch) {
+            const loopVar = forMatch[1];
+            let loopItemsExpr = forMatch[2].trim();
+            let loopItems: any[] = [];
+            
+            // Resolve loop iterable
+            const resolved = resolveValue(loopItemsExpr);
+            if (Array.isArray(resolved)) {
+              loopItems = resolved;
+            } else if (typeof resolved === 'string' && lists[resolved]) {
+              loopItems = lists[resolved];
+            } else if (lists[loopItemsExpr]) {
+              loopItems = lists[loopItemsExpr];
+            }
+            
+            // Find loop body
+            const loopIndent = indent;
+            let bodyEnd = i;
+            for (let j = i + 1; j <= endLine; j++) {
+              if (lines[j].trim().length === 0) continue;
+              if (getIndent(lines[j]) > loopIndent) {
+                bodyEnd = j;
+              } else {
+                break;
+              }
+            }
+            
+            // Execute loop body for each item
+            for (const item of loopItems) {
+              vars[loopVar] = item;
+              executeBlock(i + 1, bodyEnd, loopIndent + 4);
+            }
+            
+            i = bodyEnd + 1;
+            continue;
+          }
+          
+          // Handle if/elif/else
+          const ifMatch = trimmed.match(/^(if|elif)\s+(.+)\s*:$/);
+          if (ifMatch || trimmed === 'else:') {
+            const condIndent = indent;
+            // Collect if/elif/else chain
+            const branches: { condition: string | null; bodyStart: number; bodyEnd: number }[] = [];
+            let j = i;
+            while (j <= endLine) {
+              const jTrimmed = lines[j].trim();
+              const jIndent = getIndent(lines[j]);
+              if (jIndent !== condIndent) { j++; continue; }
+              
+              const condMatch = jTrimmed.match(/^(if|elif)\s+(.+)\s*:$/);
+              if (condMatch || jTrimmed === 'else:') {
+                const cond = condMatch ? condMatch[2] : null;
+                // Find body end
+                let bEnd = j;
+                for (let k = j + 1; k <= endLine; k++) {
+                  if (lines[k].trim().length === 0) continue;
+                  if (getIndent(lines[k]) > condIndent) {
+                    bEnd = k;
+                  } else {
+                    break;
+                  }
+                }
+                branches.push({ condition: cond, bodyStart: j + 1, bodyEnd: bEnd });
+                j = bEnd + 1;
+                // Check if next line continues the chain
+                if (j <= endLine) {
+                  const nextTrimmed = lines[j]?.trim();
+                  const nextIndent = getIndent(lines[j] || '');
+                  if (nextIndent === condIndent && (nextTrimmed?.startsWith('elif ') || nextTrimmed === 'else:')) {
+                    continue;
+                  }
+                }
+                break;
+              } else {
+                break;
+              }
+            }
+            
+            // Execute first matching branch
+            let executed = false;
+            for (const branch of branches) {
+              if (branch.condition === null) {
+                // else branch
+                if (!executed) {
+                  executeBlock(branch.bodyStart, branch.bodyEnd, condIndent + 4);
+                }
+                break;
+              }
+              if (!executed && evaluateCondition(branch.condition)) {
+                executeBlock(branch.bodyStart, branch.bodyEnd, condIndent + 4);
+                executed = true;
+              }
+            }
+            
+            i = branches.length > 0 ? branches[branches.length - 1].bodyEnd + 1 : i + 1;
+            continue;
+          }
+          
+          // Handle apply_operation
+          if (trimmed.includes('apply_operation')) {
+            // Check for assignment: result = apply_operation(...)
+            const assignOp = trimmed.match(/^(\w+)\s*=\s*(.+apply_operation.+)$/);
+            if (assignOp) {
+              executeApplyOp(assignOp[2]);
+            } else {
+              executeApplyOp(trimmed);
+            }
+            i++;
+            continue;
+          }
+          
+          // Handle apply_operation_range
+          const rangeMatch = trimmed.match(/(?:bitwise_api\.)?apply_operation_range\s*\(\s*(.+?)\s*,\s*(.+?)\s*,\s*(.+?)(?:\s*,\s*(.+))?\s*\)/);
+          if (rangeMatch) {
+            const opName = String(resolveValue(rangeMatch[1]));
+            const rStart = Number(resolveValue(rangeMatch[2]));
+            const rEnd = Number(resolveValue(rangeMatch[3]));
+            bridgeObj.bridge.apply_operation_range(opName, rStart, rEnd);
+            i++;
+            continue;
+          }
+          
+          // Handle print statements
+          if (trimmed.startsWith('print(')) {
+            const strMatch = trimmed.match(/print\(\s*["'](.*)["']\s*\)/);
+            if (strMatch) logs.push(strMatch[1]);
+            else if (trimmed.includes('get_bits()')) logs.push(`Bits: ${bridgeObj.bridge.get_bits().slice(0, 64)}...`);
+            i++;
+            continue;
+          }
+          
+          // Handle log calls
+          const logMatch = trimmed.match(/(?:bitwise_api\.)?log\s*\(\s*(.+)\s*\)/);
+          if (logMatch) {
+            const val = resolveValue(logMatch[1]);
+            logs.push(String(val));
+            i++;
+            continue;
+          }
+          
+          // Handle variable assignments (runtime)
+          const assignMatch = trimmed.match(/^(\w+)\s*=\s*(.+)$/);
+          if (assignMatch && !trimmed.includes('(') || (assignMatch && trimmed.match(/^(\w+)\s*=\s*["'].+["']$/))) {
+            const val = resolveValue(assignMatch[2]);
+            if (Array.isArray(val)) lists[assignMatch[1]] = val;
+            else if (typeof val === 'object' && val !== null) dicts[assignMatch[1]] = val;
+            else vars[assignMatch[1]] = val;
+            i++;
+            continue;
+          }
+          
+          // Handle function calls that we know about
+          const funcCallMatch = trimmed.match(/^(?:(\w+)\s*=\s*)?(\w+)\s*\((.*)?\)\s*$/);
+          if (funcCallMatch && funcDefs[funcCallMatch[2]]) {
+            const funcName = funcCallMatch[2];
+            const def = funcDefs[funcName];
+            // Parse call args
+            const callArgs = funcCallMatch[3] ? funcCallMatch[3].split(',').map(a => resolveValue(a.trim())) : [];
+            // Set params as vars
+            def.params.forEach((p, idx) => {
+              if (idx < callArgs.length) vars[p] = callArgs[idx];
+            });
+            // Execute function body
+            executeBlock(def.bodyStart, def.bodyEnd, getIndent(lines[def.bodyStart]) || 8);
+            i++;
+            continue;
+          }
+          
+          i++;
+        }
+      };
+      
+      // Execute top-level code
+      executeBlock(0, lines.length - 1, 0);
+      
+      // Try to call execute() if defined
+      if (funcDefs['execute']) {
+        const def = funcDefs['execute'];
+        executeBlock(def.bodyStart, def.bodyEnd, getIndent(lines[def.bodyStart]) || 4);
       }
       
       logs.push(`[FALLBACK] Completed with ${bridgeObj.getTransformations().length} operations`);

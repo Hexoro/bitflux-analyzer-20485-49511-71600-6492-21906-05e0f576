@@ -1,10 +1,11 @@
 /**
  * Player Verification - Independent step-by-step verification engine
  * Verifies source + mask/params = expected result independently
+ * V2 - Handles segment-only operations correctly
  */
 
 import { executeOperation, getOperationCost } from './operationsRouter';
-import { hashBits } from './verificationSystem';
+import { hashBits, verifyReplayFromStored } from './verificationSystem';
 import { TransformationStep } from './resultsManager';
 
 export interface IndependentVerificationResult {
@@ -20,6 +21,8 @@ export interface IndependentVerificationResult {
   error?: string;
   expectedHash: string;
   actualHash: string;
+  segmentOnly: boolean;
+  segmentPassed?: boolean;
 }
 
 export interface FullVerificationReport {
@@ -27,6 +30,7 @@ export interface FullVerificationReport {
   totalSteps: number;
   passedSteps: number;
   failedSteps: number;
+  segmentOnlySteps: number;
   incompleteParams: number;
   overallPassed: boolean;
   chainVerified: boolean;
@@ -41,15 +45,37 @@ const MASK_OPS = new Set(['XOR', 'AND', 'OR', 'NAND', 'NOR', 'XNOR']);
 const PARAM_OPS = new Set(['SHL', 'SHR', 'ROL', 'ROR', 'SHUFFLE', 'UNSHUFFLE', 'LFSR']);
 
 /**
+ * Detect if a step is a segment-only operation
+ */
+function isSegmentOnlyStep(step: TransformationStep): boolean {
+  // Explicit flag
+  if ((step as any).segmentOnly) return true;
+  
+  // Heuristic: beforeBits length differs from fullBeforeBits length
+  if (step.beforeBits && step.fullBeforeBits && step.beforeBits.length !== step.fullBeforeBits.length) {
+    return true;
+  }
+  
+  // Heuristic: fullBeforeBits === fullAfterBits but beforeBits !== afterBits
+  if (step.fullBeforeBits && step.fullAfterBits && step.fullBeforeBits === step.fullAfterBits 
+      && step.beforeBits && step.afterBits && step.beforeBits !== step.afterBits) {
+    return true;
+  }
+  
+  return false;
+}
+
+/**
  * Verify a single step independently by re-executing with stored params
+ * For segment-only operations, verifies against the segment, not the full file
  */
 export function verifyStepIndependently(
   beforeBits: string,
   step: TransformationStep,
   stepIndex: number
 ): IndependentVerificationResult {
-  const expectedAfter = step.cumulativeBits || step.fullAfterBits || step.afterBits || '';
   const params = step.params || {};
+  const segmentOnly = isSegmentOnlyStep(step);
   
   // Check param completeness
   const missingParams: string[] = [];
@@ -61,14 +87,51 @@ export function verifyStepIndependently(
   }
 
   try {
-    // Determine input bits
+    if (segmentOnly) {
+      // SEGMENT-ONLY: verify against segment data, not full file
+      const segmentInput = step.beforeBits || beforeBits;
+      const expectedSegmentAfter = step.afterBits || '';
+      
+      const opResult = executeOperation(step.operation, segmentInput, { ...params });
+      const reExecutedSegment = opResult.success ? opResult.bits : segmentInput;
+      
+      // Compare segment results
+      const mismatchPositions: number[] = [];
+      const maxLen = Math.max(reExecutedSegment.length, expectedSegmentAfter.length);
+      for (let i = 0; i < maxLen; i++) {
+        if ((reExecutedSegment[i] || '0') !== (expectedSegmentAfter[i] || '0')) {
+          mismatchPositions.push(i);
+        }
+      }
+      
+      const segmentPassed = mismatchPositions.length === 0;
+      
+      return {
+        stepIndex,
+        operation: step.operation,
+        passed: segmentPassed,
+        expectedBits: expectedSegmentAfter.slice(0, 64) + (expectedSegmentAfter.length > 64 ? '...' : ''),
+        actualBits: reExecutedSegment.slice(0, 64) + (reExecutedSegment.length > 64 ? '...' : ''),
+        mismatchCount: mismatchPositions.length,
+        mismatchPositions: mismatchPositions.slice(0, 100),
+        paramsComplete: missingParams.length === 0,
+        missingParams,
+        expectedHash: hashBits(expectedSegmentAfter),
+        actualHash: hashBits(reExecutedSegment),
+        segmentOnly: true,
+        segmentPassed,
+      };
+    }
+    
+    // FULL FILE: verify against cumulative/full after bits
+    const expectedAfter = step.cumulativeBits || step.fullAfterBits || step.afterBits || '';
     const inputBits = step.fullBeforeBits || beforeBits;
     
-    // Re-execute with stored params
     let reExecutedBits: string;
     const bitRange = step.bitRanges?.[0];
     
-    if (bitRange && bitRange.start !== undefined && bitRange.end !== undefined) {
+    if (bitRange && bitRange.start !== undefined && bitRange.end !== undefined 
+        && !(bitRange.start === 0 && bitRange.end === inputBits.length)) {
       const before = inputBits.slice(0, bitRange.start);
       const target = inputBits.slice(bitRange.start, bitRange.end);
       const after = inputBits.slice(bitRange.end);
@@ -100,21 +163,23 @@ export function verifyStepIndependently(
       missingParams,
       expectedHash: hashBits(expectedAfter),
       actualHash: hashBits(reExecutedBits),
+      segmentOnly: false,
     };
   } catch (e) {
     return {
       stepIndex,
       operation: step.operation,
       passed: false,
-      expectedBits: expectedAfter.slice(0, 64),
+      expectedBits: '',
       actualBits: '',
       mismatchCount: -1,
       mismatchPositions: [],
       paramsComplete: missingParams.length === 0,
       missingParams,
       error: (e as Error).message,
-      expectedHash: hashBits(expectedAfter),
+      expectedHash: 'ERROR',
       actualHash: 'ERROR',
+      segmentOnly,
     };
   }
 }
@@ -130,11 +195,13 @@ export function verifyAllStepsIndependently(
   const stepResults: IndependentVerificationResult[] = [];
   let currentBits = initialBits;
   let allPassed = true;
+  let segmentOnlyCount = 0;
 
   for (let i = 0; i < steps.length; i++) {
     const result = verifyStepIndependently(currentBits, steps[i], i);
     stepResults.push(result);
     if (!result.passed) allPassed = false;
+    if (result.segmentOnly) segmentOnlyCount++;
     
     // Use stored bits for chain continuation (authoritative)
     const storedAfter = steps[i].cumulativeBits || steps[i].fullAfterBits || steps[i].afterBits;
@@ -154,6 +221,7 @@ export function verifyAllStepsIndependently(
     totalSteps: steps.length,
     passedSteps: passedCount,
     failedSteps: failedCount,
+    segmentOnlySteps: segmentOnlyCount,
     incompleteParams: incompleteCount,
     overallPassed: allPassed && chainVerified,
     chainVerified,
@@ -162,8 +230,8 @@ export function verifyAllStepsIndependently(
     reconstructedHash,
     stepResults,
     summary: allPassed && chainVerified
-      ? `All ${steps.length} steps verified independently. Chain hash matches.`
-      : `${failedCount} of ${steps.length} steps failed. ${incompleteCount} with incomplete params. Chain: ${chainVerified ? 'OK' : 'MISMATCH'}`,
+      ? `All ${steps.length} steps verified (${segmentOnlyCount} segment-only). Chain hash matches.`
+      : `${failedCount} of ${steps.length} steps failed. ${segmentOnlyCount} segment-only. ${incompleteCount} incomplete params. Chain: ${chainVerified ? 'OK' : 'MISMATCH'}`,
   };
 }
 

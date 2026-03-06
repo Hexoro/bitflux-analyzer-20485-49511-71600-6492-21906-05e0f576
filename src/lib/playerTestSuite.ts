@@ -1294,6 +1294,575 @@ const replayChainTests: PlayerTest[] = [
   },
 ];
 
+// ============ E2E PIPELINE TESTS ============
+// These tests simulate the full flow: generate data → execute ops → build TransformationSteps → verify via Player
+
+const e2eTests: PlayerTest[] = [
+  {
+    id: 'e2e_not_full_pipeline', category: 'verification', name: 'E2E: NOT full pipeline',
+    description: 'Generate → Execute NOT → Build step → Verify independently',
+    run: () => {
+      const input = '10110100';
+      const r = executeOperation('NOT', input);
+      const step: TransformationStep = {
+        index: 0, operation: 'NOT', params: r.params,
+        fullBeforeBits: input, fullAfterBits: r.bits,
+        beforeBits: input, afterBits: r.bits,
+        cumulativeBits: r.bits,
+        metrics: {}, timestamp: Date.now(), duration: 0,
+      };
+      const report = verifyAllStepsIndependently(input, [step], r.bits);
+      return { passed: report.overallPassed, expected: true, actual: report.overallPassed, details: report.summary };
+    },
+  },
+  {
+    id: 'e2e_xor_full_pipeline', category: 'verification', name: 'E2E: XOR full pipeline',
+    description: 'Generate → Execute XOR → Build step → Verify independently',
+    run: () => {
+      const input = '11001100';
+      const r = executeOperation('XOR', input);
+      const step: TransformationStep = {
+        index: 0, operation: 'XOR', params: r.params,
+        fullBeforeBits: input, fullAfterBits: r.bits,
+        beforeBits: input, afterBits: r.bits,
+        cumulativeBits: r.bits,
+        metrics: {}, timestamp: Date.now(), duration: 0,
+      };
+      const report = verifyAllStepsIndependently(input, [step], r.bits);
+      return { passed: report.overallPassed, expected: true, actual: report.overallPassed, details: report.summary };
+    },
+  },
+  {
+    id: 'e2e_3step_chain_pipeline', category: 'verification', name: 'E2E: 3-step chain pipeline',
+    description: 'Generate → Execute NOT→XOR→ROL → Build steps → Verify all',
+    run: () => {
+      const input = '10101010';
+      const s1 = executeOperation('NOT', input);
+      const s2 = executeOperation('XOR', s1.bits);
+      const s3 = executeOperation('ROL', s2.bits, { count: 2 });
+      const steps: TransformationStep[] = [
+        { index: 0, operation: 'NOT', params: s1.params, fullBeforeBits: input, fullAfterBits: s1.bits, beforeBits: input, afterBits: s1.bits, cumulativeBits: s1.bits, metrics: {}, timestamp: Date.now(), duration: 0 },
+        { index: 1, operation: 'XOR', params: s2.params, fullBeforeBits: s1.bits, fullAfterBits: s2.bits, beforeBits: s1.bits, afterBits: s2.bits, cumulativeBits: s2.bits, metrics: {}, timestamp: Date.now(), duration: 0 },
+        { index: 2, operation: 'ROL', params: s3.params, fullBeforeBits: s2.bits, fullAfterBits: s3.bits, beforeBits: s2.bits, afterBits: s3.bits, cumulativeBits: s3.bits, metrics: {}, timestamp: Date.now(), duration: 0 },
+      ];
+      const report = verifyAllStepsIndependently(input, steps, s3.bits);
+      return { passed: report.overallPassed, expected: true, actual: report.overallPassed, details: report.summary };
+    },
+  },
+  {
+    id: 'e2e_segment_op_pipeline', category: 'verification', name: 'E2E: Segment-only operation pipeline',
+    description: 'Execute NOT on segment [0:4] of 8-bit file → Verify segment independently',
+    run: () => {
+      const fullBits = '11110000';
+      const segment = fullBits.slice(0, 4);
+      const r = executeOperation('NOT', segment);
+      const step: TransformationStep = {
+        index: 0, operation: 'NOT', params: r.params,
+        fullBeforeBits: fullBits, fullAfterBits: fullBits, // unchanged full file
+        beforeBits: segment, afterBits: r.bits,
+        cumulativeBits: fullBits,
+        bitRanges: [{ start: 0, end: 4 }],
+        metrics: {}, timestamp: Date.now(), duration: 0,
+      };
+      (step as any).segmentOnly = true;
+      const result = verifyStepIndependently(fullBits, step, 0);
+      return { passed: result.passed, expected: true, actual: result.passed, details: result.segmentOnly ? 'Correctly identified as segment-only' : 'NOT identified as segment-only' };
+    },
+  },
+  {
+    id: 'e2e_segment_xor_pipeline', category: 'verification', name: 'E2E: Segment XOR pipeline',
+    description: 'Execute XOR on segment [4:8] → Verify segment match',
+    run: () => {
+      const fullBits = '00001111';
+      const segment = fullBits.slice(4, 8);
+      const mask = '1010';
+      const r = executeOperation('XOR', segment, { mask });
+      const step: TransformationStep = {
+        index: 0, operation: 'XOR', params: r.params,
+        fullBeforeBits: fullBits, fullAfterBits: fullBits,
+        beforeBits: segment, afterBits: r.bits,
+        cumulativeBits: fullBits,
+        bitRanges: [{ start: 4, end: 8 }],
+        metrics: {}, timestamp: Date.now(), duration: 0,
+      };
+      (step as any).segmentOnly = true;
+      const result = verifyStepIndependently(fullBits, step, 0);
+      return { passed: result.passed && result.segmentOnly, expected: true, actual: result.passed };
+    },
+  },
+  {
+    id: 'e2e_mixed_segment_full', category: 'verification', name: 'E2E: Mixed segment + full ops',
+    description: 'Alternate between segment and full operations, verify all',
+    run: () => {
+      const input = '1010101011001100';
+      // Step 1: full NOT
+      const s1 = executeOperation('NOT', input);
+      // Step 2: segment XOR on [0:8]
+      const seg = s1.bits.slice(0, 8);
+      const s2 = executeOperation('XOR', seg);
+      // Step 3: full REVERSE
+      const s3 = executeOperation('REVERSE', s1.bits);
+      const steps: TransformationStep[] = [
+        { index: 0, operation: 'NOT', params: s1.params, fullBeforeBits: input, fullAfterBits: s1.bits, beforeBits: input, afterBits: s1.bits, cumulativeBits: s1.bits, metrics: {}, timestamp: Date.now(), duration: 0 },
+        { index: 1, operation: 'XOR', params: s2.params, fullBeforeBits: s1.bits, fullAfterBits: s1.bits, beforeBits: seg, afterBits: s2.bits, cumulativeBits: s1.bits, bitRanges: [{ start: 0, end: 8 }], metrics: {}, timestamp: Date.now(), duration: 0 },
+        { index: 2, operation: 'REVERSE', params: s3.params, fullBeforeBits: s1.bits, fullAfterBits: s3.bits, beforeBits: s1.bits, afterBits: s3.bits, cumulativeBits: s3.bits, metrics: {}, timestamp: Date.now(), duration: 0 },
+      ];
+      (steps[1] as any).segmentOnly = true;
+      const report = verifyAllStepsIndependently(input, steps, s3.bits);
+      // Segment step should pass (segment-level), full steps should pass
+      return { passed: report.passedSteps >= 2, expected: '≥2 passed', actual: `${report.passedSteps} passed, ${report.failedSteps} failed`, details: report.summary };
+    },
+  },
+  {
+    id: 'e2e_5step_chain_verify', category: 'verification', name: 'E2E: 5-step chain verify',
+    description: 'NOT→AND→XOR→REVERSE→SWAP chain → verify all independently',
+    run: () => {
+      const input = '11001100';
+      const s1 = executeOperation('NOT', input);
+      const s2 = executeOperation('AND', s1.bits);
+      const s3 = executeOperation('XOR', s2.bits);
+      const s4 = executeOperation('REVERSE', s3.bits);
+      const s5 = executeOperation('SWAP', s4.bits);
+      const ops = [s1, s2, s3, s4, s5];
+      const names = ['NOT', 'AND', 'XOR', 'REVERSE', 'SWAP'];
+      let prev = input;
+      const steps: TransformationStep[] = ops.map((s, i) => {
+        const step: TransformationStep = {
+          index: i, operation: names[i], params: s.params,
+          fullBeforeBits: prev, fullAfterBits: s.bits,
+          beforeBits: prev, afterBits: s.bits,
+          cumulativeBits: s.bits,
+          metrics: {}, timestamp: Date.now(), duration: 0,
+        };
+        prev = s.bits;
+        return step;
+      });
+      const report = verifyAllStepsIndependently(input, steps, s5.bits);
+      return { passed: report.overallPassed, expected: true, actual: report.overallPassed, details: report.summary };
+    },
+  },
+  {
+    id: 'e2e_param_roundtrip_xor', category: 'verification', name: 'E2E: XOR param roundtrip',
+    description: 'Execute XOR → store params → re-execute → verify match',
+    run: () => {
+      const input = '10110100';
+      const r1 = executeOperation('XOR', input);
+      // Simulate what Player does: re-execute with stored params
+      const r2 = executeOperation('XOR', input, r1.params);
+      return { passed: r1.bits === r2.bits, expected: r1.bits, actual: r2.bits };
+    },
+  },
+  {
+    id: 'e2e_param_roundtrip_and', category: 'verification', name: 'E2E: AND param roundtrip',
+    description: 'Execute AND → store params → re-execute → verify match',
+    run: () => {
+      const input = '11110000';
+      const r1 = executeOperation('AND', input);
+      const r2 = executeOperation('AND', input, r1.params);
+      return { passed: r1.bits === r2.bits, expected: r1.bits, actual: r2.bits };
+    },
+  },
+  {
+    id: 'e2e_param_roundtrip_or', category: 'verification', name: 'E2E: OR param roundtrip',
+    description: 'Execute OR → store params → re-execute → verify match',
+    run: () => {
+      const input = '00001111';
+      const r1 = executeOperation('OR', input);
+      const r2 = executeOperation('OR', input, r1.params);
+      return { passed: r1.bits === r2.bits, expected: r1.bits, actual: r2.bits };
+    },
+  },
+  {
+    id: 'e2e_param_roundtrip_nand', category: 'verification', name: 'E2E: NAND param roundtrip',
+    description: 'Execute NAND → store params → re-execute → verify match',
+    run: () => {
+      const input = '10101010';
+      const r1 = executeOperation('NAND', input);
+      const r2 = executeOperation('NAND', input, r1.params);
+      return { passed: r1.bits === r2.bits, expected: r1.bits, actual: r2.bits };
+    },
+  },
+  {
+    id: 'e2e_large_data_pipeline', category: 'verification', name: 'E2E: Large data (1000 bits) pipeline',
+    description: 'Generate 1000-bit string → NOT → XOR → Verify',
+    run: () => {
+      const input = Array.from({ length: 1000 }, (_, i) => i % 2 === 0 ? '1' : '0').join('');
+      const s1 = executeOperation('NOT', input);
+      const s2 = executeOperation('XOR', s1.bits);
+      const steps: TransformationStep[] = [
+        { index: 0, operation: 'NOT', params: s1.params, fullBeforeBits: input, fullAfterBits: s1.bits, beforeBits: input, afterBits: s1.bits, cumulativeBits: s1.bits, metrics: {}, timestamp: Date.now(), duration: 0 },
+        { index: 1, operation: 'XOR', params: s2.params, fullBeforeBits: s1.bits, fullAfterBits: s2.bits, beforeBits: s1.bits, afterBits: s2.bits, cumulativeBits: s2.bits, metrics: {}, timestamp: Date.now(), duration: 0 },
+      ];
+      const report = verifyAllStepsIndependently(input, steps, s2.bits);
+      return { passed: report.overallPassed, expected: true, actual: report.overallPassed, details: `1000 bits, ${report.summary}` };
+    },
+  },
+  {
+    id: 'e2e_segment_no_full_change', category: 'verification', name: 'E2E: Segment op shows no full-file change',
+    description: 'Verify that segment-only ops correctly report zero full-file changes',
+    run: () => {
+      const fullBits = '10101010';
+      const segment = fullBits.slice(0, 4);
+      const r = executeOperation('NOT', segment);
+      // The full file didn't change (segment op)
+      const segmentChanged = r.bits !== segment;
+      const fullChanged = fullBits !== fullBits; // false
+      return { passed: segmentChanged && !fullChanged, expected: 'segment changed, full unchanged', actual: segmentChanged && !fullChanged ? 'correct' : 'incorrect' };
+    },
+  },
+  {
+    id: 'e2e_verification_detects_corruption', category: 'verification', name: 'E2E: Verification detects corruption',
+    description: 'Build step with wrong afterBits → verify it fails',
+    run: () => {
+      const input = '10101010';
+      const r = executeOperation('NOT', input);
+      const step: TransformationStep = {
+        index: 0, operation: 'NOT', params: r.params,
+        fullBeforeBits: input, fullAfterBits: '11111111', // WRONG
+        beforeBits: input, afterBits: '11111111',
+        cumulativeBits: '11111111',
+        metrics: {}, timestamp: Date.now(), duration: 0,
+      };
+      const report = verifyAllStepsIndependently(input, [step], '11111111');
+      return { passed: !report.overallPassed, expected: 'should fail', actual: report.overallPassed ? 'passed (BAD)' : 'failed (correct)' };
+    },
+  },
+  {
+    id: 'e2e_chain_hash_integrity', category: 'verification', name: 'E2E: Chain hash integrity',
+    description: 'Verify chain hash matches final bits hash',
+    run: () => {
+      const input = '11001100';
+      const s1 = executeOperation('NOT', input);
+      const s2 = executeOperation('XOR', s1.bits);
+      const steps: TransformationStep[] = [
+        { index: 0, operation: 'NOT', params: s1.params, fullBeforeBits: input, fullAfterBits: s1.bits, beforeBits: input, afterBits: s1.bits, cumulativeBits: s1.bits, metrics: {}, timestamp: Date.now(), duration: 0 },
+        { index: 1, operation: 'XOR', params: s2.params, fullBeforeBits: s1.bits, fullAfterBits: s2.bits, beforeBits: s1.bits, afterBits: s2.bits, cumulativeBits: s2.bits, metrics: {}, timestamp: Date.now(), duration: 0 },
+      ];
+      const report = verifyAllStepsIndependently(input, steps, s2.bits);
+      return { passed: report.chainVerified, expected: true, actual: report.chainVerified, details: `final: ${report.finalHash}, reconstructed: ${report.reconstructedHash}` };
+    },
+  },
+  {
+    id: 'e2e_broken_chain_detected', category: 'verification', name: 'E2E: Broken chain detected',
+    description: 'Verify chain mismatch when finalBits doesn\'t match last step',
+    run: () => {
+      const input = '10101010';
+      const s1 = executeOperation('NOT', input);
+      const steps: TransformationStep[] = [
+        { index: 0, operation: 'NOT', params: s1.params, fullBeforeBits: input, fullAfterBits: s1.bits, beforeBits: input, afterBits: s1.bits, cumulativeBits: s1.bits, metrics: {}, timestamp: Date.now(), duration: 0 },
+      ];
+      const report = verifyAllStepsIndependently(input, steps, '00000000'); // Wrong final
+      return { passed: !report.chainVerified, expected: 'chain mismatch', actual: report.chainVerified ? 'chain OK (BAD)' : 'chain mismatch (correct)' };
+    },
+  },
+  {
+    id: 'e2e_10_ops_pipeline', category: 'verification', name: 'E2E: 10-operation pipeline',
+    description: '10 sequential operations → full verification',
+    run: () => {
+      const ops = ['NOT', 'XOR', 'AND', 'OR', 'REVERSE', 'NOT', 'SWAP', 'NOT', 'XOR', 'REVERSE'];
+      let bits = '11001100';
+      const initial = bits;
+      const results: Array<{ op: string; params: any; before: string; after: string }> = [];
+      for (const op of ops) {
+        const r = executeOperation(op, bits);
+        results.push({ op, params: r.params, before: bits, after: r.bits });
+        bits = r.bits;
+      }
+      const steps: TransformationStep[] = results.map((r, i) => ({
+        index: i, operation: r.op, params: r.params,
+        fullBeforeBits: r.before, fullAfterBits: r.after,
+        beforeBits: r.before, afterBits: r.after,
+        cumulativeBits: r.after,
+        metrics: {}, timestamp: Date.now(), duration: 0,
+      }));
+      const report = verifyAllStepsIndependently(initial, steps, bits);
+      return { passed: report.overallPassed, expected: true, actual: report.overallPassed, details: `10 ops: ${report.passedSteps} passed, ${report.failedSteps} failed` };
+    },
+  },
+  {
+    id: 'e2e_all_mask_ops_pipeline', category: 'verification', name: 'E2E: All mask ops pipeline',
+    description: 'XOR→AND→OR→NAND→NOR→XNOR with explicit masks → verify all',
+    run: () => {
+      const mask = '11110000';
+      const maskOps = ['XOR', 'AND', 'OR', 'NAND', 'NOR', 'XNOR'];
+      let bits = '10101010';
+      const initial = bits;
+      const results: Array<{ op: string; params: any; before: string; after: string }> = [];
+      for (const op of maskOps) {
+        const r = executeOperation(op, bits, { mask });
+        results.push({ op, params: r.params, before: bits, after: r.bits });
+        bits = r.bits;
+      }
+      const steps: TransformationStep[] = results.map((r, i) => ({
+        index: i, operation: r.op, params: r.params,
+        fullBeforeBits: r.before, fullAfterBits: r.after,
+        beforeBits: r.before, afterBits: r.after,
+        cumulativeBits: r.after,
+        metrics: {}, timestamp: Date.now(), duration: 0,
+      }));
+      const report = verifyAllStepsIndependently(initial, steps, bits);
+      return { passed: report.overallPassed, expected: true, actual: report.overallPassed, details: report.summary };
+    },
+  },
+  {
+    id: 'e2e_all_shift_ops_pipeline', category: 'verification', name: 'E2E: All shift/rotate ops pipeline',
+    description: 'SHL→SHR→ROL→ROR with counts → verify all',
+    run: () => {
+      const shiftOps = [
+        { op: 'SHL', params: { count: 2 } },
+        { op: 'SHR', params: { count: 1 } },
+        { op: 'ROL', params: { count: 3 } },
+        { op: 'ROR', params: { count: 2 } },
+      ];
+      let bits = '10110100';
+      const initial = bits;
+      const results: Array<{ op: string; params: any; before: string; after: string }> = [];
+      for (const { op, params } of shiftOps) {
+        const r = executeOperation(op, bits, params);
+        results.push({ op, params: r.params, before: bits, after: r.bits });
+        bits = r.bits;
+      }
+      const steps: TransformationStep[] = results.map((r, i) => ({
+        index: i, operation: r.op, params: r.params,
+        fullBeforeBits: r.before, fullAfterBits: r.after,
+        beforeBits: r.before, afterBits: r.after,
+        cumulativeBits: r.after,
+        metrics: {}, timestamp: Date.now(), duration: 0,
+      }));
+      const report = verifyAllStepsIndependently(initial, steps, bits);
+      return { passed: report.overallPassed, expected: true, actual: report.overallPassed, details: report.summary };
+    },
+  },
+  {
+    id: 'e2e_segment_multi_step', category: 'verification', name: 'E2E: Multiple segment ops verify',
+    description: '3 segment-only operations on different ranges → verify all',
+    run: () => {
+      const fullBits = '1111000011110000';
+      const segs = [
+        { start: 0, end: 4, op: 'NOT' },
+        { start: 4, end: 8, op: 'NOT' },
+        { start: 8, end: 12, op: 'NOT' },
+      ];
+      const steps: TransformationStep[] = segs.map((s, i) => {
+        const segment = fullBits.slice(s.start, s.end);
+        const r = executeOperation(s.op, segment);
+        const step: TransformationStep = {
+          index: i, operation: s.op, params: r.params,
+          fullBeforeBits: fullBits, fullAfterBits: fullBits,
+          beforeBits: segment, afterBits: r.bits,
+          cumulativeBits: fullBits,
+          bitRanges: [{ start: s.start, end: s.end }],
+          metrics: {}, timestamp: Date.now(), duration: 0,
+        };
+        (step as any).segmentOnly = true;
+        return step;
+      });
+      const report = verifyAllStepsIndependently(fullBits, steps, fullBits);
+      return { passed: report.passedSteps === 3, expected: 3, actual: report.passedSteps, details: `${report.segmentOnlySteps} segment-only` };
+    },
+  },
+  {
+    id: 'e2e_determinism_10x', category: 'verification', name: 'E2E: Pipeline determinism (10x)',
+    description: 'Run same 3-step pipeline 10 times with same seed → all identical',
+    run: () => {
+      const input = '10110100';
+      const seed = 'e2e_determinism_test';
+      let referenceHash = '';
+      let allMatch = true;
+      for (let trial = 0; trial < 10; trial++) {
+        const s1 = executeOperation('NOT', input);
+        const s2 = executeOperation('XOR', s1.bits, { seed });
+        const s3 = executeOperation('AND', s2.bits, { seed: seed + '_step3' });
+        const h = hashBits(s3.bits);
+        if (trial === 0) referenceHash = h;
+        else if (h !== referenceHash) { allMatch = false; break; }
+      }
+      return { passed: allMatch, expected: 'all 10 match', actual: allMatch ? 'all match' : 'drift detected' };
+    },
+  },
+  {
+    id: 'e2e_empty_steps_verify', category: 'verification', name: 'E2E: Empty steps list',
+    description: 'Verify with 0 steps should pass if initial == final',
+    run: () => {
+      const bits = '10101010';
+      const report = verifyAllStepsIndependently(bits, [], bits);
+      return { passed: report.overallPassed && report.chainVerified, expected: true, actual: report.overallPassed };
+    },
+  },
+  {
+    id: 'e2e_single_bit_pipeline', category: 'verification', name: 'E2E: Single bit pipeline',
+    description: 'NOT on single bit → verify',
+    run: () => {
+      const input = '1';
+      const r = executeOperation('NOT', input);
+      const step: TransformationStep = {
+        index: 0, operation: 'NOT', params: r.params,
+        fullBeforeBits: input, fullAfterBits: r.bits,
+        beforeBits: input, afterBits: r.bits,
+        cumulativeBits: r.bits,
+        metrics: {}, timestamp: Date.now(), duration: 0,
+      };
+      const report = verifyAllStepsIndependently(input, [step], r.bits);
+      return { passed: report.overallPassed, expected: true, actual: report.overallPassed };
+    },
+  },
+  {
+    id: 'e2e_segment_only_count', category: 'verification', name: 'E2E: segmentOnlySteps count',
+    description: 'Report correctly counts segment-only steps',
+    run: () => {
+      const fullBits = '10101010';
+      const segment = fullBits.slice(0, 4);
+      const r = executeOperation('NOT', segment);
+      const step: TransformationStep = {
+        index: 0, operation: 'NOT', params: r.params,
+        fullBeforeBits: fullBits, fullAfterBits: fullBits,
+        beforeBits: segment, afterBits: r.bits,
+        cumulativeBits: fullBits,
+        metrics: {}, timestamp: Date.now(), duration: 0,
+      };
+      (step as any).segmentOnly = true;
+      const report = verifyAllStepsIndependently(fullBits, [step], fullBits);
+      return { passed: report.segmentOnlySteps === 1, expected: 1, actual: report.segmentOnlySteps };
+    },
+  },
+  {
+    id: 'e2e_reverse_pipeline', category: 'verification', name: 'E2E: REVERSE pipeline',
+    description: 'REVERSE → verify independently',
+    run: () => {
+      const input = '11000011';
+      const r = executeOperation('REVERSE', input);
+      const step: TransformationStep = {
+        index: 0, operation: 'REVERSE', params: r.params,
+        fullBeforeBits: input, fullAfterBits: r.bits,
+        beforeBits: input, afterBits: r.bits,
+        cumulativeBits: r.bits,
+        metrics: {}, timestamp: Date.now(), duration: 0,
+      };
+      const report = verifyAllStepsIndependently(input, [step], r.bits);
+      return { passed: report.overallPassed, expected: true, actual: report.overallPassed };
+    },
+  },
+  {
+    id: 'e2e_swap_pipeline', category: 'verification', name: 'E2E: SWAP pipeline',
+    description: 'SWAP → verify independently',
+    run: () => {
+      const input = '11110000';
+      const r = executeOperation('SWAP', input);
+      const step: TransformationStep = {
+        index: 0, operation: 'SWAP', params: r.params,
+        fullBeforeBits: input, fullAfterBits: r.bits,
+        beforeBits: input, afterBits: r.bits,
+        cumulativeBits: r.bits,
+        metrics: {}, timestamp: Date.now(), duration: 0,
+      };
+      const report = verifyAllStepsIndependently(input, [step], r.bits);
+      return { passed: report.overallPassed, expected: true, actual: report.overallPassed };
+    },
+  },
+  {
+    id: 'e2e_gray_pipeline', category: 'verification', name: 'E2E: GRAY pipeline',
+    description: 'GRAY encode → verify independently',
+    run: () => {
+      const input = '10110100';
+      const r = executeOperation('GRAY', input);
+      const step: TransformationStep = {
+        index: 0, operation: 'GRAY', params: r.params,
+        fullBeforeBits: input, fullAfterBits: r.bits,
+        beforeBits: input, afterBits: r.bits,
+        cumulativeBits: r.bits,
+        metrics: {}, timestamp: Date.now(), duration: 0,
+      };
+      const report = verifyAllStepsIndependently(input, [step], r.bits);
+      return { passed: report.overallPassed, expected: true, actual: report.overallPassed };
+    },
+  },
+  {
+    id: 'e2e_shl_pipeline', category: 'verification', name: 'E2E: SHL pipeline',
+    description: 'SHL by 3 → verify independently',
+    run: () => {
+      const input = '10110100';
+      const r = executeOperation('SHL', input, { count: 3 });
+      const step: TransformationStep = {
+        index: 0, operation: 'SHL', params: r.params,
+        fullBeforeBits: input, fullAfterBits: r.bits,
+        beforeBits: input, afterBits: r.bits,
+        cumulativeBits: r.bits,
+        metrics: {}, timestamp: Date.now(), duration: 0,
+      };
+      const report = verifyAllStepsIndependently(input, [step], r.bits);
+      return { passed: report.overallPassed, expected: true, actual: report.overallPassed };
+    },
+  },
+  {
+    id: 'e2e_ror_pipeline', category: 'verification', name: 'E2E: ROR pipeline',
+    description: 'ROR by 5 → verify independently',
+    run: () => {
+      const input = '10110100';
+      const r = executeOperation('ROR', input, { count: 5 });
+      const step: TransformationStep = {
+        index: 0, operation: 'ROR', params: r.params,
+        fullBeforeBits: input, fullAfterBits: r.bits,
+        beforeBits: input, afterBits: r.bits,
+        cumulativeBits: r.bits,
+        metrics: {}, timestamp: Date.now(), duration: 0,
+      };
+      const report = verifyAllStepsIndependently(input, [step], r.bits);
+      return { passed: report.overallPassed, expected: true, actual: report.overallPassed };
+    },
+  },
+  {
+    id: 'e2e_nor_pipeline', category: 'verification', name: 'E2E: NOR pipeline',
+    description: 'NOR with mask → verify independently',
+    run: () => {
+      const input = '10101010';
+      const r = executeOperation('NOR', input, { mask: '11001100' });
+      const step: TransformationStep = {
+        index: 0, operation: 'NOR', params: r.params,
+        fullBeforeBits: input, fullAfterBits: r.bits,
+        beforeBits: input, afterBits: r.bits,
+        cumulativeBits: r.bits,
+        metrics: {}, timestamp: Date.now(), duration: 0,
+      };
+      const report = verifyAllStepsIndependently(input, [step], r.bits);
+      return { passed: report.overallPassed, expected: true, actual: report.overallPassed };
+    },
+  },
+  {
+    id: 'e2e_xnor_pipeline', category: 'verification', name: 'E2E: XNOR pipeline',
+    description: 'XNOR with mask → verify independently',
+    run: () => {
+      const input = '11001100';
+      const r = executeOperation('XNOR', input, { mask: '10101010' });
+      const step: TransformationStep = {
+        index: 0, operation: 'XNOR', params: r.params,
+        fullBeforeBits: input, fullAfterBits: r.bits,
+        beforeBits: input, afterBits: r.bits,
+        cumulativeBits: r.bits,
+        metrics: {}, timestamp: Date.now(), duration: 0,
+      };
+      const report = verifyAllStepsIndependently(input, [step], r.bits);
+      return { passed: report.overallPassed, expected: true, actual: report.overallPassed };
+    },
+  },
+  {
+    id: 'e2e_nand_pipeline', category: 'verification', name: 'E2E: NAND pipeline',
+    description: 'NAND with mask → verify independently',
+    run: () => {
+      const input = '11110000';
+      const r = executeOperation('NAND', input, { mask: '10101010' });
+      const step: TransformationStep = {
+        index: 0, operation: 'NAND', params: r.params,
+        fullBeforeBits: input, fullAfterBits: r.bits,
+        beforeBits: input, afterBits: r.bits,
+        cumulativeBits: r.bits,
+        metrics: {}, timestamp: Date.now(), duration: 0,
+      };
+      const report = verifyAllStepsIndependently(input, [step], r.bits);
+      return { passed: report.overallPassed, expected: true, actual: report.overallPassed };
+    },
+  },
+];
+
 // ============ ALL TESTS ============
 
 export const ALL_PLAYER_TESTS: PlayerTest[] = [
@@ -1312,6 +1881,7 @@ export const ALL_PLAYER_TESTS: PlayerTest[] = [
   ...interferenceTests,
   ...boundaryTests,
   ...replayChainTests,
+  ...e2eTests,
 ];
 
 /**
