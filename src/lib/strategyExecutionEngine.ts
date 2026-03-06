@@ -197,7 +197,8 @@ class StrategyExecutionEngine {
         0,
         currentBits,
         currentBudget,
-        runId
+        runId,
+        options
       );
       steps.push(schedulerResult);
       allTransformations.push(...schedulerResult.transformations);
@@ -223,7 +224,8 @@ class StrategyExecutionEngine {
           stepIndex,
           currentBits,
           currentBudget,
-          runId
+          runId,
+          options
         );
 
         // Update state
@@ -266,7 +268,8 @@ class StrategyExecutionEngine {
           stepIndex,
           currentBits,
           currentBudget,
-          runId
+          runId,
+          options
         );
 
         // Extract score from logs
@@ -297,7 +300,8 @@ class StrategyExecutionEngine {
           stepIndex,
           currentBits,
           currentBudget,
-          runId
+          runId,
+          options
         );
 
         // Check if policy passed
@@ -439,30 +443,63 @@ class StrategyExecutionEngine {
     stepIndex: number,
     bits: string,
     budget: number,
-    runId: number
+    runId: number,
+    options?: ExecutionRuntimeOptions
   ): Promise<StepResult> {
     const startTime = performance.now();
+
+    // Build filtered operations list based on whitelist/blacklist
+    let availableOps = getAvailableOperations();
+    if (options?.operationWhitelist && options.operationWhitelist.length > 0) {
+      const whiteset = new Set(options.operationWhitelist);
+      availableOps = availableOps.filter(op => whiteset.has(op));
+    }
+    if (options?.operationBlacklist && options.operationBlacklist.length > 0) {
+      const blackset = new Set(options.operationBlacklist);
+      availableOps = availableOps.filter(op => !blackset.has(op));
+    }
 
     const context: PythonContext = {
       bits,
       budget,
       metrics: calculateAllMetrics(bits).metrics,
-      operations: getAvailableOperations(),
+      operations: availableOps,
     };
 
-    const execResult = await pythonExecutor.sandboxTest(file.content, context);
-    const finalMetrics = calculateAllMetrics(execResult.finalBits).metrics;
+    // Add seed to context if provided
+    if (options?.seed) {
+      (context as any).seed = options.seed;
+    }
 
-    return {
-      stepIndex,
-      stepType,
-      fileName: file.name,
-      bits: execResult.finalBits,
-      metrics: finalMetrics,
-      logs: execResult.logs,
-      transformations: execResult.transformations,
-      duration: performance.now() - startTime,
-    };
+    // Execute with retry support
+    const maxRetries = options?.retryOnFailure ?? 0;
+    let lastError: Error | null = null;
+    
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        const execResult = await pythonExecutor.sandboxTest(file.content, context);
+        const finalMetrics = calculateAllMetrics(execResult.finalBits).metrics;
+
+        return {
+          stepIndex,
+          stepType,
+          fileName: file.name,
+          bits: execResult.finalBits,
+          metrics: finalMetrics,
+          logs: execResult.logs,
+          transformations: execResult.transformations,
+          duration: performance.now() - startTime,
+        };
+      } catch (e) {
+        lastError = e instanceof Error ? e : new Error(String(e));
+        if (attempt < maxRetries) {
+          // Exponential backoff
+          await new Promise(r => setTimeout(r, Math.pow(2, attempt) * 100));
+        }
+      }
+    }
+
+    throw lastError || new Error('Step execution failed');
   }
 
   /**
