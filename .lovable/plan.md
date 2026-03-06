@@ -1,167 +1,118 @@
 
-What I found (from your current code + uploaded reports)
 
-1) Execution options are mostly UI-only right now  
-- Strategy options are captured in `StrategyExecuteTab` / `StrategyTabV7`, but `handleRunStrategy` calls:
-  `strategyExecutionEngine.executeStrategy(baseConfig, selectedDataFile)` (no options passed).
-- Jobs advanced options are stored (`Job.executionOptions`) but never applied inside `jobManagerV2.executeJob` / engine.
+# Plan: Fix Player Mode Architecture, Fallback Parser, and Add E2E Auto-Debug Tests
 
-2) “Local snapshots like git” are NOT full snapshots today  
-- Versioning in `StrategyTabV7` stores strategy metadata + file hashes only.
-- `handleRestoreVersion` restores strategy links, not file contents, not file add/remove state.
-- So: changing file content or adding/removing linked files is not truly restorable like git snapshots.
+## Root Cause Analysis (from verification report)
 
-3) Why many Player steps show no bit changes  
-- In your “Full Verification” strategy code, many operations run on `test_segment` (a local slice), not on full file state.
-- Bridge records full-file before/after; if full file wasn’t updated, reports show unchanged hashes.
-- Player transformation report currently computes `bitsChanged` from `fullBeforeBits/fullAfterBits` only (not segment delta), making many steps appear as 0-change.
-- There is also a verification logic bug in Player reconstruction: when stored state exists, `verified` is effectively forced true (`storedAfter ? true : executionMatches`), hiding mismatches.
+The verification report shows **all 280 steps have `beforeHash === afterHash === "1C0C2D75"`** — zero bits changed across every operation. Two distinct causes:
 
-4) Fallback parser still misses important Python patterns  
-- Current fallback handles simple loops/assignments, but not many real patterns in unified strategies (e.g. `for op_id in list(all_ops)[:106]:`, nested/get_params flows), so fallback parity is incomplete.
+### Cause 1: Segment operations don't update file state (by design, but recorded misleadingly)
 
-5) Reporting gaps and truncation gaps  
-- Report Viewer type detection mismatches generated player reports (`verification/transformation/issues` nested under `data`) and may render as unknown/raw.
-- Report export from Test dialog does not include full player failure details in a journal-friendly unified format.
-- UI still truncates expected/actual values in several places.
+In `pythonExecutor.ts` line 253, the bridge checks:
+```
+const isFullOperation = !bits || bits === currentBits || bits.length === currentBits.length;
+```
+The unified strategy calls `apply_operation(op_id, test_segment, params)` where `test_segment` is a 64-bit slice. Since `test_segment.length !== currentBits.length`, `isFullOperation = false`, so **`currentBits` is never updated** (line 262-268). The transformation is recorded with `fullAfterBits = currentBits` (unchanged) and `cumulativeBits = currentBits` (unchanged).
 
-6) Your uploaded test report (7 failing)  
-- `test-report-2026-03-05.json` shows 7 fails total.
-- Explicit failures listed: 3 core timeouts in Results-related tests:
-  - `ResultsManager: Get all results`
-  - `ResultsManager: Statistics`
-  - `ModeCollision: Results manager isolation`
-- Remaining failed count likely comes from player tests not fully represented in exported failure section.
+This is correct behavior for the strategy's "testing" intent, but the Player sees 280 steps with zero change and marks 218 as "Re-execution mismatch" because when Player re-executes the same operation on full `currentBits`, it DOES produce changes (different input length → different result).
 
-Implementation plan (next build)
+### Cause 2: Fallback parser cannot handle real Python
 
-Phase A — Fix execution options end-to-end (Strategy + Jobs + Engine)
-- Extend `strategyExecutionEngine.executeStrategy` to accept a typed `ExecutionRuntimeOptions`.
-- Thread options from:
-  - `StrategyTabV7 -> handleRunStrategy -> strategyExecutionEngine`
-  - `jobManagerV2.executeJob -> strategyExecutionEngine` using `job.executionOptions`.
-- Implement missing controls behavior:
-  - `iterationCount`, `retryOnFailure`, `operationWhitelist`, `operationBlacklist`,
-  - `seed`, `verifyAfterStep`, `stepMode`, `timeout`, `memoryLimit`, `budgetOverride`.
-- Add persisted defaults and validation (conflicting whitelist/blacklist, invalid ranges).
+When Pyodide fails to load, the fallback parser cannot handle: function definitions, `list(x)[:N]` slicing, `if` conditionals, nested function calls, or `dict.get()` patterns. It executes zero operations.
 
-Phase B — Real git-like local snapshots for strategy versioning
-- Replace hash-only versioning with full snapshot object:
-  - strategy metadata
-  - full contents of all linked files at snapshot time
-  - linked file list (including additions/removals)
-  - snapshot hash + parent snapshot pointer
-- Add restore modes:
-  - “Restore Strategy Links only”
-  - “Restore Links + File Contents” (true git-like local snapshot)
-- Add diff view (files added/removed/modified, line-level summary).
-- Add one-click rollback and snapshot labels/tags.
+## Fix Strategy
 
-Phase C — Player “no bit changes” deep fix
-- Fix reporting semantics:
-  - Track BOTH full-file delta and segment delta per step.
-  - In Player/report UI show:
-    - `fullBitsChanged`
-    - `segmentBitsChanged`
-    - “segment-only operation” badge.
-- Fix verification correctness in `PlayerModePanel`:
-  - `verified` must reflect re-exec match, not auto-true when stored bits exist.
-- Improve fallback parser robustness:
-  - support richer `for ... in ...` expressions, variable slicing/list wrappers, and param indirection patterns used by unified strategy.
-- Add explicit “operation had effect on segment but not committed to full file” diagnostics.
+### Fix 1: Bridge must record segment changes accurately
 
-Phase D — Reports Center + download + no truncation
-- Build a unified Reports Center (Toolbar “Reports”):
-  - Select Strategy
-  - Select execution result
-  - Select report family:
-    - execution report
-    - file player reports (verification/transformation/issues)
-    - test reports
-    - journal bundle
-- Add report registry (`reportsManager`) for persisted generated reports + metadata.
-- Add download button on every report view.
-- Remove truncation for key scientific fields (expected/actual/mismatch slices); replace with:
-  - expandable blocks
-  - copy-to-clipboard
-  - lazy rendering for very large payloads.
-- Fix report type detection to parse current player report schema (`type` + nested `data`).
+When `isFullOperation = false`, the bridge currently records `fullAfterBits = currentBits` (no change). This is misleading. Fix: always record what actually happened to the segment, and flag it as a segment-only operation. Add a `segmentOnly: boolean` field to `TransformationRecord`.
 
-Phase E — Plugin runtime system (real, not only metadata)
-- Keep current plugin CRUD UI, add runtime lifecycle:
-  - load enabled plugins on startup
-  - unload/reload on “Restart Plugins”
-  - isolate plugin errors and show health status
-- Add plugin hook API:
-  - operation hooks (register/unregister custom operations)
-  - metric hooks
-  - report/export hooks
-  - optional UI contribution hooks (safe, constrained)
-- Add plugin state controls:
-  - enabled/disabled
-  - startup order
-  - crash-safe fallback (disable faulty plugin automatically).
+More critically: **the bridge should apply segment results back to the full file** when `apply_operation` is called with a bits argument that's a substring of `currentBits`. The Python strategy expects `apply_operation(op, segment, params)` to return the result but NOT modify state — the bridge should still record an accurate `fullAfterBits` by splicing the result into the right position.
 
-Phase F — Advanced publication-grade testing + auto-debug loop
-- Add E2E “Full Verification Pipeline” tests:
-  1) run strategy execution
-  2) open/reconstruct in Player logic
-  3) independent verification
-  4) compare source/changed files + hashes
-  5) assert deterministic replay
-- Add randomized property tests:
-  - seed determinism over many seeds/runs
-  - operation composition invariants
-  - segment-vs-full consistency checks
-- Add “auto-debug mode” for failing runs:
-  - capture first divergence step
-  - capture params/mask/seed
-  - generate machine-readable failure artifact.
-- Add journal artifact export pack:
-  - strategy snapshot
-  - source/final bits
-  - execution report
-  - player verification report
-  - full test report
-  - environment metadata + hashes.
+Actually the real fix is simpler: the **Player verification logic** needs to understand that when `beforeBits !== fullBeforeBits` (segment operation), re-execution should use `beforeBits` not `currentBits`. Currently Player line 179 does:
+```
+executeOperation(originalStep.operation, currentBits, originalStep.params || {})
+```
+But it should use `originalStep.beforeBits` (the segment) when the step was a segment operation.
 
-Phase G — Close the 7 failing tests
-- Fix ResultsManager timeout failures by:
-  - lightweight statistics path
-  - bounded/lazy hydration from localStorage for tests
-  - optional dedicated test storage namespace isolation.
-- Ensure player failures are fully included in exported report/failure sections.
-- Re-run full suite, verify `0 failed`, then export final audit report.
+### Fix 2: Rewrite fallback parser as a mini Python interpreter
 
-Primary files to update
-- Execution/options:  
-  `src/components/algorithm/StrategyExecuteTab.tsx`  
-  `src/components/algorithm/StrategyTabV7.tsx`  
-  `src/components/JobsDialog.tsx`  
-  `src/lib/jobManagerV2.ts`  
-  `src/lib/strategyExecutionEngine.ts`
-- Versioning/snapshots:  
-  `src/components/algorithm/StrategyTabV7.tsx`  
-  `src/lib/pythonModuleSystem.ts` (snapshot restore helpers)
-- Player/replay/verification/reporting:  
-  `src/components/PlayerModePanel.tsx`  
-  `src/lib/pythonExecutor.ts`  
-  `src/lib/playerVerification.ts`  
-  `src/lib/playerReportGenerator.ts`
-- Reports center + test export completeness:  
-  `src/components/ReportViewerDialog.tsx`  
-  `src/components/TestSettingsDialog.tsx`  
-  `src/components/StartupTestSuite.tsx`  
-  `src/pages/Index.tsx` / `src/components/Toolbar.tsx`
-- Plugin runtime:  
-  `src/lib/pluginManager.ts`  
-  `src/components/PluginsDialog.tsx`  
-  plus operation/metric registration points.
+Replace the regex-based fallback with a structured approach:
+- Parse function definitions and store their bodies
+- Track variable assignments including slicing and `list()` wrapping  
+- Handle `for/if/try` blocks with proper indentation tracking
+- Resolve function calls by inlining stored function bodies
+- Execute `apply_operation` calls with resolved variables
 
-Acceptance criteria
-- Advanced execution options demonstrably affect both manual and job runs.
-- Version restore can fully revert file content + linked file set (add/remove included).
-- Player reports distinguish segment changes from full-file changes; verification mismatch is never silently marked “passed”.
-- Reports Center can select strategy/result/report type and download all artifacts without truncating scientific values.
-- Plugin enable/disable/restart actually changes runtime behavior safely.
-- Full test suite passes (including player + new E2E), with an exportable journal-ready bundle.
+### Fix 3: Player verification must match execution context
+
+In `PlayerModePanel.tsx` reconstruction (line 158-233):
+- When a step has `bitRanges` and `beforeBits !== fullBeforeBits`, use `beforeBits` for re-execution, not `currentBits`
+- Compare re-executed result against `afterBits` (segment), not `fullAfterBits`
+- Track and display `segmentOnly` badge per step
+
+## Implementation Tasks
+
+### Task 1: Fix bridge segment handling (`pythonExecutor.ts`)
+- Add `segmentOnly` field to `TransformationRecord`
+- When `isFullOperation = false`, set `segmentOnly: true`
+- Still record accurate `beforeBits` and `afterBits` for the segment
+
+### Task 2: Fix Player verification logic (`PlayerModePanel.tsx`)
+- When step has `bitRanges` and segment data, re-execute on `originalStep.beforeBits` (segment)
+- Compare result against `originalStep.afterBits` (segment result)
+- Only flag mismatch when the segment-level comparison fails
+- Display "Segment Operation" badge for segment-only steps
+
+### Task 3: Rewrite fallback parser (`pythonExecutor.ts`)
+- Add function definition tracker: `functionDefs: Map<string, {params: string[], body: string[]}>`
+- Add `if/elif/else` handling with condition evaluation for simple patterns (`x in y`, `x > N`)
+- Add `try/except` block handling (execute try body, skip except)
+- Add function call resolution: when seeing `test_operation(op_id, segment)`, look up function body and inline it
+- Handle `list(x)[:N]` → resolve to first N items of the list
+- Handle `for x in list(y)[:N]:` patterns
+
+### Task 4: Create E2E auto-debug test suite (`playerTestSuite.ts`)
+Add 50+ new tests that:
+1. **Generate data** → create a known bit string
+2. **Execute operations directly** via `executeOperation` and record results
+3. **Build mock TransformationStep[]** from those results  
+4. **Feed into Player verification** (`verifyAllStepsIndependently`)
+5. **Assert 100% match** — if Player disagrees with direct execution, the test fails with detailed divergence info
+
+Test categories:
+- **Direct execution E2E**: Execute NOT/XOR/ROL etc on known input, build step records, verify Player matches
+- **Segment operation E2E**: Execute on a segment, record with bitRanges, verify Player handles correctly
+- **Chain E2E**: Execute 5-10 ops in sequence, verify Player can replay entire chain
+- **Parameter roundtrip**: Execute with auto-generated params, store, re-execute with stored params, verify match
+- **Fallback parser**: Feed simple Python code into fallback, verify operations execute and produce correct bits
+- **Mixed segment/full**: Alternate between full-file and segment operations, verify cumulative state is correct
+
+### Task 5: Add execution options to engine (`strategyExecutionEngine.ts`)
+Wire the existing `ExecutionRuntimeOptions` fields into actual behavior:
+- `operationWhitelist/Blacklist`: filter operations before passing to Python context
+- `iterationCount`: run strategy N times, collect all results
+- `retryOnFailure`: wrap step execution in retry loop
+- `seed`: pass deterministic seed to context
+- `budgetOverride`: use provided budget instead of default
+
+### Task 6: Integrate tests into StartupTestSuite
+- Add E2E player tests to `runPlayerTestSuite()`
+- Show results in TestSettingsDialog Player tab
+- Include in exported test report
+
+## Files to Modify
+| File | Change |
+|------|--------|
+| `src/lib/pythonExecutor.ts` | Add `segmentOnly` to TransformationRecord; rewrite fallback parser with function/if/try handling |
+| `src/components/PlayerModePanel.tsx` | Fix verification to use segment data for segment operations |
+| `src/lib/playerTestSuite.ts` | Add 50+ E2E tests covering execution→player→verification pipeline |
+| `src/lib/strategyExecutionEngine.ts` | Wire execution options into actual behavior |
+| `src/lib/playerVerification.ts` | Handle segment-only steps in independent verification |
+
+## Implementation Order
+1. Fix bridge `segmentOnly` field + Player verification logic (unblocks accurate reports)
+2. Rewrite fallback parser (unblocks fallback mode execution)
+3. Wire execution options into engine
+4. Create E2E auto-debug tests
+5. Integrate into test suite
+
