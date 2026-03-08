@@ -780,21 +780,26 @@ const METRIC_IMPLEMENTATIONS: Record<string, (bits: string) => number> = {
   },
 
   'sample_entropy': (bits) => {
-    // Sample Entropy (simplified)
+    // Sample Entropy with performance cap
+    const maxLen = Math.min(bits.length, 2048); // Cap for O(n²) safety
+    const s = bits.slice(0, maxLen);
+    const n = s.length;
     const m = 2;
-    const countMatches = (m: number) => {
+    
+    // Use template counting with hash-based lookup for speed
+    const countMatches = (dim: number) => {
+      const templates = new Map<string, number>();
+      for (let i = 0; i <= n - dim; i++) {
+        const key = s.slice(i, i + dim);
+        templates.set(key, (templates.get(key) || 0) + 1);
+      }
       let count = 0;
-      for (let i = 0; i < bits.length - m; i++) {
-        for (let j = i + 1; j < bits.length - m; j++) {
-          let match = true;
-          for (let k = 0; k < m && match; k++) {
-            if (bits[i + k] !== bits[j + k]) match = false;
-          }
-          if (match) count++;
-        }
+      for (const c of templates.values()) {
+        count += c * (c - 1) / 2; // pairs
       }
       return count;
     };
+    
     const a = countMatches(m + 1);
     const b = countMatches(m);
     if (b === 0 || a === 0) return 0;

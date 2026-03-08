@@ -679,8 +679,14 @@ const OPERATION_IMPLEMENTATIONS: Record<string, (bits: string, params: Operation
     return result.slice(0, bits.length);
   },
 
-  // Unpack (expand - opposite of pack)
-  UNPACK: (bits) => bits, // Identity for now
+  // Unpack (expand - opposite of pack): each bit becomes a full byte (00000000 or 00000001)
+  UNPACK: (bits) => {
+    let result = '';
+    for (let i = 0; i < bits.length; i++) {
+      result += bits[i] === '1' ? '00000001' : '00000000';
+    }
+    return result;
+  },
 
   // Clamp values
   CLAMP: (bits, p) => {
