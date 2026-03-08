@@ -77,6 +77,7 @@ export function replayFromStoredSteps(
   result: ExecutionResultV2,
   strictMode: boolean = true
 ): ReplayReport {
+  console.log(`[REPLAY] ▶ Starting replay | ${result.steps.length} steps | initialBits.len=${result.initialBits.length} | finalBits.len=${result.finalBits.length}`);
   const steps: ReplayStep[] = [];
   let currentBits = result.initialBits;
   let verifiedCount = 0;
