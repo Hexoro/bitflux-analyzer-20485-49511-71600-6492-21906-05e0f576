@@ -74,7 +74,7 @@ export const Toolbar = ({
   };
 
   return (
-    <div className="flex items-center gap-1.5 p-1.5 bg-card border-b border-border overflow-x-auto">
+    <div className="flex items-center justify-center gap-1.5 p-1.5 bg-card border-b border-border overflow-x-auto">
       {/* File */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
