@@ -1070,13 +1070,19 @@ except SyntaxError as e:
     this.executionCounter++;
     const execId = this.executionCounter;
 
+    console.log(`[PYEXEC] ▶ sandboxTest #${execId} | isLoaded=${this.isLoaded} | fallbackMode=${this.fallbackMode} | runtimePolicy=${this.runtimePolicy}`);
+    console.log(`[PYEXEC] Context: bits.len=${context.bits.length} | budget=${context.budget} | operations.len=${context.operations.length}`);
+
     // Check if we need to use fallback mode
     if (this.fallbackMode || !this.isLoaded) {
+      console.log(`[PYEXEC] Attempting to load Pyodide...`);
       await this.loadPyodide();
       
       // If still in fallback mode after attempting to load
       if (this.fallbackMode) {
+        console.log(`[PYEXEC] Using FALLBACK mode (Pyodide unavailable)`);
         if (this.runtimePolicy === 'strict') {
+          console.error(`[PYEXEC] Strict mode - rejecting fallback execution`);
           return {
             success: false,
             output: null,
@@ -1094,6 +1100,8 @@ except SyntaxError as e:
         return this.fallbackExecution(pythonCode, context, startTime);
       }
     }
+    
+    console.log(`[PYEXEC] Using PYODIDE for execution`);
 
     try {
 
