@@ -510,6 +510,15 @@ except SyntaxError as e:
         if (trimmed.includes('get_budget()')) return bridgeObj.bridge.get_budget();
         // get_bits_length()
         if (trimmed.includes('get_bits_length()')) return bridgeObj.bridge.get_bits_length();
+        // get_cost(op)
+        const costMatch = trimmed.match(/(?:bitwise_api\.)?get_cost\s*\(\s*(.+?)\s*\)/);
+        if (costMatch) return bridgeObj.bridge.get_cost(String(resolveValue(costMatch[1])));
+        // get_metric(name)
+        const metricMatch = trimmed.match(/(?:bitwise_api\.)?get_metric\s*\(\s*(.+?)\s*\)/);
+        if (metricMatch) return bridgeObj.bridge.get_metric(String(resolveValue(metricMatch[1])));
+        // is_operation_allowed(op) / has_operation(op)
+        const opAllowedMatch = trimmed.match(/(?:bitwise_api\.)?(?:is_operation_allowed|has_operation)\s*\(\s*(.+?)\s*\)/);
+        if (opAllowedMatch) return bridgeObj.bridge.has_operation(String(resolveValue(opAllowedMatch[1])));
         // list(x)[:N] pattern
         const listSliceMatch = trimmed.match(/^list\((\w+)\)\s*\[\s*:(\d+)\s*\]$/);
         if (listSliceMatch) {
