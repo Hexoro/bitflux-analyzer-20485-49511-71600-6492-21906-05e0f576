@@ -439,16 +439,27 @@ const METRIC_IMPLEMENTATIONS: Record<string, (bits: string) => number> = {
   },
 
   'longest_repeat': (bits) => {
-    // Longest repeated substring
+    // Longest repeated substring using suffix array approach with O(n log n) cap
+    const maxCheck = Math.min(bits.length, 4096); // Cap input for performance
+    const s = bits.slice(0, maxCheck);
+    const n = s.length;
+    if (n < 2) return 0;
+    
+    // Build suffix array (simplified but bounded)
+    const suffixes: number[] = Array.from({ length: n }, (_, i) => i);
+    suffixes.sort((a, b) => {
+      const la = s.slice(a), lb = s.slice(b);
+      return la < lb ? -1 : la > lb ? 1 : 0;
+    });
+    
+    // Find longest common prefix between adjacent suffixes
     let maxLen = 0;
-    for (let len = 1; len <= bits.length / 2; len++) {
-      for (let i = 0; i <= bits.length - len * 2; i++) {
-        const pattern = bits.slice(i, i + len);
-        if (bits.indexOf(pattern, i + len) !== -1) {
-          maxLen = len;
-        }
-      }
-      if (maxLen < len - 1) break; // Early exit optimization
+    for (let i = 1; i < n; i++) {
+      let lcp = 0;
+      const a = suffixes[i - 1], b = suffixes[i];
+      const limit = Math.min(n - a, n - b);
+      while (lcp < limit && s[a + lcp] === s[b + lcp]) lcp++;
+      if (lcp > maxLen) maxLen = lcp;
     }
     return maxLen;
   },
