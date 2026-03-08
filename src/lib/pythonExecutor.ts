@@ -916,8 +916,8 @@ except SyntaxError as e:
           const trimmed = rawLine.trim();
           const indent = getIndent(rawLine);
           
-          // Skip empty, comments, imports, def declarations
-          if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('import ') || trimmed.startsWith('from ') || trimmed.startsWith('def ')) {
+          // Skip empty, comments, imports, def declarations, global keyword, return/pass
+          if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('import ') || trimmed.startsWith('from ') || trimmed.startsWith('def ') || trimmed.startsWith('global ') || trimmed === 'pass' || trimmed.startsWith('return ') || trimmed === 'return') {
             // Skip function body
             if (trimmed.startsWith('def ')) {
               const defName = trimmed.match(/^def\s+(\w+)/)?.[1];
