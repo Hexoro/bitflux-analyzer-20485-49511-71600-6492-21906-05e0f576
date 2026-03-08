@@ -2,6 +2,7 @@
  * Plugin Manager - Add, delete, enable/disable, import/export plugins
  * Plugins stored in localStorage
  */
+import { validateCode, safeExecute } from './sandboxedExec';
 
 export type PluginType = 'operation' | 'metric' | 'visualization' | 'export';
 
@@ -52,14 +53,34 @@ export class PluginManager {
 
   private loadPlugin(plugin: Plugin): boolean {
     try {
-      // Mark as loaded - actual code execution would happen here
-      // For safety, we validate the code but don't eval it
+      const validation = validateCode(plugin.code);
+      if (!validation.safe) {
+        throw new Error(`Blocked APIs: ${validation.violations.join(', ')}`);
+      }
+
+      // Execute plugin code with a registration API
+      const pluginApi = {
+        type: plugin.type,
+        id: plugin.id,
+        name: plugin.name,
+        config: plugin.config,
+        log: (msg: string) => console.log(`[PLUGIN:${plugin.name}]`, msg),
+      };
+
+      safeExecute(
+        ['plugin'],
+        plugin.code,
+        [pluginApi]
+      );
+
       this.loadedPlugins.add(plugin.id);
       this.pluginErrors.delete(plugin.id);
+      console.log(`[PLUGIN] Loaded: ${plugin.name} (${plugin.type})`);
       return true;
     } catch (e) {
       const errorMsg = (e as Error).message;
       this.pluginErrors.set(plugin.id, errorMsg);
+      console.warn(`[PLUGIN] Failed to load ${plugin.name}:`, errorMsg);
       // Auto-disable faulty plugins
       plugin.enabled = false;
       plugin.updatedAt = new Date().toISOString();

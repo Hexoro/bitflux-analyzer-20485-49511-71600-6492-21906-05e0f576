@@ -439,16 +439,27 @@ const METRIC_IMPLEMENTATIONS: Record<string, (bits: string) => number> = {
   },
 
   'longest_repeat': (bits) => {
-    // Longest repeated substring
+    // Longest repeated substring using suffix array approach with O(n log n) cap
+    const maxCheck = Math.min(bits.length, 4096); // Cap input for performance
+    const s = bits.slice(0, maxCheck);
+    const n = s.length;
+    if (n < 2) return 0;
+    
+    // Build suffix array (simplified but bounded)
+    const suffixes: number[] = Array.from({ length: n }, (_, i) => i);
+    suffixes.sort((a, b) => {
+      const la = s.slice(a), lb = s.slice(b);
+      return la < lb ? -1 : la > lb ? 1 : 0;
+    });
+    
+    // Find longest common prefix between adjacent suffixes
     let maxLen = 0;
-    for (let len = 1; len <= bits.length / 2; len++) {
-      for (let i = 0; i <= bits.length - len * 2; i++) {
-        const pattern = bits.slice(i, i + len);
-        if (bits.indexOf(pattern, i + len) !== -1) {
-          maxLen = len;
-        }
-      }
-      if (maxLen < len - 1) break; // Early exit optimization
+    for (let i = 1; i < n; i++) {
+      let lcp = 0;
+      const a = suffixes[i - 1], b = suffixes[i];
+      const limit = Math.min(n - a, n - b);
+      while (lcp < limit && s[a + lcp] === s[b + lcp]) lcp++;
+      if (lcp > maxLen) maxLen = lcp;
     }
     return maxLen;
   },
@@ -769,21 +780,26 @@ const METRIC_IMPLEMENTATIONS: Record<string, (bits: string) => number> = {
   },
 
   'sample_entropy': (bits) => {
-    // Sample Entropy (simplified)
+    // Sample Entropy with performance cap
+    const maxLen = Math.min(bits.length, 2048); // Cap for O(n²) safety
+    const s = bits.slice(0, maxLen);
+    const n = s.length;
     const m = 2;
-    const countMatches = (m: number) => {
+    
+    // Use template counting with hash-based lookup for speed
+    const countMatches = (dim: number) => {
+      const templates = new Map<string, number>();
+      for (let i = 0; i <= n - dim; i++) {
+        const key = s.slice(i, i + dim);
+        templates.set(key, (templates.get(key) || 0) + 1);
+      }
       let count = 0;
-      for (let i = 0; i < bits.length - m; i++) {
-        for (let j = i + 1; j < bits.length - m; j++) {
-          let match = true;
-          for (let k = 0; k < m && match; k++) {
-            if (bits[i + k] !== bits[j + k]) match = false;
-          }
-          if (match) count++;
-        }
+      for (const c of templates.values()) {
+        count += c * (c - 1) / 2; // pairs
       }
       return count;
     };
+    
     const a = countMatches(m + 1);
     const b = countMatches(m);
     if (b === 0 || a === 0) return 0;
@@ -903,8 +919,17 @@ const METRIC_IMPLEMENTATIONS: Record<string, (bits: string) => number> = {
   },
 
   'complement_distance': (bits) => {
-    // Always equals bits.length for binary
-    return bits.length;
+    // Hamming distance between bits and its bitwise complement
+    // For pure binary this equals the length, but for mixed analysis
+    // we count positions where bit differs from its complement (always all for binary)
+    // More useful: distance to nearest palindrome complement
+    const reversed = bits.split('').reverse().join('');
+    const complement = reversed.split('').map(b => b === '0' ? '1' : '0').join('');
+    let distance = 0;
+    for (let i = 0; i < bits.length; i++) {
+      if (bits[i] !== complement[i]) distance++;
+    }
+    return distance;
   },
 
   // === Cross Entropy and KL Divergence ===
