@@ -515,8 +515,6 @@ const Index = () => {
               onExitPlayer={handleExitPlayerMode} 
               selectedResultId={playerResultId}
             />
-          ) : appMode === 'ai' ? (
-            <AIModePanel />
           ) : (
             <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
               <TabsList className="w-full justify-start rounded-none border-b overflow-x-auto flex-shrink-0">

@@ -189,11 +189,6 @@ export const Toolbar = ({
           <DropdownMenuItem onClick={() => onModeChange('player')} className={currentMode === 'player' ? 'bg-accent' : ''}>
             File Player
           </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={() => onModeChange('ai')} className={currentMode === 'ai' ? 'bg-accent' : ''}>
-            <Brain className="w-3.5 h-3.5 mr-2" />
-            AI Mode
-          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
     </div>
