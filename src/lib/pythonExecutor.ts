@@ -659,9 +659,9 @@ except SyntaxError as e:
             case '!=': return left !== right;
           }
         }
-        // has_operation() / has_metric()
-        if (trimmed.includes('has_operation(')) {
-          const m = trimmed.match(/has_operation\(\s*(.+?)\s*\)/);
+        // has_operation() / has_metric() / is_operation_allowed()
+        if (trimmed.includes('has_operation(') || trimmed.includes('is_operation_allowed(')) {
+          const m = trimmed.match(/(?:has_operation|is_operation_allowed)\(\s*(.+?)\s*\)/);
           if (m) return bridgeObj.bridge.has_operation(String(resolveValue(m[1])));
         }
         if (trimmed.includes('has_metric(')) {
