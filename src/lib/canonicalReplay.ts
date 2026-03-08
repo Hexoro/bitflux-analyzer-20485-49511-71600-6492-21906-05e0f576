@@ -208,6 +208,8 @@ export function replayFromStoredSteps(
   const expectedFinalHash = hashBits(result.finalBits);
   const chainVerified = reconstructedFinalHash === expectedFinalHash;
 
+  console.log(`[REPLAY] ✓ Complete | verified=${verifiedCount}/${result.steps.length} | failed=${failedCount} | segmentOnly=${segmentOnlyCount} | chainVerified=${chainVerified}`);
+
   return {
     steps,
     totalSteps: result.steps.length,
