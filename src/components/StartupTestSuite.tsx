@@ -92,15 +92,17 @@ export const StartupTestSuite = ({
     (coreResults?.failed ?? 0) + 
     vectorSummary.opFailed + 
     vectorSummary.metricFailed +
-    (playerResults?.failed ?? 0);
+    (playerResults?.failed ?? 0) +
+    (pipelineResults?.failed ?? 0);
   
   const totalPassed = (smokeResults?.passed ?? 0) + 
     (coreResults?.passed ?? 0) + 
     vectorSummary.opPassed + 
     vectorSummary.metricPassed +
-    (playerResults?.passed ?? 0);
+    (playerResults?.passed ?? 0) +
+    (pipelineResults?.passed ?? 0);
 
-  const hasResults = smokeResults !== null || coreResults !== null || playerResults !== null ||
+  const hasResults = smokeResults !== null || coreResults !== null || playerResults !== null || pipelineResults !== null ||
     (vectorSummary.opPassed + vectorSummary.opFailed + vectorSummary.metricPassed + vectorSummary.metricFailed) > 0;
 
   // Stop stall checker
