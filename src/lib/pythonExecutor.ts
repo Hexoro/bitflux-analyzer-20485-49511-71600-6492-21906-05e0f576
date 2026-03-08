@@ -458,11 +458,15 @@ except SyntaxError as e:
    * Parses simple Python-like commands and executes them via the bridge
    */
   private fallbackExecution(pythonCode: string, context: PythonContext, startTime: number): PythonExecutionResult {
+    console.log(`[PYEXEC-FALLBACK] ▶ Starting fallback execution | bits.len=${context.bits.length} | budget=${context.budget} | operations.len=${context.operations.length}`);
+    console.log(`[PYEXEC-FALLBACK] Python code (first 500 chars): "${pythonCode.slice(0, 500)}"`);
+    
     const bridgeObj = this.createBitwiseApiBridge(context);
     const logs: string[] = ['[FALLBACK MODE] Pyodide unavailable, using enhanced JS execution'];
     
     try {
       const lines = pythonCode.split('\n');
+      console.log(`[PYEXEC-FALLBACK] Code has ${lines.length} lines`);
       
       // Variable tracker
       const vars: Record<string, any> = {};
