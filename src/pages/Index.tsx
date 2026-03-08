@@ -22,7 +22,7 @@ import { Toolbar, AppMode } from '@/components/Toolbar';
 import { AlgorithmPanel } from '@/components/AlgorithmPanel';
 import { BackendPanel } from '@/components/BackendPanel';
 import { PlayerModePanel } from '@/components/PlayerModePanel';
-import { AIModePanel } from '@/components/AIModePanel';
+
 import { DataGraphsDialog } from '@/components/DataGraphsDialog';
 import { AudioVisualizerDialog } from '@/components/AudioVisualizerDialog';
 import { PatternHeatmapDialog } from '@/components/PatternHeatmapDialog';
