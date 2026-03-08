@@ -1038,15 +1038,24 @@ except SyntaxError as e:
         executeBlock(def.bodyStart, def.bodyEnd, getIndent(lines[def.bodyStart]) || 4);
       }
       
-      logs.push(`[FALLBACK] Completed with ${bridgeObj.getTransformations().length} operations`);
+      const transformations = bridgeObj.getTransformations();
+      const totalBitsChanged = transformations.reduce((sum, t) => sum + t.bitsChanged, 0);
+      const finalBits = bridgeObj.getCurrentBits();
+      
+      console.log(`[PYEXEC-FALLBACK] ✓ Complete | transformations=${transformations.length} | totalBitsChanged=${totalBitsChanged} | finalBits.len=${finalBits.length}`);
+      transformations.forEach((t, i) => {
+        console.log(`[PYEXEC-FALLBACK]   [${i}] ${t.operation}: bitsChanged=${t.bitsChanged} hasMask=${!!t.params?.mask} hasSeed=${!!t.params?.seed}`);
+      });
+      
+      logs.push(`[FALLBACK] Completed with ${transformations.length} operations, ${totalBitsChanged} bits changed`);
       
       return {
         success: true,
         output: 'Fallback execution completed',
         logs,
         duration: performance.now() - startTime,
-        transformations: bridgeObj.getTransformations(),
-        finalBits: bridgeObj.getCurrentBits(),
+        transformations,
+        finalBits,
         metrics: bridgeObj.bridge.get_all_metrics() as Record<string, number>,
         stats: bridgeObj.getStats(),
       };
