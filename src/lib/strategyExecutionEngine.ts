@@ -11,6 +11,8 @@ import { pythonModuleSystem, PythonFile, StrategyConfig } from './pythonModuleSy
 import { resultsManager, ExecutionResultV2, TransformationStep } from './resultsManager';
 import { calculateAllMetrics } from './metricsCalculator';
 import { getAvailableOperations } from './operationsRouter';
+import { executeJSStrategy, JSStrategyContext } from './jsStrategyRuntime';
+import { getJSEquivalent } from './jsStrategyFiles';
 
 export interface ExecutionRuntimeOptions {
   seed?: string;
@@ -339,6 +341,18 @@ class StrategyExecutionEngine {
       const totalOperations = allTransformations.length;
       const totalBitsChanged = allTransformations.reduce((sum, t) => sum + t.bitsChanged, 0);
 
+      // NO-OP FAIL GUARD: If we ran operations but zero bits changed, flag as failure
+      if (totalOperations > 0 && totalBitsChanged === 0) {
+        const noOpOps = allTransformations.filter(t => t.bitsChanged === 0).map(t => t.operation);
+        const uniqueNoOps = [...new Set(noOpOps)];
+        console.error(`[EXEC-ENGINE] ⛔ NO-OP FAIL GUARD: ${totalOperations} operations executed but 0 bits changed! No-op operations: ${uniqueNoOps.join(', ')}`);
+        throw new Error(
+          `Execution produced no changes: ${totalOperations} operations ran but 0 bits were modified. ` +
+          `This indicates operations are returning identity results. ` +
+          `No-op operations: ${uniqueNoOps.slice(0, 10).join(', ')}${uniqueNoOps.length > 10 ? ` (+${uniqueNoOps.length - 10} more)` : ''}`
+        );
+      }
+
       // Total score
       const totalScore = scores.reduce((sum, s) => sum + s.score, 0);
 
@@ -480,7 +494,37 @@ class StrategyExecutionEngine {
       (context as any).seed = options.seed;
     }
 
-    // Execute with retry support
+    // Check if we should use JS execution (when Pyodide is unavailable)
+    const jsEquivalent = getJSEquivalent(file.name);
+    const useFallback = pythonExecutor.isFallbackMode() || !pythonExecutor.isPyodideAvailable();
+    
+    if (useFallback && jsEquivalent) {
+      console.log(`[EXEC-ENGINE] Using native JS execution for ${file.name} (Pyodide unavailable)`);
+      
+      const jsContext: JSStrategyContext = {
+        bits,
+        budget,
+        metrics: context.metrics,
+        operations: availableOps,
+        seed: options?.seed,
+      };
+      
+      const jsResult = executeJSStrategy(jsEquivalent.content, jsContext);
+      const finalMetrics = calculateAllMetrics(jsResult.finalBits).metrics;
+      
+      return {
+        stepIndex,
+        stepType,
+        fileName: file.name,
+        bits: jsResult.finalBits,
+        metrics: finalMetrics,
+        logs: jsResult.logs,
+        transformations: jsResult.transformations,
+        duration: performance.now() - startTime,
+      };
+    }
+
+    // Execute with retry support (Python / fallback)
     const maxRetries = options?.retryOnFailure ?? 0;
     let lastError: Error | null = null;
     
