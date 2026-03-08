@@ -341,8 +341,17 @@ class StrategyExecutionEngine {
       const totalOperations = allTransformations.length;
       const totalBitsChanged = allTransformations.reduce((sum, t) => sum + t.bitsChanged, 0);
 
-      // Total score
-      const totalScore = scores.reduce((sum, s) => sum + s.score, 0);
+      // NO-OP FAIL GUARD: If we ran operations but zero bits changed, flag as failure
+      if (totalOperations > 0 && totalBitsChanged === 0) {
+        const noOpOps = allTransformations.filter(t => t.bitsChanged === 0).map(t => t.operation);
+        const uniqueNoOps = [...new Set(noOpOps)];
+        console.error(`[EXEC-ENGINE] ⛔ NO-OP FAIL GUARD: ${totalOperations} operations executed but 0 bits changed! No-op operations: ${uniqueNoOps.join(', ')}`);
+        throw new Error(
+          `Execution produced no changes: ${totalOperations} operations ran but 0 bits were modified. ` +
+          `This indicates operations are returning identity results. ` +
+          `No-op operations: ${uniqueNoOps.slice(0, 10).join(', ')}${uniqueNoOps.length > 10 ? ` (+${uniqueNoOps.length - 10} more)` : ''}`
+        );
+      }
 
       // Create single result file for Player
       const resultFileName = `result_${strategy.name.replace(/\s+/g, '_')}_run${runId}.txt`;
