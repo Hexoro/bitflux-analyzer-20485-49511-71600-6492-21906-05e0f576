@@ -1311,6 +1311,34 @@ export function executeOperation(operationId: string, bits: string, params: Oper
       }
     }
 
+    // Structural ops: avoid deterministic no-op defaults when params are omitted
+    const seedInt = hashSeed(operationSeed);
+    if (operationId === 'INSERT') {
+      if (paramsUsed.position === undefined) {
+        paramsUsed.position = bits.length > 0 ? seedInt % bits.length : 0;
+      }
+      if (!paramsUsed.bits || paramsUsed.bits.length === 0) {
+        const idx = Math.min(paramsUsed.position, Math.max(0, bits.length - 1));
+        const sourceBit = bits[idx] || '0';
+        paramsUsed.bits = sourceBit === '1' ? '0' : '1';
+      }
+    }
+
+    if (operationId === 'MOVE' && bits.length > 1) {
+      if (paramsUsed.count === undefined || paramsUsed.count <= 0) {
+        paramsUsed.count = 1;
+      }
+      if (paramsUsed.source === undefined) {
+        paramsUsed.source = seedInt % bits.length;
+      }
+      if (paramsUsed.dest === undefined) {
+        paramsUsed.dest = (paramsUsed.source + Math.max(1, Math.floor(bits.length / 2))) % bits.length;
+      }
+      if (paramsUsed.dest === paramsUsed.source) {
+        paramsUsed.dest = (paramsUsed.source + 1) % bits.length;
+      }
+    }
+
     // Check for custom implementation first
     if (customOperations.has(operationId)) {
       const impl = customOperations.get(operationId)!;
