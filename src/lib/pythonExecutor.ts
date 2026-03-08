@@ -272,6 +272,8 @@ except SyntaxError as e:
           const targetBits = isValidBitString ? bits : currentBits;
           const isFullOperation = !isValidBitString || bits === currentBits || bits.length === currentBits.length;
           
+          console.log(`[BRIDGE] ▶ apply_operation("${opName}") | rawBitsArg="${(bits || '').slice(0, 40)}${bits && bits.length > 40 ? '...' : ''}" | isValidBitString=${isValidBitString} | targetBits.len=${targetBits.length} | isFullOp=${isFullOperation} | params=`, JSON.stringify(params || {}).slice(0, 200));
+          
           try {
             const result = executeOperation(opName, targetBits, params || {});
             if (result.success) {
@@ -286,6 +288,11 @@ except SyntaxError as e:
               } else {
                 // Operating on a segment - count changes in that segment
                 bitsChanged = this.countChangedBits(targetBits, result.bits);
+              }
+              
+              console.log(`[BRIDGE] ✓ ${opName} | bitsChanged=${bitsChanged} | resultParams.hasMask=${!!result.params?.mask} | resultParams.hasSeed=${!!result.params?.seed}`);
+              if (bitsChanged === 0) {
+                console.warn(`[BRIDGE] ⚠ ZERO bits changed for ${opName}! currentBits updated=${isFullOperation}`);
               }
               
               const opCost = getOperationCost(opName);
@@ -319,9 +326,11 @@ except SyntaxError as e:
               
               return result.bits;
             }
+            console.error(`[BRIDGE] ✗ Operation ${opName} failed: ${result.error}`);
             logs.push(`[ERROR] Operation ${opName} failed: ${result.error}`);
             return targetBits;
           } catch (e) {
+            console.error(`[BRIDGE] ✗ Operation ${opName} exception:`, e);
             logs.push(`[ERROR] Operation ${opName} exception: ${e}`);
             return targetBits;
           }
