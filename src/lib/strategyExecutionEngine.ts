@@ -482,7 +482,37 @@ class StrategyExecutionEngine {
       (context as any).seed = options.seed;
     }
 
-    // Execute with retry support
+    // Check if we should use JS execution (when Pyodide is unavailable)
+    const jsEquivalent = getJSEquivalent(file.name);
+    const useFallback = pythonExecutor.isFallbackMode() || !pythonExecutor.isPyodideAvailable();
+    
+    if (useFallback && jsEquivalent) {
+      console.log(`[EXEC-ENGINE] Using native JS execution for ${file.name} (Pyodide unavailable)`);
+      
+      const jsContext: JSStrategyContext = {
+        bits,
+        budget,
+        metrics: context.metrics,
+        operations: availableOps,
+        seed: options?.seed,
+      };
+      
+      const jsResult = executeJSStrategy(jsEquivalent.content, jsContext);
+      const finalMetrics = calculateAllMetrics(jsResult.finalBits).metrics;
+      
+      return {
+        stepIndex,
+        stepType,
+        fileName: file.name,
+        bits: jsResult.finalBits,
+        metrics: finalMetrics,
+        logs: jsResult.logs,
+        transformations: jsResult.transformations,
+        duration: performance.now() - startTime,
+      };
+    }
+
+    // Execute with retry support (Python / fallback)
     const maxRetries = options?.retryOnFailure ?? 0;
     let lastError: Error | null = null;
     
