@@ -1128,16 +1128,73 @@ except SyntaxError as e:
             continue;
           }
           
-          // Handle log calls
+          // Handle log calls - support f-strings
           const logMatch = trimmed.match(/(?:bitwise_api\.)?log\s*\(\s*(.+)\s*\)/);
           if (logMatch) {
-            const val = resolveValue(logMatch[1]);
-            logs.push(String(val));
+            let logArg = logMatch[1].trim();
+            // f-string: f"..." or f'...'
+            if (logArg.startsWith('f"') || logArg.startsWith("f'")) {
+              const inner = logArg.slice(2, -1);
+              const resolved = inner.replace(/\{([^}]+)\}/g, (_, expr) => {
+                // Strip format spec: {val:.4f} -> val
+                const exprClean = expr.split(':')[0].trim();
+                const v = resolveValue(exprClean);
+                const fmt = expr.includes(':') ? expr.split(':')[1] : null;
+                if (fmt && fmt.includes('f') && typeof v === 'number') return v.toFixed(parseInt(fmt) || 4);
+                return String(v);
+              });
+              logs.push(resolved);
+            } else {
+              // String concatenation with +
+              if (logArg.includes(' + ')) {
+                const parts = logArg.split(/\s*\+\s*/);
+                logs.push(parts.map(p => String(resolveValue(p))).join(''));
+              } else {
+                const val = resolveValue(logArg);
+                logs.push(String(val));
+              }
+            }
             i++;
             continue;
           }
           
-          // Handle += / -= operators
+          // Handle dict key augmented assignment: dict["key"] += 1
+          const dictAugMatch = trimmed.match(/^(\w+)\s*\[\s*["'](\w+)["']\s*\]\s*(\+=|-=)\s*(.+)$/);
+          if (dictAugMatch) {
+            const dictName = dictAugMatch[1];
+            const key = dictAugMatch[2];
+            const op = dictAugMatch[3];
+            const rhs = Number(resolveValue(dictAugMatch[4]));
+            const d = dicts[dictName];
+            if (d) {
+              const current = typeof d[key] === 'number' ? d[key] : 0;
+              d[key] = op === '+=' ? current + rhs : current - rhs;
+            }
+            i++;
+            continue;
+          }
+          
+          // Handle dict key assignment: dict["key"] = value / dict["key"].append(value)
+          const dictKeyAssign = trimmed.match(/^(\w+)\s*\[\s*["'](\w+)["']\s*\]\s*=\s*(.+)$/);
+          if (dictKeyAssign) {
+            const d = dicts[dictKeyAssign[1]];
+            if (d) d[dictKeyAssign[2]] = resolveValue(dictKeyAssign[3]);
+            i++;
+            continue;
+          }
+          const dictAppendMatch = trimmed.match(/^(\w+)\s*\[\s*["'](\w+)["']\s*\]\.append\s*\(\s*(.+?)\s*\)$/);
+          if (dictAppendMatch) {
+            const d = dicts[dictAppendMatch[1]];
+            if (d) {
+              const key = dictAppendMatch[2];
+              if (!Array.isArray(d[key])) d[key] = [];
+              d[key].push(resolveValue(dictAppendMatch[3]));
+            }
+            i++;
+            continue;
+          }
+          
+          // Handle += / -= operators on simple variables
           const augAssignMatch = trimmed.match(/^(\w+)\s*(\+=|-=|\*=|\/=)\s*(.+)$/);
           if (augAssignMatch) {
             const varName = augAssignMatch[1];
