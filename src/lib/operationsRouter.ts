@@ -40,19 +40,24 @@ export interface OperationResult {
 }
 
 /**
+ * Convert deterministic seed text to a stable positive integer
+ */
+function hashSeed(seed: string): number {
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) {
+    hash = ((hash << 5) - hash) + seed.charCodeAt(i);
+    hash |= 0; // force 32-bit
+  }
+  return Math.abs(hash) || 1;
+}
+
+/**
  * Generate a deterministic mask using seeded random for reproducibility
  * Uses the bits content as seed for deterministic replay
  */
 function generateDeterministicMask(length: number, seed: string): string {
-  // Create hash from seed for deterministic randomness
-  let hash = 0;
-  for (let i = 0; i < seed.length; i++) {
-    hash = ((hash << 5) - hash) + seed.charCodeAt(i);
-    hash = hash & hash; // Convert to 32bit integer
-  }
-  
   let mask = '';
-  let rng = Math.abs(hash) || 1;
+  let rng = hashSeed(seed);
   for (let i = 0; i < length; i++) {
     rng = (rng * 1103515245 + 12345) & 0x7fffffff;
     mask += (rng % 2).toString();
@@ -1303,6 +1308,34 @@ export function executeOperation(operationId: string, bits: string, params: Oper
       } else {
         // Compute content-based seed for SHUFFLE/UNSHUFFLE
         paramsUsed.count = bits.split('').reduce((a, b, i) => a + (b === '1' ? i : 0), 0) || 1;
+      }
+    }
+
+    // Structural ops: avoid deterministic no-op defaults when params are omitted
+    const seedInt = hashSeed(operationSeed);
+    if (operationId === 'INSERT') {
+      if (paramsUsed.position === undefined) {
+        paramsUsed.position = bits.length > 0 ? seedInt % bits.length : 0;
+      }
+      if (!paramsUsed.bits || paramsUsed.bits.length === 0) {
+        const idx = Math.min(paramsUsed.position, Math.max(0, bits.length - 1));
+        const sourceBit = bits[idx] || '0';
+        paramsUsed.bits = sourceBit === '1' ? '0' : '1';
+      }
+    }
+
+    if (operationId === 'MOVE' && bits.length > 1) {
+      if (paramsUsed.count === undefined || paramsUsed.count <= 0) {
+        paramsUsed.count = 1;
+      }
+      if (paramsUsed.source === undefined) {
+        paramsUsed.source = seedInt % bits.length;
+      }
+      if (paramsUsed.dest === undefined) {
+        paramsUsed.dest = (paramsUsed.source + Math.max(1, Math.floor(bits.length / 2))) % bits.length;
+      }
+      if (paramsUsed.dest === paramsUsed.source) {
+        paramsUsed.dest = (paramsUsed.source + 1) % bits.length;
       }
     }
 
