@@ -153,23 +153,32 @@ export const PlayerModePanel = ({ onExitPlayer, selectedResultId }: PlayerModePa
     setPlayerFileId(tempFile.id);
 
     // Use canonical replay engine - authoritative stored state, re-execution for validation only
+    console.log(`[PLAYER-UI] ▶ Running replay for result "${selectedResult.strategyName}" | ${selectedResult.steps.length} steps`);
     const replay = replayFromStoredSteps(selectedResult, true);
 
     // Convert replay steps to the format expected by sub-components
-    const steps = replay.steps.map(rs => ({
-      ...rs,
-      // Compatibility aliases
-      fullBeforeBits: rs.authoritativeBeforeBits,
-      fullAfterBits: rs.authoritativeAfterBits,
-      cumulativeBits: rs.authoritativeCumulativeBits,
-      beforeBits: rs.segmentBeforeBits,
-      afterBits: rs.segmentAfterBits,
-      storedAfterBits: rs.authoritativeCumulativeBits,
-      isSegmentOnly: rs.isSegmentOnly,
-    }));
+    const steps = replay.steps.map((rs, idx) => {
+      console.log(`[PLAYER-UI] Step ${idx}/${replay.steps.length-1}: ${rs.operation} | fullBitsChanged=${rs.fullBitsChanged} | segmentBitsChanged=${rs.segmentBitsChanged} | verified=${rs.verified}`);
+      if (rs.fullBitsChanged === 0 && rs.segmentBitsChanged === 0) {
+        console.warn(`[PLAYER-UI] ⚠ Step ${idx} (${rs.operation}) has ZERO bits changed!`);
+      }
+      return {
+        ...rs,
+        // Compatibility aliases
+        fullBeforeBits: rs.authoritativeBeforeBits,
+        fullAfterBits: rs.authoritativeAfterBits,
+        cumulativeBits: rs.authoritativeCumulativeBits,
+        beforeBits: rs.segmentBeforeBits,
+        afterBits: rs.segmentAfterBits,
+        storedAfterBits: rs.authoritativeCumulativeBits,
+        isSegmentOnly: rs.isSegmentOnly,
+      };
+    });
 
     setReconstructedSteps(steps);
     setReconstructedBits(selectedResult.initialBits);
+
+    console.log(`[PLAYER-UI] ✓ Replay complete | verified=${replay.verifiedSteps}/${replay.totalSteps} | failed=${replay.failedSteps} | chainVerified=${replay.chainVerified}`);
 
     // Strict verification: chain hash must match exactly
     if (replay.chainVerified && replay.failedSteps === 0) {
