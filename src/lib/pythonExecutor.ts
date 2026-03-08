@@ -504,21 +504,67 @@ except SyntaxError as e:
         if (trimmed === 'None') return null;
         // Variable
         if (vars[trimmed] !== undefined) return vars[trimmed];
-        // len() call
-        const lenMatch = trimmed.match(/^len\((\w+)\)$/);
+        if (lists[trimmed] !== undefined) return lists[trimmed];
+        if (dicts[trimmed] !== undefined) return dicts[trimmed];
+        
+        // min(a, b) / max(a, b)
+        const minMaxMatch = trimmed.match(/^(min|max)\s*\(\s*(.+?)\s*,\s*(.+?)\s*\)$/);
+        if (minMaxMatch) {
+          const a = Number(resolveValue(minMaxMatch[2]));
+          const b = Number(resolveValue(minMaxMatch[3]));
+          return minMaxMatch[1] === 'min' ? Math.min(a, b) : Math.max(a, b);
+        }
+        
+        // int(x)
+        const intMatch = trimmed.match(/^int\s*\(\s*(.+?)\s*\)$/);
+        if (intMatch) return Math.floor(Number(resolveValue(intMatch[1])));
+        
+        // str(x)
+        const strMatch = trimmed.match(/^str\s*\(\s*(.+?)\s*\)$/);
+        if (strMatch) return String(resolveValue(strMatch[1]));
+        
+        // isinstance(x, y) - always return true for simplicity
+        if (trimmed.startsWith('isinstance(')) return true;
+        
+        // len() call - support nested: len(bits), len(x)
+        const lenMatch = trimmed.match(/^len\((.+?)\)$/);
         if (lenMatch) {
-          const v = resolveValue(lenMatch[1]);
+          const inner = lenMatch[1].trim();
+          const v = resolveValue(inner);
           if (typeof v === 'string') return v.length;
           if (Array.isArray(v)) return v.length;
-          if (lists[lenMatch[1]]) return lists[lenMatch[1]].length;
+          if (typeof v === 'object' && v !== null) return Object.keys(v).length;
           return 0;
         }
+        
+        // Arithmetic: a // b, a + b, a - b, a * b, a / b, a % b
+        const intDivMatch = trimmed.match(/^(.+?)\s*\/\/\s*(.+)$/);
+        if (intDivMatch) {
+          const a = Number(resolveValue(intDivMatch[1]));
+          const b = Number(resolveValue(intDivMatch[2]));
+          return b !== 0 ? Math.floor(a / b) : 0;
+        }
+        const arithMatch = trimmed.match(/^(.+?)\s*([+\-*/%])\s*([^+\-*/%].*)$/);
+        if (arithMatch && !trimmed.includes('(')) {
+          const a = Number(resolveValue(arithMatch[1]));
+          const b = Number(resolveValue(arithMatch[3]));
+          switch (arithMatch[2]) {
+            case '+': return a + b;
+            case '-': return a - b;
+            case '*': return a * b;
+            case '/': return b !== 0 ? a / b : 0;
+            case '%': return b !== 0 ? a % b : 0;
+          }
+        }
+        
         // get_bits()
         if (trimmed === 'get_bits()' || trimmed === 'bitwise_api.get_bits()') return bridgeObj.bridge.get_bits();
         // get_available_operations()
         if (trimmed.includes('get_available_operations()')) return context.operations;
         // get_available_metrics()
         if (trimmed.includes('get_available_metrics()')) return bridgeObj.bridge.get_available_metrics();
+        // get_all_metrics()
+        if (trimmed.includes('get_all_metrics()')) return bridgeObj.bridge.get_all_metrics();
         // get_budget()
         if (trimmed.includes('get_budget()')) return bridgeObj.bridge.get_budget();
         // get_bits_length()
@@ -526,17 +572,34 @@ except SyntaxError as e:
         // get_cost(op)
         const costMatch = trimmed.match(/(?:bitwise_api\.)?get_cost\s*\(\s*(.+?)\s*\)/);
         if (costMatch) return bridgeObj.bridge.get_cost(String(resolveValue(costMatch[1])));
-        // get_metric(name)
+        // get_metric(name) - support 2 args: get_metric(name, bits)
+        const metricMatch2 = trimmed.match(/(?:bitwise_api\.)?get_metric\s*\(\s*(.+?)\s*,\s*(.+?)\s*\)/);
+        if (metricMatch2) return bridgeObj.bridge.get_metric(String(resolveValue(metricMatch2[1])), String(resolveValue(metricMatch2[2])));
         const metricMatch = trimmed.match(/(?:bitwise_api\.)?get_metric\s*\(\s*(.+?)\s*\)/);
         if (metricMatch) return bridgeObj.bridge.get_metric(String(resolveValue(metricMatch[1])));
         // is_operation_allowed(op) / has_operation(op)
         const opAllowedMatch = trimmed.match(/(?:bitwise_api\.)?(?:is_operation_allowed|has_operation)\s*\(\s*(.+?)\s*\)/);
         if (opAllowedMatch) return bridgeObj.bridge.has_operation(String(resolveValue(opAllowedMatch[1])));
+        
+        // list(x.keys())[:N] pattern
+        const listKeysSlice = trimmed.match(/^list\((\w+)\.keys\(\)\)\s*\[\s*:(\d+)\s*\]$/);
+        if (listKeysSlice) {
+          const d = dicts[listKeysSlice[1]] || (vars[listKeysSlice[1]] as Record<string, any>);
+          if (d && typeof d === 'object') return Object.keys(d).slice(0, parseInt(listKeysSlice[2]));
+          return [];
+        }
+        // list(x.keys())
+        const listKeysMatch = trimmed.match(/^list\((\w+)\.keys\(\)\)$/);
+        if (listKeysMatch) {
+          const d = dicts[listKeysMatch[1]] || (vars[listKeysMatch[1]] as Record<string, any>);
+          if (d && typeof d === 'object') return Object.keys(d);
+          return [];
+        }
         // list(x)[:N] pattern
         const listSliceMatch = trimmed.match(/^list\((\w+)\)\s*\[\s*:(\d+)\s*\]$/);
         if (listSliceMatch) {
           const source = lists[listSliceMatch[1]] || (vars[listSliceMatch[1]] as any[]) || [];
-          return source.slice(0, parseInt(listSliceMatch[2]));
+          return (Array.isArray(source) ? source : []).slice(0, parseInt(listSliceMatch[2]));
         }
         // list(x) pattern
         const listWrapMatch = trimmed.match(/^list\((\w+)\)$/);
@@ -550,12 +613,14 @@ except SyntaxError as e:
           const source = lists[sortedMatch[1]] || vars[sortedMatch[1]] || [];
           return [...(Array.isArray(source) ? source : [])].sort();
         }
-        // x[:N] slice on variable
-        const varSliceMatch = trimmed.match(/^(\w+)\s*\[\s*(?:(\d+))?\s*:\s*(?:(\d+))?\s*\]$/);
-        if (varSliceMatch) {
-          const v = vars[varSliceMatch[1]] || lists[varSliceMatch[1]];
-          const start = varSliceMatch[2] ? parseInt(varSliceMatch[2]) : 0;
-          const end = varSliceMatch[3] ? parseInt(varSliceMatch[3]) : undefined;
+        // x[:expr] slice on variable - support expressions in slice indices
+        const varSliceExpr = trimmed.match(/^(\w+)\s*\[\s*(?:(.+?))?\s*:\s*(?:(.+?))?\s*\]$/);
+        if (varSliceExpr) {
+          const v = vars[varSliceExpr[1]] || lists[varSliceExpr[1]];
+          const startVal = varSliceExpr[2] ? Number(resolveValue(varSliceExpr[2])) : 0;
+          const endVal = varSliceExpr[3] ? Number(resolveValue(varSliceExpr[3])) : undefined;
+          const start = isNaN(startVal) ? 0 : startVal;
+          const end = endVal !== undefined && !isNaN(endVal) ? endVal : undefined;
           if (typeof v === 'string') return v.slice(start, end);
           if (Array.isArray(v)) return v.slice(start, end);
         }
@@ -567,6 +632,14 @@ except SyntaxError as e:
           if (d && typeof d === 'object' && d[key] !== undefined) return d[key];
           return getMatch[3] ? resolveValue(getMatch[3]) : undefined;
         }
+        // dict[key]
+        const dictAccessMatch = trimmed.match(/^(\w+)\s*\[\s*(.+?)\s*\]$/);
+        if (dictAccessMatch) {
+          const d = dicts[dictAccessMatch[1]] || vars[dictAccessMatch[1]];
+          const key = resolveValue(dictAccessMatch[2]);
+          if (d && typeof d === 'object' && !Array.isArray(d)) return (d as any)[key];
+          if (Array.isArray(d) && typeof key === 'number') return d[key];
+        }
         // x in y
         const inMatch = trimmed.match(/^(.+)\s+in\s+(\w+)$/);
         if (inMatch) {
@@ -576,6 +649,9 @@ except SyntaxError as e:
           if (typeof container === 'string') return container.includes(String(item));
           return false;
         }
+        // sum() with generator: sum(1 for a, b in zip(...))
+        if (trimmed.startsWith('sum(')) return 0;
+        
         return trimmed;
       };
       
