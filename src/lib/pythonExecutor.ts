@@ -581,15 +581,50 @@ except SyntaxError as e:
       };
       
       // Execute an apply_operation call
+      // Handles: apply_operation('OP'), apply_operation('OP', {params}), apply_operation('OP', bits, {params})
       const executeApplyOp = (trimmed: string): boolean => {
-        const opMatch = trimmed.match(/(?:bitwise_api\.)?apply_operation\s*\(\s*([^,)]+)\s*(?:,\s*([^,)]+))?\s*(?:,\s*(.+))?\s*\)/);
-        if (opMatch) {
-          const opName = String(resolveValue(opMatch[1]));
-          const bitsArg = opMatch[2] ? String(resolveValue(opMatch[2])) : '';
-          const parsedParams = opMatch[3] ? resolveParams(opMatch[3]) : {};
+        // First try 3-arg: apply_operation(op, bits, params)
+        const threeArgMatch = trimmed.match(/(?:bitwise_api\.)?apply_operation\s*\(\s*([^,)]+)\s*,\s*([^,{)]+)\s*,\s*(\{.+\}|\w+)\s*\)/);
+        if (threeArgMatch) {
+          const opName = String(resolveValue(threeArgMatch[1]));
+          const bitsArg = String(resolveValue(threeArgMatch[2]));
+          const parsedParams = resolveParams(threeArgMatch[3]);
           bridgeObj.bridge.apply_operation(opName, bitsArg, parsedParams);
           return true;
         }
+        
+        // Two-arg: apply_operation(op, {params}) - dict as second arg means params, not bits
+        const twoArgDictMatch = trimmed.match(/(?:bitwise_api\.)?apply_operation\s*\(\s*([^,)]+)\s*,\s*(\{.*\})\s*\)/);
+        if (twoArgDictMatch) {
+          const opName = String(resolveValue(twoArgDictMatch[1]));
+          const parsedParams = resolveParams(twoArgDictMatch[2]);
+          // Pass empty string for bits so bridge uses currentBits
+          bridgeObj.bridge.apply_operation(opName, '', parsedParams);
+          return true;
+        }
+        
+        // Two-arg: apply_operation(op, bits_variable) - variable as bits
+        const twoArgVarMatch = trimmed.match(/(?:bitwise_api\.)?apply_operation\s*\(\s*([^,)]+)\s*,\s*([^,{)]+)\s*\)/);
+        if (twoArgVarMatch) {
+          const opName = String(resolveValue(twoArgVarMatch[1]));
+          const secondArg = resolveValue(twoArgVarMatch[2]);
+          // If the second arg resolves to an object/dict, treat as params
+          if (typeof secondArg === 'object' && secondArg !== null && !Array.isArray(secondArg)) {
+            bridgeObj.bridge.apply_operation(opName, '', secondArg);
+          } else {
+            bridgeObj.bridge.apply_operation(opName, String(secondArg), {});
+          }
+          return true;
+        }
+        
+        // One-arg: apply_operation(op) - no bits, no params
+        const oneArgMatch = trimmed.match(/(?:bitwise_api\.)?apply_operation\s*\(\s*([^,)]+)\s*\)/);
+        if (oneArgMatch) {
+          const opName = String(resolveValue(oneArgMatch[1]));
+          bridgeObj.bridge.apply_operation(opName, '', {});
+          return true;
+        }
+        
         return false;
       };
       
