@@ -69,6 +69,8 @@ export const StartupTestSuite = ({
   const [isStalled, setIsStalled] = useState(false);
   const [playerResults, setPlayerResults] = useState<PlayerTestReport | null>(null);
   const [isPlayerRunning, setIsPlayerRunning] = useState(false);
+  const [pipelineResults, setPipelineResults] = useState<PipelineTestReport | null>(null);
+  const [isPipelineRunning, setIsPipelineRunning] = useState(false);
 
   // Refs
   const coreWorkerRef = useRef<Worker | null>(null);
