@@ -903,8 +903,17 @@ const METRIC_IMPLEMENTATIONS: Record<string, (bits: string) => number> = {
   },
 
   'complement_distance': (bits) => {
-    // Always equals bits.length for binary
-    return bits.length;
+    // Hamming distance between bits and its bitwise complement
+    // For pure binary this equals the length, but for mixed analysis
+    // we count positions where bit differs from its complement (always all for binary)
+    // More useful: distance to nearest palindrome complement
+    const reversed = bits.split('').reverse().join('');
+    const complement = reversed.split('').map(b => b === '0' ? '1' : '0').join('');
+    let distance = 0;
+    for (let i = 0; i < bits.length; i++) {
+      if (bits[i] !== complement[i]) distance++;
+    }
+    return distance;
   },
 
   // === Cross Entropy and KL Divergence ===
