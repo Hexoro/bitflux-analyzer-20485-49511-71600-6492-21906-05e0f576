@@ -22,7 +22,7 @@ import { Toolbar, AppMode } from '@/components/Toolbar';
 import { AlgorithmPanel } from '@/components/AlgorithmPanel';
 import { BackendPanel } from '@/components/BackendPanel';
 import { PlayerModePanel } from '@/components/PlayerModePanel';
-import { AIModePanel } from '@/components/AIModePanel';
+
 import { DataGraphsDialog } from '@/components/DataGraphsDialog';
 import { AudioVisualizerDialog } from '@/components/AudioVisualizerDialog';
 import { PatternHeatmapDialog } from '@/components/PatternHeatmapDialog';
@@ -515,8 +515,6 @@ const Index = () => {
               onExitPlayer={handleExitPlayerMode} 
               selectedResultId={playerResultId}
             />
-          ) : appMode === 'ai' ? (
-            <AIModePanel />
           ) : (
             <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
               <TabsList className="w-full justify-start rounded-none border-b overflow-x-auto flex-shrink-0">
