@@ -11,6 +11,8 @@ import { pythonModuleSystem, PythonFile, StrategyConfig } from './pythonModuleSy
 import { resultsManager, ExecutionResultV2, TransformationStep } from './resultsManager';
 import { calculateAllMetrics } from './metricsCalculator';
 import { getAvailableOperations } from './operationsRouter';
+import { executeJSStrategy, JSStrategyContext } from './jsStrategyRuntime';
+import { getJSEquivalent } from './jsStrategyFiles';
 
 export interface ExecutionRuntimeOptions {
   seed?: string;
