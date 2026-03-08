@@ -231,6 +231,15 @@ class StrategyExecutionEngine {
         // Update state
         currentBits = algoResult.bits;
         
+        // Log transformations from this step
+        console.log(`[EXEC-ENGINE] Algorithm step ${stepIndex} | transformations=${algoResult.transformations.length} | newBits.len=${currentBits.length}`);
+        algoResult.transformations.forEach((t, ti) => {
+          console.log(`[EXEC-ENGINE]   Transform ${ti}: ${t.operation} | bitsChanged=${t.bitsChanged} | hasMask=${!!t.params?.mask} | hasSeed=${!!t.params?.seed} | beforeBits.len=${t.beforeBits.length} | afterBits.len=${t.afterBits.length}`);
+          if (t.bitsChanged === 0) {
+            console.warn(`[EXEC-ENGINE]   ⚠ ZERO bits changed for ${t.operation}!`);
+          }
+        });
+        
         // Calculate cost from transformations
         const stepCost = algoResult.transformations.reduce((sum, t) => {
           const cost = DEFAULT_SCORING_CONFIG.operationCosts[t.operation as keyof typeof DEFAULT_SCORING_CONFIG.operationCosts] || 1;
