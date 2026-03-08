@@ -504,21 +504,67 @@ except SyntaxError as e:
         if (trimmed === 'None') return null;
         // Variable
         if (vars[trimmed] !== undefined) return vars[trimmed];
-        // len() call
-        const lenMatch = trimmed.match(/^len\((\w+)\)$/);
+        if (lists[trimmed] !== undefined) return lists[trimmed];
+        if (dicts[trimmed] !== undefined) return dicts[trimmed];
+        
+        // min(a, b) / max(a, b)
+        const minMaxMatch = trimmed.match(/^(min|max)\s*\(\s*(.+?)\s*,\s*(.+?)\s*\)$/);
+        if (minMaxMatch) {
+          const a = Number(resolveValue(minMaxMatch[2]));
+          const b = Number(resolveValue(minMaxMatch[3]));
+          return minMaxMatch[1] === 'min' ? Math.min(a, b) : Math.max(a, b);
+        }
+        
+        // int(x)
+        const intMatch = trimmed.match(/^int\s*\(\s*(.+?)\s*\)$/);
+        if (intMatch) return Math.floor(Number(resolveValue(intMatch[1])));
+        
+        // str(x)
+        const strMatch = trimmed.match(/^str\s*\(\s*(.+?)\s*\)$/);
+        if (strMatch) return String(resolveValue(strMatch[1]));
+        
+        // isinstance(x, y) - always return true for simplicity
+        if (trimmed.startsWith('isinstance(')) return true;
+        
+        // len() call - support nested: len(bits), len(x)
+        const lenMatch = trimmed.match(/^len\((.+?)\)$/);
         if (lenMatch) {
-          const v = resolveValue(lenMatch[1]);
+          const inner = lenMatch[1].trim();
+          const v = resolveValue(inner);
           if (typeof v === 'string') return v.length;
           if (Array.isArray(v)) return v.length;
-          if (lists[lenMatch[1]]) return lists[lenMatch[1]].length;
+          if (typeof v === 'object' && v !== null) return Object.keys(v).length;
           return 0;
         }
+        
+        // Arithmetic: a // b, a + b, a - b, a * b, a / b, a % b
+        const intDivMatch = trimmed.match(/^(.+?)\s*\/\/\s*(.+)$/);
+        if (intDivMatch) {
+          const a = Number(resolveValue(intDivMatch[1]));
+          const b = Number(resolveValue(intDivMatch[2]));
+          return b !== 0 ? Math.floor(a / b) : 0;
+        }
+        const arithMatch = trimmed.match(/^(.+?)\s*([+\-*/%])\s*([^+\-*/%].*)$/);
+        if (arithMatch && !trimmed.includes('(')) {
+          const a = Number(resolveValue(arithMatch[1]));
+          const b = Number(resolveValue(arithMatch[3]));
+          switch (arithMatch[2]) {
+            case '+': return a + b;
+            case '-': return a - b;
+            case '*': return a * b;
+            case '/': return b !== 0 ? a / b : 0;
+            case '%': return b !== 0 ? a % b : 0;
+          }
+        }
+        
         // get_bits()
         if (trimmed === 'get_bits()' || trimmed === 'bitwise_api.get_bits()') return bridgeObj.bridge.get_bits();
         // get_available_operations()
         if (trimmed.includes('get_available_operations()')) return context.operations;
         // get_available_metrics()
         if (trimmed.includes('get_available_metrics()')) return bridgeObj.bridge.get_available_metrics();
+        // get_all_metrics()
+        if (trimmed.includes('get_all_metrics()')) return bridgeObj.bridge.get_all_metrics();
         // get_budget()
         if (trimmed.includes('get_budget()')) return bridgeObj.bridge.get_budget();
         // get_bits_length()
@@ -526,17 +572,34 @@ except SyntaxError as e:
         // get_cost(op)
         const costMatch = trimmed.match(/(?:bitwise_api\.)?get_cost\s*\(\s*(.+?)\s*\)/);
         if (costMatch) return bridgeObj.bridge.get_cost(String(resolveValue(costMatch[1])));
-        // get_metric(name)
+        // get_metric(name) - support 2 args: get_metric(name, bits)
+        const metricMatch2 = trimmed.match(/(?:bitwise_api\.)?get_metric\s*\(\s*(.+?)\s*,\s*(.+?)\s*\)/);
+        if (metricMatch2) return bridgeObj.bridge.get_metric(String(resolveValue(metricMatch2[1])), String(resolveValue(metricMatch2[2])));
         const metricMatch = trimmed.match(/(?:bitwise_api\.)?get_metric\s*\(\s*(.+?)\s*\)/);
         if (metricMatch) return bridgeObj.bridge.get_metric(String(resolveValue(metricMatch[1])));
         // is_operation_allowed(op) / has_operation(op)
         const opAllowedMatch = trimmed.match(/(?:bitwise_api\.)?(?:is_operation_allowed|has_operation)\s*\(\s*(.+?)\s*\)/);
         if (opAllowedMatch) return bridgeObj.bridge.has_operation(String(resolveValue(opAllowedMatch[1])));
+        
+        // list(x.keys())[:N] pattern
+        const listKeysSlice = trimmed.match(/^list\((\w+)\.keys\(\)\)\s*\[\s*:(\d+)\s*\]$/);
+        if (listKeysSlice) {
+          const d = dicts[listKeysSlice[1]] || (vars[listKeysSlice[1]] as Record<string, any>);
+          if (d && typeof d === 'object') return Object.keys(d).slice(0, parseInt(listKeysSlice[2]));
+          return [];
+        }
+        // list(x.keys())
+        const listKeysMatch = trimmed.match(/^list\((\w+)\.keys\(\)\)$/);
+        if (listKeysMatch) {
+          const d = dicts[listKeysMatch[1]] || (vars[listKeysMatch[1]] as Record<string, any>);
+          if (d && typeof d === 'object') return Object.keys(d);
+          return [];
+        }
         // list(x)[:N] pattern
         const listSliceMatch = trimmed.match(/^list\((\w+)\)\s*\[\s*:(\d+)\s*\]$/);
         if (listSliceMatch) {
           const source = lists[listSliceMatch[1]] || (vars[listSliceMatch[1]] as any[]) || [];
-          return source.slice(0, parseInt(listSliceMatch[2]));
+          return (Array.isArray(source) ? source : []).slice(0, parseInt(listSliceMatch[2]));
         }
         // list(x) pattern
         const listWrapMatch = trimmed.match(/^list\((\w+)\)$/);
@@ -550,12 +613,14 @@ except SyntaxError as e:
           const source = lists[sortedMatch[1]] || vars[sortedMatch[1]] || [];
           return [...(Array.isArray(source) ? source : [])].sort();
         }
-        // x[:N] slice on variable
-        const varSliceMatch = trimmed.match(/^(\w+)\s*\[\s*(?:(\d+))?\s*:\s*(?:(\d+))?\s*\]$/);
-        if (varSliceMatch) {
-          const v = vars[varSliceMatch[1]] || lists[varSliceMatch[1]];
-          const start = varSliceMatch[2] ? parseInt(varSliceMatch[2]) : 0;
-          const end = varSliceMatch[3] ? parseInt(varSliceMatch[3]) : undefined;
+        // x[:expr] slice on variable - support expressions in slice indices
+        const varSliceExpr = trimmed.match(/^(\w+)\s*\[\s*(?:(.+?))?\s*:\s*(?:(.+?))?\s*\]$/);
+        if (varSliceExpr) {
+          const v = vars[varSliceExpr[1]] || lists[varSliceExpr[1]];
+          const startVal = varSliceExpr[2] ? Number(resolveValue(varSliceExpr[2])) : 0;
+          const endVal = varSliceExpr[3] ? Number(resolveValue(varSliceExpr[3])) : undefined;
+          const start = isNaN(startVal) ? 0 : startVal;
+          const end = endVal !== undefined && !isNaN(endVal) ? endVal : undefined;
           if (typeof v === 'string') return v.slice(start, end);
           if (Array.isArray(v)) return v.slice(start, end);
         }
@@ -567,6 +632,14 @@ except SyntaxError as e:
           if (d && typeof d === 'object' && d[key] !== undefined) return d[key];
           return getMatch[3] ? resolveValue(getMatch[3]) : undefined;
         }
+        // dict[key]
+        const dictAccessMatch = trimmed.match(/^(\w+)\s*\[\s*(.+?)\s*\]$/);
+        if (dictAccessMatch) {
+          const d = dicts[dictAccessMatch[1]] || vars[dictAccessMatch[1]];
+          const key = resolveValue(dictAccessMatch[2]);
+          if (d && typeof d === 'object' && !Array.isArray(d)) return (d as any)[key];
+          if (Array.isArray(d) && typeof key === 'number') return d[key];
+        }
         // x in y
         const inMatch = trimmed.match(/^(.+)\s+in\s+(\w+)$/);
         if (inMatch) {
@@ -576,6 +649,9 @@ except SyntaxError as e:
           if (typeof container === 'string') return container.includes(String(item));
           return false;
         }
+        // sum() with generator: sum(1 for a, b in zip(...))
+        if (trimmed.startsWith('sum(')) return 0;
+        
         return trimmed;
       };
       
@@ -724,9 +800,9 @@ except SyntaxError as e:
         }
       }
       
-      // First pass: collect variable/list/dict assignments
-      for (const line of lines) {
-        const trimmed = line.trim();
+      // First pass: collect variable/list/dict assignments (including multi-line dicts)
+      for (let li = 0; li < lines.length; li++) {
+        const trimmed = lines[li].trim();
         if (trimmed.startsWith('#') || trimmed.startsWith('def ') || trimmed.startsWith('import ') || trimmed.startsWith('from ')) continue;
         
         // Simple assignment: var = 'value'
@@ -752,12 +828,67 @@ except SyntaxError as e:
           continue;
         }
         
-        // Dict assignment: var = {...}
+        // Multi-line dict assignment: var = { ... (possibly spanning multiple lines)
+        const multiDictStart = trimmed.match(/^(\w+)\s*=\s*\{(.*)$/);
+        if (multiDictStart && !trimmed.endsWith('}')) {
+          // Collect lines until closing brace
+          let dictStr = multiDictStart[2];
+          let braceCount = 1; // We've seen the opening {
+          // Count braces in first line
+          for (const ch of multiDictStart[2]) {
+            if (ch === '{') braceCount++;
+            if (ch === '}') braceCount--;
+          }
+          let j = li + 1;
+          while (j < lines.length && braceCount > 0) {
+            const dLine = lines[j].trim();
+            for (const ch of dLine) {
+              if (ch === '{') braceCount++;
+              if (ch === '}') braceCount--;
+            }
+            dictStr += ' ' + dLine;
+            j++;
+          }
+          try {
+            const jsonStr = ('{' + dictStr)
+              .replace(/'/g, '"').replace(/True/g, 'true').replace(/False/g, 'false').replace(/None/g, 'null')
+              .replace(/,\s*}/g, '}') // trailing commas
+              .replace(/\(\s*\)/g, '()'); // ignore function calls in values
+            // Try parsing - may fail for complex nested structures
+            dicts[multiDictStart[1]] = JSON.parse(jsonStr);
+          } catch {
+            // Simplified: try to extract string key-value pairs
+            const pairs: Record<string, any> = {};
+            const pairRegex = /["'](\w+)["']\s*:\s*(?:["']([^"']+)["']|\{([^}]*)\}|(\d+(?:\.\d+)?))/g;
+            let m;
+            const fullStr = '{' + dictStr;
+            while ((m = pairRegex.exec(fullStr)) !== null) {
+              if (m[2] !== undefined) pairs[m[1]] = m[2];
+              else if (m[4] !== undefined) pairs[m[1]] = parseFloat(m[4]);
+              else if (m[3] !== undefined) {
+                // Nested dict - try to parse sub-keys
+                const subPairs: Record<string, any> = {};
+                const subRegex = /["'](\w+)["']\s*:\s*(?:["']([^"']+)["']|(\d+(?:\.\d+)?))/g;
+                let sm;
+                while ((sm = subRegex.exec(m[3])) !== null) {
+                  subPairs[sm[1]] = sm[2] !== undefined ? sm[2] : parseFloat(sm[3]);
+                }
+                if (Object.keys(subPairs).length > 0) pairs[m[1]] = subPairs;
+              }
+            }
+            if (Object.keys(pairs).length > 0) dicts[multiDictStart[1]] = pairs;
+          }
+          li = j - 1; // skip consumed lines
+          continue;
+        }
+        
+        // Single-line dict assignment: var = {...}
         const dictMatch = trimmed.match(/^(\w+)\s*=\s*(\{.*\})\s*$/);
         if (dictMatch) {
           try {
             const jsonStr = dictMatch[2]
-              .replace(/'/g, '"').replace(/True/g, 'true').replace(/False/g, 'false').replace(/None/g, 'null');
+              .replace(/'/g, '"').replace(/True/g, 'true').replace(/False/g, 'false').replace(/None/g, 'null')
+              .replace(/,\s*}/g, '}');
             dicts[dictMatch[1]] = JSON.parse(jsonStr);
           } catch { /* skip */ }
           continue;
@@ -785,8 +916,8 @@ except SyntaxError as e:
           const trimmed = rawLine.trim();
           const indent = getIndent(rawLine);
           
-          // Skip empty, comments, imports, def declarations
-          if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('import ') || trimmed.startsWith('from ') || trimmed.startsWith('def ')) {
+          // Skip empty, comments, imports, def declarations, global keyword, return/pass
+          if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('import ') || trimmed.startsWith('from ') || trimmed.startsWith('def ') || trimmed.startsWith('global ') || trimmed === 'pass' || trimmed.startsWith('return ') || trimmed === 'return') {
             // Skip function body
             if (trimmed.startsWith('def ')) {
               const defName = trimmed.match(/^def\s+(\w+)/)?.[1];
@@ -937,14 +1068,41 @@ except SyntaxError as e:
             continue;
           }
           
-          // Handle apply_operation
-          if (trimmed.includes('apply_operation')) {
-            // Check for assignment: result = apply_operation(...)
-            const assignOp = trimmed.match(/^(\w+)\s*=\s*(.+apply_operation.+)$/);
+          // Handle apply_operation (including tuple unpacking: a, b = func(apply_operation...))
+          if (trimmed.includes('apply_operation') && !trimmed.startsWith('def ')) {
+            // Check for any assignment (including tuple) before apply_operation
+            const assignOp = trimmed.match(/^.+=\s*(.+apply_operation.+)$/);
             if (assignOp) {
-              executeApplyOp(assignOp[2]);
+              executeApplyOp(assignOp[1]);
             } else {
               executeApplyOp(trimmed);
+            }
+            i++;
+            continue;
+          }
+          
+          // Handle tuple unpacking: a, b = func(...)
+          const tupleAssignFunc = trimmed.match(/^(\w+)\s*,\s*(\w+)\s*=\s*(\w+)\s*\((.*)?\)\s*$/);
+          if (tupleAssignFunc) {
+            const funcName = tupleAssignFunc[3];
+            if (funcDefs[funcName]) {
+              const def = funcDefs[funcName];
+              const callArgs = tupleAssignFunc[4] ? tupleAssignFunc[4].split(',').map(a => resolveValue(a.trim())) : [];
+              def.params.forEach((p, idx) => {
+                if (idx < callArgs.length) vars[p] = callArgs[idx];
+              });
+              executeBlock(def.bodyStart, def.bodyEnd, getIndent(lines[def.bodyStart]) || 8);
+            } else {
+              // Try to resolve as a built-in or expression
+              const callExpr = `${tupleAssignFunc[3]}(${tupleAssignFunc[4] || ''})`;
+              const result = resolveValue(callExpr);
+              if (Array.isArray(result) && result.length >= 2) {
+                vars[tupleAssignFunc[1]] = result[0];
+                vars[tupleAssignFunc[2]] = result[1];
+              } else {
+                vars[tupleAssignFunc[1]] = result;
+                vars[tupleAssignFunc[2]] = result;
+              }
             }
             i++;
             continue;
@@ -970,16 +1128,73 @@ except SyntaxError as e:
             continue;
           }
           
-          // Handle log calls
+          // Handle log calls - support f-strings
           const logMatch = trimmed.match(/(?:bitwise_api\.)?log\s*\(\s*(.+)\s*\)/);
           if (logMatch) {
-            const val = resolveValue(logMatch[1]);
-            logs.push(String(val));
+            let logArg = logMatch[1].trim();
+            // f-string: f"..." or f'...'
+            if (logArg.startsWith('f"') || logArg.startsWith("f'")) {
+              const inner = logArg.slice(2, -1);
+              const resolved = inner.replace(/\{([^}]+)\}/g, (_, expr) => {
+                // Strip format spec: {val:.4f} -> val
+                const exprClean = expr.split(':')[0].trim();
+                const v = resolveValue(exprClean);
+                const fmt = expr.includes(':') ? expr.split(':')[1] : null;
+                if (fmt && fmt.includes('f') && typeof v === 'number') return v.toFixed(parseInt(fmt) || 4);
+                return String(v);
+              });
+              logs.push(resolved);
+            } else {
+              // String concatenation with +
+              if (logArg.includes(' + ')) {
+                const parts = logArg.split(/\s*\+\s*/);
+                logs.push(parts.map(p => String(resolveValue(p))).join(''));
+              } else {
+                const val = resolveValue(logArg);
+                logs.push(String(val));
+              }
+            }
             i++;
             continue;
           }
           
-          // Handle += / -= operators
+          // Handle dict key augmented assignment: dict["key"] += 1
+          const dictAugMatch = trimmed.match(/^(\w+)\s*\[\s*["'](\w+)["']\s*\]\s*(\+=|-=)\s*(.+)$/);
+          if (dictAugMatch) {
+            const dictName = dictAugMatch[1];
+            const key = dictAugMatch[2];
+            const op = dictAugMatch[3];
+            const rhs = Number(resolveValue(dictAugMatch[4]));
+            const d = dicts[dictName];
+            if (d) {
+              const current = typeof d[key] === 'number' ? d[key] : 0;
+              d[key] = op === '+=' ? current + rhs : current - rhs;
+            }
+            i++;
+            continue;
+          }
+          
+          // Handle dict key assignment: dict["key"] = value / dict["key"].append(value)
+          const dictKeyAssign = trimmed.match(/^(\w+)\s*\[\s*["'](\w+)["']\s*\]\s*=\s*(.+)$/);
+          if (dictKeyAssign) {
+            const d = dicts[dictKeyAssign[1]];
+            if (d) d[dictKeyAssign[2]] = resolveValue(dictKeyAssign[3]);
+            i++;
+            continue;
+          }
+          const dictAppendMatch = trimmed.match(/^(\w+)\s*\[\s*["'](\w+)["']\s*\]\.append\s*\(\s*(.+?)\s*\)$/);
+          if (dictAppendMatch) {
+            const d = dicts[dictAppendMatch[1]];
+            if (d) {
+              const key = dictAppendMatch[2];
+              if (!Array.isArray(d[key])) d[key] = [];
+              d[key].push(resolveValue(dictAppendMatch[3]));
+            }
+            i++;
+            continue;
+          }
+          
+          // Handle += / -= operators on simple variables
           const augAssignMatch = trimmed.match(/^(\w+)\s*(\+=|-=|\*=|\/=)\s*(.+)$/);
           if (augAssignMatch) {
             const varName = augAssignMatch[1];
