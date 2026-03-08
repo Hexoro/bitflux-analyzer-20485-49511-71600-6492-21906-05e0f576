@@ -1253,11 +1253,14 @@ function isCodeBasedOperation(operationId: string): boolean {
  */
 export function executeOperation(operationId: string, bits: string, params: OperationParams = {}): OperationResult {
   try {
+    console.log(`[OP-ROUTER] ▶ executeOperation("${operationId}") | bits.len=${bits.length} | bits[0:32]="${bits.slice(0, 32)}" | params=`, JSON.stringify(params).slice(0, 200));
+    
     // Validate operation exists in predefinedManager OR has built-in implementation
     const opDef = predefinedManager.getOperation(operationId);
     const hasBuiltIn = !!OPERATION_IMPLEMENTATIONS[operationId];
     
     if (!opDef && !hasBuiltIn && !customOperations.has(operationId)) {
+      console.warn(`[OP-ROUTER] ✗ Operation "${operationId}" NOT FOUND`);
       return {
         success: false,
         bits,
