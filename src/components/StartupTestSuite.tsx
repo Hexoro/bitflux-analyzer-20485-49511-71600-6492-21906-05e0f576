@@ -24,6 +24,7 @@ import {
 } from '@/lib/testScheduler';
 import { TestSettingsDialog, TestState, VectorTestResult } from '@/components/TestSettingsDialog';
 import { runPlayerTestSuite, PlayerTestReport } from '@/lib/playerTestSuite';
+import { runPipelineTestSuite, PipelineTestReport } from '@/lib/playerPipelineTestSuite';
 import { toast } from 'sonner';
 
 // Import workers using Vite's ?worker syntax for proper bundling
