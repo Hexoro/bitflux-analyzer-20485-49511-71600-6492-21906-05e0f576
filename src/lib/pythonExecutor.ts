@@ -267,8 +267,10 @@ except SyntaxError as e:
         apply_operation: (opName: string, bits: string, params?: any, rangeStart?: number, rangeEnd?: number) => {
           const startTime = performance.now();
           const fullBeforeBits = currentBits;
-          const targetBits = bits || currentBits;
-          const isFullOperation = !bits || bits === currentBits || bits.length === currentBits.length;
+          // Validate bits arg: must be non-empty string of only 0s and 1s, otherwise use currentBits
+          const isValidBitString = bits && bits.length > 0 && /^[01]+$/.test(bits);
+          const targetBits = isValidBitString ? bits : currentBits;
+          const isFullOperation = !isValidBitString || bits === currentBits || bits.length === currentBits.length;
           
           try {
             const result = executeOperation(opName, targetBits, params || {});
@@ -508,6 +510,15 @@ except SyntaxError as e:
         if (trimmed.includes('get_budget()')) return bridgeObj.bridge.get_budget();
         // get_bits_length()
         if (trimmed.includes('get_bits_length()')) return bridgeObj.bridge.get_bits_length();
+        // get_cost(op)
+        const costMatch = trimmed.match(/(?:bitwise_api\.)?get_cost\s*\(\s*(.+?)\s*\)/);
+        if (costMatch) return bridgeObj.bridge.get_cost(String(resolveValue(costMatch[1])));
+        // get_metric(name)
+        const metricMatch = trimmed.match(/(?:bitwise_api\.)?get_metric\s*\(\s*(.+?)\s*\)/);
+        if (metricMatch) return bridgeObj.bridge.get_metric(String(resolveValue(metricMatch[1])));
+        // is_operation_allowed(op) / has_operation(op)
+        const opAllowedMatch = trimmed.match(/(?:bitwise_api\.)?(?:is_operation_allowed|has_operation)\s*\(\s*(.+?)\s*\)/);
+        if (opAllowedMatch) return bridgeObj.bridge.has_operation(String(resolveValue(opAllowedMatch[1])));
         // list(x)[:N] pattern
         const listSliceMatch = trimmed.match(/^list\((\w+)\)\s*\[\s*:(\d+)\s*\]$/);
         if (listSliceMatch) {
@@ -581,15 +592,50 @@ except SyntaxError as e:
       };
       
       // Execute an apply_operation call
+      // Handles: apply_operation('OP'), apply_operation('OP', {params}), apply_operation('OP', bits, {params})
       const executeApplyOp = (trimmed: string): boolean => {
-        const opMatch = trimmed.match(/(?:bitwise_api\.)?apply_operation\s*\(\s*([^,)]+)\s*(?:,\s*([^,)]+))?\s*(?:,\s*(.+))?\s*\)/);
-        if (opMatch) {
-          const opName = String(resolveValue(opMatch[1]));
-          const bitsArg = opMatch[2] ? String(resolveValue(opMatch[2])) : '';
-          const parsedParams = opMatch[3] ? resolveParams(opMatch[3]) : {};
+        // First try 3-arg: apply_operation(op, bits, params)
+        const threeArgMatch = trimmed.match(/(?:bitwise_api\.)?apply_operation\s*\(\s*([^,)]+)\s*,\s*([^,{)]+)\s*,\s*(\{.+\}|\w+)\s*\)/);
+        if (threeArgMatch) {
+          const opName = String(resolveValue(threeArgMatch[1]));
+          const bitsArg = String(resolveValue(threeArgMatch[2]));
+          const parsedParams = resolveParams(threeArgMatch[3]);
           bridgeObj.bridge.apply_operation(opName, bitsArg, parsedParams);
           return true;
         }
+        
+        // Two-arg: apply_operation(op, {params}) - dict as second arg means params, not bits
+        const twoArgDictMatch = trimmed.match(/(?:bitwise_api\.)?apply_operation\s*\(\s*([^,)]+)\s*,\s*(\{.*\})\s*\)/);
+        if (twoArgDictMatch) {
+          const opName = String(resolveValue(twoArgDictMatch[1]));
+          const parsedParams = resolveParams(twoArgDictMatch[2]);
+          // Pass empty string for bits so bridge uses currentBits
+          bridgeObj.bridge.apply_operation(opName, '', parsedParams);
+          return true;
+        }
+        
+        // Two-arg: apply_operation(op, bits_variable) - variable as bits
+        const twoArgVarMatch = trimmed.match(/(?:bitwise_api\.)?apply_operation\s*\(\s*([^,)]+)\s*,\s*([^,{)]+)\s*\)/);
+        if (twoArgVarMatch) {
+          const opName = String(resolveValue(twoArgVarMatch[1]));
+          const secondArg = resolveValue(twoArgVarMatch[2]);
+          // If the second arg resolves to an object/dict, treat as params
+          if (typeof secondArg === 'object' && secondArg !== null && !Array.isArray(secondArg)) {
+            bridgeObj.bridge.apply_operation(opName, '', secondArg);
+          } else {
+            bridgeObj.bridge.apply_operation(opName, String(secondArg), {});
+          }
+          return true;
+        }
+        
+        // One-arg: apply_operation(op) - no bits, no params
+        const oneArgMatch = trimmed.match(/(?:bitwise_api\.)?apply_operation\s*\(\s*([^,)]+)\s*\)/);
+        if (oneArgMatch) {
+          const opName = String(resolveValue(oneArgMatch[1]));
+          bridgeObj.bridge.apply_operation(opName, '', {});
+          return true;
+        }
+        
         return false;
       };
       
@@ -622,9 +668,9 @@ except SyntaxError as e:
             case '!=': return left !== right;
           }
         }
-        // has_operation() / has_metric()
-        if (trimmed.includes('has_operation(')) {
-          const m = trimmed.match(/has_operation\(\s*(.+?)\s*\)/);
+        // has_operation() / has_metric() / is_operation_allowed()
+        if (trimmed.includes('has_operation(') || trimmed.includes('is_operation_allowed(')) {
+          const m = trimmed.match(/(?:has_operation|is_operation_allowed)\(\s*(.+?)\s*\)/);
           if (m) return bridgeObj.bridge.has_operation(String(resolveValue(m[1])));
         }
         if (trimmed.includes('has_metric(')) {
@@ -913,9 +959,27 @@ except SyntaxError as e:
             continue;
           }
           
-          // Handle variable assignments (runtime)
+          // Handle += / -= operators
+          const augAssignMatch = trimmed.match(/^(\w+)\s*(\+=|-=|\*=|\/=)\s*(.+)$/);
+          if (augAssignMatch) {
+            const varName = augAssignMatch[1];
+            const op = augAssignMatch[2];
+            const rhsVal = resolveValue(augAssignMatch[3]);
+            const currentVal = typeof vars[varName] === 'number' ? vars[varName] : 0;
+            const rhs = typeof rhsVal === 'number' ? rhsVal : parseFloat(String(rhsVal)) || 0;
+            switch (op) {
+              case '+=': vars[varName] = currentVal + rhs; break;
+              case '-=': vars[varName] = currentVal - rhs; break;
+              case '*=': vars[varName] = currentVal * rhs; break;
+              case '/=': vars[varName] = rhs !== 0 ? currentVal / rhs : currentVal; break;
+            }
+            i++;
+            continue;
+          }
+          
+          // Handle variable assignments (runtime) - now supports function calls on RHS
           const assignMatch = trimmed.match(/^(\w+)\s*=\s*(.+)$/);
-          if (assignMatch && !trimmed.includes('(') || (assignMatch && trimmed.match(/^(\w+)\s*=\s*["'].+["']$/))) {
+          if (assignMatch && !trimmed.includes('apply_operation') && !trimmed.startsWith('def ')) {
             const val = resolveValue(assignMatch[2]);
             if (Array.isArray(val)) lists[assignMatch[1]] = val;
             else if (typeof val === 'object' && val !== null) dicts[assignMatch[1]] = val;
