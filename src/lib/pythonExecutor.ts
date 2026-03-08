@@ -959,9 +959,27 @@ except SyntaxError as e:
             continue;
           }
           
-          // Handle variable assignments (runtime)
+          // Handle += / -= operators
+          const augAssignMatch = trimmed.match(/^(\w+)\s*(\+=|-=|\*=|\/=)\s*(.+)$/);
+          if (augAssignMatch) {
+            const varName = augAssignMatch[1];
+            const op = augAssignMatch[2];
+            const rhsVal = resolveValue(augAssignMatch[3]);
+            const currentVal = typeof vars[varName] === 'number' ? vars[varName] : 0;
+            const rhs = typeof rhsVal === 'number' ? rhsVal : parseFloat(String(rhsVal)) || 0;
+            switch (op) {
+              case '+=': vars[varName] = currentVal + rhs; break;
+              case '-=': vars[varName] = currentVal - rhs; break;
+              case '*=': vars[varName] = currentVal * rhs; break;
+              case '/=': vars[varName] = rhs !== 0 ? currentVal / rhs : currentVal; break;
+            }
+            i++;
+            continue;
+          }
+          
+          // Handle variable assignments (runtime) - now supports function calls on RHS
           const assignMatch = trimmed.match(/^(\w+)\s*=\s*(.+)$/);
-          if (assignMatch && !trimmed.includes('(') || (assignMatch && trimmed.match(/^(\w+)\s*=\s*["'].+["']$/))) {
+          if (assignMatch && !trimmed.includes('apply_operation') && !trimmed.startsWith('def ')) {
             const val = resolveValue(assignMatch[2]);
             if (Array.isArray(val)) lists[assignMatch[1]] = val;
             else if (typeof val === 'object' && val !== null) dicts[assignMatch[1]] = val;
