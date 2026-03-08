@@ -163,6 +163,10 @@ export function replayFromStoredSteps(
     }
 
     if (verified) verifiedCount++;
+    else {
+      failedCount++;
+      console.warn(`[REPLAY] Step ${i} verification FAILED: ${verificationNote || executionError || 'unknown'}`);
+    }
     else failedCount++;
 
     // Compute deltas
