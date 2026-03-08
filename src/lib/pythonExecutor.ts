@@ -800,9 +800,9 @@ except SyntaxError as e:
         }
       }
       
-      // First pass: collect variable/list/dict assignments
-      for (const line of lines) {
-        const trimmed = line.trim();
+      // First pass: collect variable/list/dict assignments (including multi-line dicts)
+      for (let li = 0; li < lines.length; li++) {
+        const trimmed = lines[li].trim();
         if (trimmed.startsWith('#') || trimmed.startsWith('def ') || trimmed.startsWith('import ') || trimmed.startsWith('from ')) continue;
         
         // Simple assignment: var = 'value'
@@ -828,12 +828,67 @@ except SyntaxError as e:
           continue;
         }
         
-        // Dict assignment: var = {...}
+        // Multi-line dict assignment: var = { ... (possibly spanning multiple lines)
+        const multiDictStart = trimmed.match(/^(\w+)\s*=\s*\{(.*)$/);
+        if (multiDictStart && !trimmed.endsWith('}')) {
+          // Collect lines until closing brace
+          let dictStr = multiDictStart[2];
+          let braceCount = 1; // We've seen the opening {
+          // Count braces in first line
+          for (const ch of multiDictStart[2]) {
+            if (ch === '{') braceCount++;
+            if (ch === '}') braceCount--;
+          }
+          let j = li + 1;
+          while (j < lines.length && braceCount > 0) {
+            const dLine = lines[j].trim();
+            for (const ch of dLine) {
+              if (ch === '{') braceCount++;
+              if (ch === '}') braceCount--;
+            }
+            dictStr += ' ' + dLine;
+            j++;
+          }
+          try {
+            const jsonStr = ('{' + dictStr)
+              .replace(/'/g, '"').replace(/True/g, 'true').replace(/False/g, 'false').replace(/None/g, 'null')
+              .replace(/,\s*}/g, '}') // trailing commas
+              .replace(/\(\s*\)/g, '()'); // ignore function calls in values
+            // Try parsing - may fail for complex nested structures
+            dicts[multiDictStart[1]] = JSON.parse(jsonStr);
+          } catch {
+            // Simplified: try to extract string key-value pairs
+            const pairs: Record<string, any> = {};
+            const pairRegex = /["'](\w+)["']\s*:\s*(?:["']([^"']+)["']|\{([^}]*)\}|(\d+(?:\.\d+)?))/g;
+            let m;
+            const fullStr = '{' + dictStr;
+            while ((m = pairRegex.exec(fullStr)) !== null) {
+              if (m[2] !== undefined) pairs[m[1]] = m[2];
+              else if (m[4] !== undefined) pairs[m[1]] = parseFloat(m[4]);
+              else if (m[3] !== undefined) {
+                // Nested dict - try to parse sub-keys
+                const subPairs: Record<string, any> = {};
+                const subRegex = /["'](\w+)["']\s*:\s*(?:["']([^"']+)["']|(\d+(?:\.\d+)?))/g;
+                let sm;
+                while ((sm = subRegex.exec(m[3])) !== null) {
+                  subPairs[sm[1]] = sm[2] !== undefined ? sm[2] : parseFloat(sm[3]);
+                }
+                if (Object.keys(subPairs).length > 0) pairs[m[1]] = subPairs;
+              }
+            }
+            if (Object.keys(pairs).length > 0) dicts[multiDictStart[1]] = pairs;
+          }
+          li = j - 1; // skip consumed lines
+          continue;
+        }
+        
+        // Single-line dict assignment: var = {...}
         const dictMatch = trimmed.match(/^(\w+)\s*=\s*(\{.*\})\s*$/);
         if (dictMatch) {
           try {
             const jsonStr = dictMatch[2]
-              .replace(/'/g, '"').replace(/True/g, 'true').replace(/False/g, 'false').replace(/None/g, 'null');
+              .replace(/'/g, '"').replace(/True/g, 'true').replace(/False/g, 'false').replace(/None/g, 'null')
+              .replace(/,\s*}/g, '}');
             dicts[dictMatch[1]] = JSON.parse(jsonStr);
           } catch { /* skip */ }
           continue;
