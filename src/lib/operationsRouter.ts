@@ -40,19 +40,24 @@ export interface OperationResult {
 }
 
 /**
+ * Convert deterministic seed text to a stable positive integer
+ */
+function hashSeed(seed: string): number {
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) {
+    hash = ((hash << 5) - hash) + seed.charCodeAt(i);
+    hash |= 0; // force 32-bit
+  }
+  return Math.abs(hash) || 1;
+}
+
+/**
  * Generate a deterministic mask using seeded random for reproducibility
  * Uses the bits content as seed for deterministic replay
  */
 function generateDeterministicMask(length: number, seed: string): string {
-  // Create hash from seed for deterministic randomness
-  let hash = 0;
-  for (let i = 0; i < seed.length; i++) {
-    hash = ((hash << 5) - hash) + seed.charCodeAt(i);
-    hash = hash & hash; // Convert to 32bit integer
-  }
-  
   let mask = '';
-  let rng = Math.abs(hash) || 1;
+  let rng = hashSeed(seed);
   for (let i = 0; i < length; i++) {
     rng = (rng * 1103515245 + 12345) & 0x7fffffff;
     mask += (rng % 2).toString();
