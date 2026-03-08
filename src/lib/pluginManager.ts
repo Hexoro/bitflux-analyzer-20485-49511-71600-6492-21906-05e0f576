@@ -53,8 +53,6 @@ export class PluginManager {
 
   private loadPlugin(plugin: Plugin): boolean {
     try {
-      // Validate and execute plugin code in sandbox
-      const { validateCode, safeExecute } = require('./sandboxedExec') as typeof import('./sandboxedExec');
       const validation = validateCode(plugin.code);
       if (!validation.safe) {
         throw new Error(`Blocked APIs: ${validation.violations.join(', ')}`);
