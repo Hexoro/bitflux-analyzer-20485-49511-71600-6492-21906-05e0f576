@@ -93,6 +93,9 @@ export function replayFromStoredSteps(
       || originalStep.fullAfterBits 
       || originalStep.afterBits 
       || currentBits;
+    
+    const storedBitsChanged = countChangedBits(beforeBits, authoritativeAfter);
+    console.log(`[REPLAY] Step ${i}/${result.steps.length-1}: ${originalStep.operation} | storedBitsChanged=${storedBitsChanged} | hasParams=${!!originalStep.params} | hasMask=${!!originalStep.params?.mask} | hasSeed=${!!originalStep.params?.seed} | hasCumulative=${!!originalStep.cumulativeBits} | hasFullAfter=${!!originalStep.fullAfterBits}`);
 
     // Detect segment-only operation
     const isSegmentOp = (originalStep as any).segmentOnly === true

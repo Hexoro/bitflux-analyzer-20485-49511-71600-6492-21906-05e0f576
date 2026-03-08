@@ -603,12 +603,15 @@ except SyntaxError as e:
       // Execute an apply_operation call
       // Handles: apply_operation('OP'), apply_operation('OP', {params}), apply_operation('OP', bits, {params})
       const executeApplyOp = (trimmed: string): boolean => {
+        console.log(`[FALLBACK-PARSE] ▶ Parsing: "${trimmed.slice(0, 120)}"`);
+        
         // First try 3-arg: apply_operation(op, bits, params)
         const threeArgMatch = trimmed.match(/(?:bitwise_api\.)?apply_operation\s*\(\s*([^,)]+)\s*,\s*([^,{)]+)\s*,\s*(\{.+\}|\w+)\s*\)/);
         if (threeArgMatch) {
           const opName = String(resolveValue(threeArgMatch[1]));
           const bitsArg = String(resolveValue(threeArgMatch[2]));
           const parsedParams = resolveParams(threeArgMatch[3]);
+          console.log(`[FALLBACK-PARSE] ✓ 3-arg match: op="${opName}" bits="${bitsArg.slice(0, 40)}" params=`, parsedParams);
           bridgeObj.bridge.apply_operation(opName, bitsArg, parsedParams);
           return true;
         }
@@ -618,6 +621,7 @@ except SyntaxError as e:
         if (twoArgDictMatch) {
           const opName = String(resolveValue(twoArgDictMatch[1]));
           const parsedParams = resolveParams(twoArgDictMatch[2]);
+          console.log(`[FALLBACK-PARSE] ✓ 2-arg-dict match: op="${opName}" params=`, parsedParams);
           // Pass empty string for bits so bridge uses currentBits
           bridgeObj.bridge.apply_operation(opName, '', parsedParams);
           return true;
@@ -628,6 +632,7 @@ except SyntaxError as e:
         if (twoArgVarMatch) {
           const opName = String(resolveValue(twoArgVarMatch[1]));
           const secondArg = resolveValue(twoArgVarMatch[2]);
+          console.log(`[FALLBACK-PARSE] ✓ 2-arg-var match: op="${opName}" secondArg type=${typeof secondArg} val="${String(secondArg).slice(0, 40)}"`);
           // If the second arg resolves to an object/dict, treat as params
           if (typeof secondArg === 'object' && secondArg !== null && !Array.isArray(secondArg)) {
             bridgeObj.bridge.apply_operation(opName, '', secondArg);
@@ -641,10 +646,12 @@ except SyntaxError as e:
         const oneArgMatch = trimmed.match(/(?:bitwise_api\.)?apply_operation\s*\(\s*([^,)]+)\s*\)/);
         if (oneArgMatch) {
           const opName = String(resolveValue(oneArgMatch[1]));
+          console.log(`[FALLBACK-PARSE] ✓ 1-arg match: op="${opName}"`);
           bridgeObj.bridge.apply_operation(opName, '', {});
           return true;
         }
         
+        console.warn(`[FALLBACK-PARSE] ✗ No regex matched for: "${trimmed.slice(0, 120)}"`);
         return false;
       };
       
