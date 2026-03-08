@@ -383,8 +383,23 @@ export const StrategyTabV7 = ({ onRunStrategy, isExecuting = false, onNavigateTo
     if (!strategyName.trim()) { toast.error('Enter a strategy name'); return; }
     if (!selectedScheduler) { toast.error('Select a scheduler file'); return; }
 
+    // Register with pythonModuleSystem so execution engine can find it
+    let registeredStrategy: StrategyConfig | null = null;
+    try {
+      registeredStrategy = pythonModuleSystem.createStrategy(
+        strategyName,
+        selectedScheduler,
+        selectedAlgorithms,
+        selectedScoring,
+        selectedPolicies
+      );
+      console.log('[STRATEGY-CREATE] Registered with pythonModuleSystem:', registeredStrategy.id);
+    } catch (e) {
+      console.warn('[STRATEGY-CREATE] pythonModuleSystem registration failed, using local only:', e);
+    }
+
     const newStrategy: EnhancedStrategy = {
-      id: `strategy_${Date.now()}`,
+      id: registeredStrategy?.id || `strategy_${Date.now()}`,
       name: strategyName,
       description: strategyDescription,
       schedulerFile: selectedScheduler,
