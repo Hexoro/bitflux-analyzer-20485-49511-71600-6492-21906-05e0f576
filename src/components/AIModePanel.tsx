@@ -62,7 +62,7 @@ export const AIModePanel = () => {
     const jsCode = exportModelAsJSStrategy(model);
     // Save as a file in the module system
     const fileName = `ai_strategy_${model.name.replace(/\s+/g, '_')}.js`;
-    pythonModuleSystem.createFile(fileName, jsCode, 'custom');
+    pythonModuleSystem.addFile(fileName, jsCode, 'custom');
     // Also download
     const blob = new Blob([jsCode], { type: 'text/javascript' });
     const url = URL.createObjectURL(blob);
