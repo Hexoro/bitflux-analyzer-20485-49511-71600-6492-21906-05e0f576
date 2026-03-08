@@ -77,6 +77,7 @@ export function replayFromStoredSteps(
   result: ExecutionResultV2,
   strictMode: boolean = true
 ): ReplayReport {
+  console.log(`[REPLAY] ▶ Starting replay | ${result.steps.length} steps | initialBits.len=${result.initialBits.length} | finalBits.len=${result.finalBits.length}`);
   const steps: ReplayStep[] = [];
   let currentBits = result.initialBits;
   let verifiedCount = 0;
@@ -92,6 +93,9 @@ export function replayFromStoredSteps(
       || originalStep.fullAfterBits 
       || originalStep.afterBits 
       || currentBits;
+    
+    const storedBitsChanged = countChangedBits(beforeBits, authoritativeAfter);
+    console.log(`[REPLAY] Step ${i}/${result.steps.length-1}: ${originalStep.operation} | storedBitsChanged=${storedBitsChanged} | hasParams=${!!originalStep.params} | hasMask=${!!originalStep.params?.mask} | hasSeed=${!!originalStep.params?.seed} | hasCumulative=${!!originalStep.cumulativeBits} | hasFullAfter=${!!originalStep.fullAfterBits}`);
 
     // Detect segment-only operation
     const isSegmentOp = (originalStep as any).segmentOnly === true
@@ -159,7 +163,10 @@ export function replayFromStoredSteps(
     }
 
     if (verified) verifiedCount++;
-    else failedCount++;
+    else {
+      failedCount++;
+      console.warn(`[REPLAY] Step ${i} verification FAILED: ${verificationNote || executionError || 'unknown'}`);
+    }
 
     // Compute deltas
     const segmentBefore = originalStep.beforeBits || beforeBits;
@@ -200,6 +207,8 @@ export function replayFromStoredSteps(
   const reconstructedFinalHash = hashBits(currentBits);
   const expectedFinalHash = hashBits(result.finalBits);
   const chainVerified = reconstructedFinalHash === expectedFinalHash;
+
+  console.log(`[REPLAY] ✓ Complete | verified=${verifiedCount}/${result.steps.length} | failed=${failedCount} | segmentOnly=${segmentOnlyCount} | chainVerified=${chainVerified}`);
 
   return {
     steps,

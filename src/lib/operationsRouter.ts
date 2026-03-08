@@ -1253,11 +1253,14 @@ function isCodeBasedOperation(operationId: string): boolean {
  */
 export function executeOperation(operationId: string, bits: string, params: OperationParams = {}): OperationResult {
   try {
+    console.log(`[OP-ROUTER] ▶ executeOperation("${operationId}") | bits.len=${bits.length} | bits[0:32]="${bits.slice(0, 32)}" | params=`, JSON.stringify(params).slice(0, 200));
+    
     // Validate operation exists in predefinedManager OR has built-in implementation
     const opDef = predefinedManager.getOperation(operationId);
     const hasBuiltIn = !!OPERATION_IMPLEMENTATIONS[operationId];
     
     if (!opDef && !hasBuiltIn && !customOperations.has(operationId)) {
+      console.warn(`[OP-ROUTER] ✗ Operation "${operationId}" NOT FOUND`);
       return {
         success: false,
         bits,
@@ -1340,6 +1343,7 @@ export function executeOperation(operationId: string, bits: string, params: Oper
     // Check built-in implementations
     const impl = OPERATION_IMPLEMENTATIONS[operationId];
     if (!impl) {
+      console.warn(`[OP-ROUTER] ✗ No implementation for "${operationId}"`);
       return {
         success: false,
         bits,
@@ -1351,8 +1355,20 @@ export function executeOperation(operationId: string, bits: string, params: Oper
     }
 
     const result = impl(bits, paramsUsed);
+    
+    // Count changes
+    let changedBits = 0;
+    for (let ci = 0; ci < Math.max(bits.length, result.length); ci++) {
+      if (bits[ci] !== result[ci]) changedBits++;
+    }
+    console.log(`[OP-ROUTER] ✓ ${operationId} complete | result.len=${result.length} | bitsChanged=${changedBits} | hasMask=${!!paramsUsed.mask} | maskLen=${paramsUsed.mask?.length || 0} | seed=${operationSeed?.slice(0, 30)}`);
+    if (changedBits === 0) {
+      console.warn(`[OP-ROUTER] ⚠ ZERO bits changed for ${operationId}! bits[0:64]="${bits.slice(0, 64)}" result[0:64]="${result.slice(0, 64)}" mask[0:64]="${(paramsUsed.mask || '').slice(0, 64)}"`);
+    }
+    
     return { success: true, bits: result, operationId, params: paramsUsed, seed: operationSeed };
   } catch (error) {
+    console.error(`[OP-ROUTER] ✗ Exception in ${operationId}:`, error);
     return {
       success: false,
       bits,

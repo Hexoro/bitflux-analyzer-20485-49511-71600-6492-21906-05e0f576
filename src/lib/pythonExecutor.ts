@@ -272,6 +272,8 @@ except SyntaxError as e:
           const targetBits = isValidBitString ? bits : currentBits;
           const isFullOperation = !isValidBitString || bits === currentBits || bits.length === currentBits.length;
           
+          console.log(`[BRIDGE] ▶ apply_operation("${opName}") | rawBitsArg="${(bits || '').slice(0, 40)}${bits && bits.length > 40 ? '...' : ''}" | isValidBitString=${isValidBitString} | targetBits.len=${targetBits.length} | isFullOp=${isFullOperation} | params=`, JSON.stringify(params || {}).slice(0, 200));
+          
           try {
             const result = executeOperation(opName, targetBits, params || {});
             if (result.success) {
@@ -286,6 +288,11 @@ except SyntaxError as e:
               } else {
                 // Operating on a segment - count changes in that segment
                 bitsChanged = this.countChangedBits(targetBits, result.bits);
+              }
+              
+              console.log(`[BRIDGE] ✓ ${opName} | bitsChanged=${bitsChanged} | resultParams.hasMask=${!!result.params?.mask} | resultParams.hasSeed=${!!result.params?.seed}`);
+              if (bitsChanged === 0) {
+                console.warn(`[BRIDGE] ⚠ ZERO bits changed for ${opName}! currentBits updated=${isFullOperation}`);
               }
               
               const opCost = getOperationCost(opName);
@@ -319,9 +326,11 @@ except SyntaxError as e:
               
               return result.bits;
             }
+            console.error(`[BRIDGE] ✗ Operation ${opName} failed: ${result.error}`);
             logs.push(`[ERROR] Operation ${opName} failed: ${result.error}`);
             return targetBits;
           } catch (e) {
+            console.error(`[BRIDGE] ✗ Operation ${opName} exception:`, e);
             logs.push(`[ERROR] Operation ${opName} exception: ${e}`);
             return targetBits;
           }
@@ -449,11 +458,15 @@ except SyntaxError as e:
    * Parses simple Python-like commands and executes them via the bridge
    */
   private fallbackExecution(pythonCode: string, context: PythonContext, startTime: number): PythonExecutionResult {
+    console.log(`[PYEXEC-FALLBACK] ▶ Starting fallback execution | bits.len=${context.bits.length} | budget=${context.budget} | operations.len=${context.operations.length}`);
+    console.log(`[PYEXEC-FALLBACK] Python code (first 500 chars): "${pythonCode.slice(0, 500)}"`);
+    
     const bridgeObj = this.createBitwiseApiBridge(context);
     const logs: string[] = ['[FALLBACK MODE] Pyodide unavailable, using enhanced JS execution'];
     
     try {
       const lines = pythonCode.split('\n');
+      console.log(`[PYEXEC-FALLBACK] Code has ${lines.length} lines`);
       
       // Variable tracker
       const vars: Record<string, any> = {};
@@ -594,12 +607,15 @@ except SyntaxError as e:
       // Execute an apply_operation call
       // Handles: apply_operation('OP'), apply_operation('OP', {params}), apply_operation('OP', bits, {params})
       const executeApplyOp = (trimmed: string): boolean => {
+        console.log(`[FALLBACK-PARSE] ▶ Parsing: "${trimmed.slice(0, 120)}"`);
+        
         // First try 3-arg: apply_operation(op, bits, params)
         const threeArgMatch = trimmed.match(/(?:bitwise_api\.)?apply_operation\s*\(\s*([^,)]+)\s*,\s*([^,{)]+)\s*,\s*(\{.+\}|\w+)\s*\)/);
         if (threeArgMatch) {
           const opName = String(resolveValue(threeArgMatch[1]));
           const bitsArg = String(resolveValue(threeArgMatch[2]));
           const parsedParams = resolveParams(threeArgMatch[3]);
+          console.log(`[FALLBACK-PARSE] ✓ 3-arg match: op="${opName}" bits="${bitsArg.slice(0, 40)}" params=`, parsedParams);
           bridgeObj.bridge.apply_operation(opName, bitsArg, parsedParams);
           return true;
         }
@@ -609,6 +625,7 @@ except SyntaxError as e:
         if (twoArgDictMatch) {
           const opName = String(resolveValue(twoArgDictMatch[1]));
           const parsedParams = resolveParams(twoArgDictMatch[2]);
+          console.log(`[FALLBACK-PARSE] ✓ 2-arg-dict match: op="${opName}" params=`, parsedParams);
           // Pass empty string for bits so bridge uses currentBits
           bridgeObj.bridge.apply_operation(opName, '', parsedParams);
           return true;
@@ -619,6 +636,7 @@ except SyntaxError as e:
         if (twoArgVarMatch) {
           const opName = String(resolveValue(twoArgVarMatch[1]));
           const secondArg = resolveValue(twoArgVarMatch[2]);
+          console.log(`[FALLBACK-PARSE] ✓ 2-arg-var match: op="${opName}" secondArg type=${typeof secondArg} val="${String(secondArg).slice(0, 40)}"`);
           // If the second arg resolves to an object/dict, treat as params
           if (typeof secondArg === 'object' && secondArg !== null && !Array.isArray(secondArg)) {
             bridgeObj.bridge.apply_operation(opName, '', secondArg);
@@ -632,10 +650,12 @@ except SyntaxError as e:
         const oneArgMatch = trimmed.match(/(?:bitwise_api\.)?apply_operation\s*\(\s*([^,)]+)\s*\)/);
         if (oneArgMatch) {
           const opName = String(resolveValue(oneArgMatch[1]));
+          console.log(`[FALLBACK-PARSE] ✓ 1-arg match: op="${opName}"`);
           bridgeObj.bridge.apply_operation(opName, '', {});
           return true;
         }
         
+        console.warn(`[FALLBACK-PARSE] ✗ No regex matched for: "${trimmed.slice(0, 120)}"`);
         return false;
       };
       
@@ -1018,15 +1038,24 @@ except SyntaxError as e:
         executeBlock(def.bodyStart, def.bodyEnd, getIndent(lines[def.bodyStart]) || 4);
       }
       
-      logs.push(`[FALLBACK] Completed with ${bridgeObj.getTransformations().length} operations`);
+      const transformations = bridgeObj.getTransformations();
+      const totalBitsChanged = transformations.reduce((sum, t) => sum + t.bitsChanged, 0);
+      const finalBits = bridgeObj.getCurrentBits();
+      
+      console.log(`[PYEXEC-FALLBACK] ✓ Complete | transformations=${transformations.length} | totalBitsChanged=${totalBitsChanged} | finalBits.len=${finalBits.length}`);
+      transformations.forEach((t, i) => {
+        console.log(`[PYEXEC-FALLBACK]   [${i}] ${t.operation}: bitsChanged=${t.bitsChanged} hasMask=${!!t.params?.mask} hasSeed=${!!t.params?.seed}`);
+      });
+      
+      logs.push(`[FALLBACK] Completed with ${transformations.length} operations, ${totalBitsChanged} bits changed`);
       
       return {
         success: true,
         output: 'Fallback execution completed',
         logs,
         duration: performance.now() - startTime,
-        transformations: bridgeObj.getTransformations(),
-        finalBits: bridgeObj.getCurrentBits(),
+        transformations,
+        finalBits,
         metrics: bridgeObj.bridge.get_all_metrics() as Record<string, number>,
         stats: bridgeObj.getStats(),
       };
@@ -1050,13 +1079,19 @@ except SyntaxError as e:
     this.executionCounter++;
     const execId = this.executionCounter;
 
+    console.log(`[PYEXEC] ▶ sandboxTest #${execId} | isLoaded=${this.isLoaded} | fallbackMode=${this.fallbackMode} | runtimePolicy=${this.runtimePolicy}`);
+    console.log(`[PYEXEC] Context: bits.len=${context.bits.length} | budget=${context.budget} | operations.len=${context.operations.length}`);
+
     // Check if we need to use fallback mode
     if (this.fallbackMode || !this.isLoaded) {
+      console.log(`[PYEXEC] Attempting to load Pyodide...`);
       await this.loadPyodide();
       
       // If still in fallback mode after attempting to load
       if (this.fallbackMode) {
+        console.log(`[PYEXEC] Using FALLBACK mode (Pyodide unavailable)`);
         if (this.runtimePolicy === 'strict') {
+          console.error(`[PYEXEC] Strict mode - rejecting fallback execution`);
           return {
             success: false,
             output: null,
@@ -1074,6 +1109,8 @@ except SyntaxError as e:
         return this.fallbackExecution(pythonCode, context, startTime);
       }
     }
+    
+    console.log(`[PYEXEC] Using PYODIDE for execution`);
 
     try {
 
