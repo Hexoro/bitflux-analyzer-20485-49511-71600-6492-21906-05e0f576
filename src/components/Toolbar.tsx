@@ -30,7 +30,7 @@ import {
   Brain,
 } from 'lucide-react';
 
-export type AppMode = 'analysis' | 'algorithm' | 'backend' | 'player' | 'ai';
+export type AppMode = 'analysis' | 'algorithm' | 'backend' | 'player';
 
 interface ToolbarProps {
   onLoad: () => void;
