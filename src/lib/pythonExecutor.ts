@@ -1068,14 +1068,41 @@ except SyntaxError as e:
             continue;
           }
           
-          // Handle apply_operation
-          if (trimmed.includes('apply_operation')) {
-            // Check for assignment: result = apply_operation(...)
-            const assignOp = trimmed.match(/^(\w+)\s*=\s*(.+apply_operation.+)$/);
+          // Handle apply_operation (including tuple unpacking: a, b = func(apply_operation...))
+          if (trimmed.includes('apply_operation') && !trimmed.startsWith('def ')) {
+            // Check for any assignment (including tuple) before apply_operation
+            const assignOp = trimmed.match(/^.+=\s*(.+apply_operation.+)$/);
             if (assignOp) {
-              executeApplyOp(assignOp[2]);
+              executeApplyOp(assignOp[1]);
             } else {
               executeApplyOp(trimmed);
+            }
+            i++;
+            continue;
+          }
+          
+          // Handle tuple unpacking: a, b = func(...)
+          const tupleAssignFunc = trimmed.match(/^(\w+)\s*,\s*(\w+)\s*=\s*(\w+)\s*\((.*)?\)\s*$/);
+          if (tupleAssignFunc) {
+            const funcName = tupleAssignFunc[3];
+            if (funcDefs[funcName]) {
+              const def = funcDefs[funcName];
+              const callArgs = tupleAssignFunc[4] ? tupleAssignFunc[4].split(',').map(a => resolveValue(a.trim())) : [];
+              def.params.forEach((p, idx) => {
+                if (idx < callArgs.length) vars[p] = callArgs[idx];
+              });
+              executeBlock(def.bodyStart, def.bodyEnd, getIndent(lines[def.bodyStart]) || 8);
+            } else {
+              // Try to resolve as a built-in or expression
+              const callExpr = `${tupleAssignFunc[3]}(${tupleAssignFunc[4] || ''})`;
+              const result = resolveValue(callExpr);
+              if (Array.isArray(result) && result.length >= 2) {
+                vars[tupleAssignFunc[1]] = result[0];
+                vars[tupleAssignFunc[2]] = result[1];
+              } else {
+                vars[tupleAssignFunc[1]] = result;
+                vars[tupleAssignFunc[2]] = result;
+              }
             }
             i++;
             continue;
