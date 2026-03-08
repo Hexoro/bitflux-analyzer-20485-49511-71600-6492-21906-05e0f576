@@ -296,11 +296,17 @@ api.log("=" .repeat(80));
  */
 export function getJSEquivalent(pythonFileName: string): { name: string; content: string; type: string } | null {
   const mapping: Record<string, { content: string; type: string }> = {
+    // V2 names (from unifiedStrategy.ts loadUnifiedStrategyV2)
     'UnifiedSchedulerV2.py': { content: JS_UNIFIED_SCHEDULER, type: 'scheduler' },
     'UnifiedAlgorithmV2.py': { content: JS_UNIFIED_ALGORITHM, type: 'algorithm' },
-    'ComprehensiveMultiFile.py': { content: JS_UNIFIED_ALGORITHM, type: 'algorithm' }, // same logic
+    'ComprehensiveMultiFile.py': { content: JS_UNIFIED_ALGORITHM, type: 'algorithm' },
     'UnifiedScoringV2.py': { content: JS_UNIFIED_SCORING, type: 'scoring' },
     'UnifiedPolicyV2.py': { content: JS_UNIFIED_POLICY, type: 'policies' },
+    // Non-V2 names (from StrategyTabV7 and other components)
+    'UnifiedScheduler.py': { content: JS_UNIFIED_SCHEDULER, type: 'scheduler' },
+    'UnifiedAlgorithm.py': { content: JS_UNIFIED_ALGORITHM, type: 'algorithm' },
+    'UnifiedScoring.py': { content: JS_UNIFIED_SCORING, type: 'scoring' },
+    'UnifiedPolicy.py': { content: JS_UNIFIED_POLICY, type: 'policies' },
   };
   
   const entry = mapping[pythonFileName];

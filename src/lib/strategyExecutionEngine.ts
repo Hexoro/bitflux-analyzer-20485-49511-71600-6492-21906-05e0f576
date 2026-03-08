@@ -510,6 +510,14 @@ class StrategyExecutionEngine {
       };
       
       const jsResult = executeJSStrategy(jsEquivalent.content, jsContext);
+      
+      // Check for errors
+      if (!jsResult.success) {
+        console.error(`[EXEC-ENGINE] ⛔ JS execution failed for ${file.name}: ${jsResult.error}`);
+        console.error(`[EXEC-ENGINE] JS logs:`, jsResult.logs);
+      }
+      console.log(`[EXEC-ENGINE] JS result for ${file.name}: success=${jsResult.success} transformations=${jsResult.transformations.length} bitsChanged=${jsResult.stats.totalBitsChanged} logs=${jsResult.logs.length} error=${jsResult.error || 'none'}`);
+      
       const finalMetrics = calculateAllMetrics(jsResult.finalBits).metrics;
       
       return {
