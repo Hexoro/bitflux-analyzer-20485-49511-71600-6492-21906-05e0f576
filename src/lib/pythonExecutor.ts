@@ -267,8 +267,10 @@ except SyntaxError as e:
         apply_operation: (opName: string, bits: string, params?: any, rangeStart?: number, rangeEnd?: number) => {
           const startTime = performance.now();
           const fullBeforeBits = currentBits;
-          const targetBits = bits || currentBits;
-          const isFullOperation = !bits || bits === currentBits || bits.length === currentBits.length;
+          // Validate bits arg: must be non-empty string of only 0s and 1s, otherwise use currentBits
+          const isValidBitString = bits && bits.length > 0 && /^[01]+$/.test(bits);
+          const targetBits = isValidBitString ? bits : currentBits;
+          const isFullOperation = !isValidBitString || bits === currentBits || bits.length === currentBits.length;
           
           try {
             const result = executeOperation(opName, targetBits, params || {});
