@@ -24,6 +24,7 @@ import {
 } from '@/lib/testScheduler';
 import { TestSettingsDialog, TestState, VectorTestResult } from '@/components/TestSettingsDialog';
 import { runPlayerTestSuite, PlayerTestReport } from '@/lib/playerTestSuite';
+import { runPipelineTestSuite, PipelineTestReport } from '@/lib/playerPipelineTestSuite';
 import { toast } from 'sonner';
 
 // Import workers using Vite's ?worker syntax for proper bundling
@@ -68,6 +69,8 @@ export const StartupTestSuite = ({
   const [isStalled, setIsStalled] = useState(false);
   const [playerResults, setPlayerResults] = useState<PlayerTestReport | null>(null);
   const [isPlayerRunning, setIsPlayerRunning] = useState(false);
+  const [pipelineResults, setPipelineResults] = useState<PipelineTestReport | null>(null);
+  const [isPipelineRunning, setIsPipelineRunning] = useState(false);
 
   // Refs
   const coreWorkerRef = useRef<Worker | null>(null);
@@ -89,15 +92,17 @@ export const StartupTestSuite = ({
     (coreResults?.failed ?? 0) + 
     vectorSummary.opFailed + 
     vectorSummary.metricFailed +
-    (playerResults?.failed ?? 0);
+    (playerResults?.failed ?? 0) +
+    (pipelineResults?.failed ?? 0);
   
   const totalPassed = (smokeResults?.passed ?? 0) + 
     (coreResults?.passed ?? 0) + 
     vectorSummary.opPassed + 
     vectorSummary.metricPassed +
-    (playerResults?.passed ?? 0);
+    (playerResults?.passed ?? 0) +
+    (pipelineResults?.passed ?? 0);
 
-  const hasResults = smokeResults !== null || coreResults !== null || playerResults !== null ||
+  const hasResults = smokeResults !== null || coreResults !== null || playerResults !== null || pipelineResults !== null ||
     (vectorSummary.opPassed + vectorSummary.opFailed + vectorSummary.metricPassed + vectorSummary.metricFailed) > 0;
 
   // Stop stall checker

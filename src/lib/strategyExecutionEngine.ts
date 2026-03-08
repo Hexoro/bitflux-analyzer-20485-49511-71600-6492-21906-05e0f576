@@ -542,6 +542,9 @@ class StrategyExecutionEngine {
         bitRanges: t.bitRanges,
         cost,
         cumulativeBits: t.cumulativeBits || t.fullAfterBits || t.afterBits,
+        segmentOnly: t.segmentOnly || false,
+        segmentBitsChanged: t.segmentBitsChanged || 0,
+        fullBitsChanged: t.bitsChanged || 0,
       };
     });
 

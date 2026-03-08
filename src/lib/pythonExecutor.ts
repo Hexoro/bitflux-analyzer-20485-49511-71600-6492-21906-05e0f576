@@ -61,6 +61,8 @@ export interface PythonExecutionResult {
   };
 }
 
+export type RuntimePolicy = 'strict' | 'legacy_fallback';
+
 class PythonExecutor {
   private pyodide: any = null;
   private isLoaded = false;
@@ -70,6 +72,19 @@ class PythonExecutor {
   private executionCounter = 0;
   private loadFailed = false;
   private fallbackMode = false;
+  private runtimePolicy: RuntimePolicy = 'legacy_fallback';
+
+  setRuntimePolicy(policy: RuntimePolicy): void {
+    this.runtimePolicy = policy;
+  }
+
+  getRuntimePolicy(): RuntimePolicy {
+    return this.runtimePolicy;
+  }
+
+  isPyodideAvailable(): boolean {
+    return this.isLoaded && !this.loadFailed;
+  }
 
   async loadPyodide(): Promise<void> {
     if (this.isLoaded) return;
@@ -975,8 +990,23 @@ except SyntaxError as e:
     if (this.fallbackMode || !this.isLoaded) {
       await this.loadPyodide();
       
-      // If still in fallback mode after attempting to load, use JS-based execution
+      // If still in fallback mode after attempting to load
       if (this.fallbackMode) {
+        if (this.runtimePolicy === 'strict') {
+          return {
+            success: false,
+            output: null,
+            logs: ['[STRICT MODE] Pyodide is unavailable. Python execution requires Pyodide.',
+                   'To use fallback mode, change runtime policy to "legacy_fallback" in settings.',
+                   'Alternatively, use a JavaScript strategy file (.js) which executes locally.'],
+            error: 'Pyodide unavailable (strict mode). Switch to legacy_fallback policy or use JS strategies.',
+            duration: performance.now() - startTime,
+            transformations: [],
+            finalBits: context.bits,
+            metrics: context.metrics,
+            stats: { totalOperations: 0, totalBitsChanged: 0, budgetUsed: 0, budgetRemaining: context.budget },
+          };
+        }
         return this.fallbackExecution(pythonCode, context, startTime);
       }
     }

@@ -20,6 +20,11 @@ export interface TransformationStep {
   cost?: number;
   // Cumulative state (full file after this step)
   cumulativeBits?: string;
+  // Whether this was a segment-only operation
+  segmentOnly?: boolean;
+  // Segment vs full bits changed
+  segmentBitsChanged?: number;
+  fullBitsChanged?: number;
   // Memory window - what part of data the algorithm is looking at
   memoryWindow?: {
     start: number;
