@@ -2,6 +2,7 @@
  * Plugin Manager - Add, delete, enable/disable, import/export plugins
  * Plugins stored in localStorage
  */
+import { validateCode, safeExecute } from './sandboxedExec';
 
 export type PluginType = 'operation' | 'metric' | 'visualization' | 'export';
 
