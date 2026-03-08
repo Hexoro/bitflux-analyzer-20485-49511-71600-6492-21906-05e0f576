@@ -31,6 +31,7 @@ import { calculateAllMetrics } from '@/lib/metricsCalculator';
 import { toast } from 'sonner';
 import { verifyAllStepsIndependently, exportVerificationReport } from '@/lib/playerVerification';
 import { exportPlayerReport, generateVerificationPlayerReport, generateIssuesReport, generateTransformationReport } from '@/lib/playerReportGenerator';
+import { replayFromStoredSteps } from '@/lib/canonicalReplay';
 
 // Player sub-components
 import { EnhancedDiffView } from './player/EnhancedDiffView';
