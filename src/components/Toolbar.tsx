@@ -71,7 +71,6 @@ export const Toolbar = ({
     algorithm: 'Algorithm',
     backend: 'Backend',
     player: 'Player',
-    ai: 'AI Mode',
   };
 
   return (
