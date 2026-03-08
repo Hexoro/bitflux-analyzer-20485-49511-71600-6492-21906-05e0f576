@@ -353,6 +353,9 @@ class StrategyExecutionEngine {
         );
       }
 
+      // Total score
+      const totalScore = scores.reduce((sum, s) => sum + s.score, 0);
+
       // Create single result file for Player
       const resultFileName = `result_${strategy.name.replace(/\s+/g, '_')}_run${runId}.txt`;
       const resultFile = fileSystemManager.createFile(resultFileName, currentBits, 'binary');
