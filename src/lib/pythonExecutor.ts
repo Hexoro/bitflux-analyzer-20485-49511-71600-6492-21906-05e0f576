@@ -61,6 +61,8 @@ export interface PythonExecutionResult {
   };
 }
 
+export type RuntimePolicy = 'strict' | 'legacy_fallback';
+
 class PythonExecutor {
   private pyodide: any = null;
   private isLoaded = false;
@@ -70,6 +72,19 @@ class PythonExecutor {
   private executionCounter = 0;
   private loadFailed = false;
   private fallbackMode = false;
+  private runtimePolicy: RuntimePolicy = 'legacy_fallback';
+
+  setRuntimePolicy(policy: RuntimePolicy): void {
+    this.runtimePolicy = policy;
+  }
+
+  getRuntimePolicy(): RuntimePolicy {
+    return this.runtimePolicy;
+  }
+
+  isPyodideAvailable(): boolean {
+    return this.isLoaded && !this.loadFailed;
+  }
 
   async loadPyodide(): Promise<void> {
     if (this.isLoaded) return;
