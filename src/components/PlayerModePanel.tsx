@@ -132,7 +132,7 @@ export const PlayerModePanel = ({ onExitPlayer, selectedResultId }: PlayerModePa
     return count;
   }, []);
 
-  // Reconstruct steps
+  // Reconstruct steps using canonical replay engine
   useEffect(() => {
     if (!selectedResult) {
       setReconstructedBits('');
@@ -152,131 +152,41 @@ export const PlayerModePanel = ({ onExitPlayer, selectedResultId }: PlayerModePa
     fileSystemManager.setActiveFile(tempFile.id);
     setPlayerFileId(tempFile.id);
 
-    let currentBits = selectedResult.initialBits;
-    const steps: any[] = [];
-    let mismatchDetails: string[] = [];
+    // Use canonical replay engine - authoritative stored state, re-execution for validation only
+    const replay = replayFromStoredSteps(selectedResult, true);
 
-    for (let i = 0; i < selectedResult.steps.length; i++) {
-      const originalStep = selectedResult.steps[i];
-      const beforeBits = currentBits;
-      const storedAfter = originalStep.cumulativeBits || originalStep.fullAfterBits || originalStep.afterBits || '';
-      let afterBits = storedAfter || currentBits;
-      let executionError: string | undefined;
-      let executionMatches = true;
-
-      // Detect segment-only operation
-      const isSegmentOp = (originalStep as any).segmentOnly === true 
-        || (originalStep.beforeBits && originalStep.fullBeforeBits 
-            && originalStep.beforeBits.length !== originalStep.fullBeforeBits.length)
-        || (originalStep.fullBeforeBits === originalStep.fullAfterBits 
-            && originalStep.beforeBits !== originalStep.afterBits);
-
-      if (originalStep.params) {
-        try {
-          let reExecutedBits: string;
-
-          if (isSegmentOp) {
-            // SEGMENT-ONLY: re-execute on the SEGMENT data, not full file
-            const segmentInput = originalStep.beforeBits || currentBits;
-            const expectedSegmentAfter = originalStep.afterBits || '';
-            const opResult = executeOperation(originalStep.operation, segmentInput, originalStep.params || {});
-            
-            if (opResult.success) {
-              // Compare against segment result, not full file
-              executionMatches = opResult.bits === expectedSegmentAfter;
-              if (!executionMatches) {
-                const mismatches = countMismatches(opResult.bits, expectedSegmentAfter);
-                if (mismatches > 0) mismatchDetails.push(`Step ${i}: ${originalStep.operation} - ${mismatches} segment mismatches`);
-              }
-            } else {
-              executionError = opResult.error;
-            }
-            // Don't update reExecutedBits for full file — segment ops don't change full state
-            reExecutedBits = currentBits;
-          } else {
-            // FULL FILE operation
-            const bitRange = originalStep.bitRanges?.[0];
-
-            if (bitRange && bitRange.start !== undefined && bitRange.end !== undefined
-                && !(bitRange.start === 0 && bitRange.end === currentBits.length)) {
-              const before = currentBits.slice(0, bitRange.start);
-              const target = currentBits.slice(bitRange.start, bitRange.end);
-              const after = currentBits.slice(bitRange.end);
-              const opResult = executeOperation(originalStep.operation, target, originalStep.params || {});
-              reExecutedBits = opResult.success ? before + opResult.bits + after : currentBits;
-              if (!opResult.success) executionError = opResult.error;
-            } else {
-              const opResult = executeOperation(originalStep.operation, currentBits, originalStep.params || {});
-              reExecutedBits = opResult.success && opResult.bits.length > 0 ? opResult.bits : currentBits;
-              if (!opResult.success) executionError = opResult.error;
-            }
-
-            if (storedAfter && reExecutedBits !== storedAfter) {
-              executionMatches = false;
-              const mismatches = countMismatches(reExecutedBits, storedAfter);
-              if (mismatches > 0) mismatchDetails.push(`Step ${i}: ${originalStep.operation} - ${mismatches} mismatches`);
-            }
-            if (!storedAfter && reExecutedBits) afterBits = reExecutedBits;
-          }
-        } catch (e) {
-          executionError = (e as Error).message;
-        }
-      }
-
-      const metricsResult = calculateAllMetrics(afterBits);
-
-      // Count segment-level changes
-      const segmentBefore = originalStep.beforeBits || beforeBits;
-      const segmentAfter = originalStep.afterBits || afterBits;
-      let segmentBitsChanged = 0;
-      for (let j = 0; j < Math.min(segmentBefore.length, segmentAfter.length); j++) {
-        if (segmentBefore[j] !== segmentAfter[j]) segmentBitsChanged++;
-      }
-      
-      // Count full-file changes
-      let fullBitsChanged = 0;
-      for (let j = 0; j < Math.min(beforeBits.length, afterBits.length); j++) {
-        if (beforeBits[j] !== afterBits[j]) fullBitsChanged++;
-      }
-
-      steps.push({
-        ...originalStep,
-        stepIndex: i,
-        fullBeforeBits: beforeBits,
-        fullAfterBits: afterBits,
-        metrics: metricsResult.metrics,
-        cost: originalStep.cost || getOperationCost(originalStep.operation),
-        cumulativeBits: afterBits,
-        bitsLength: afterBits.length,
-        executionError,
-        verified: executionMatches,
-        verificationNote: !executionMatches 
-          ? `Re-execution mismatch${isSegmentOp ? ' (segment-only op)' : ''}${storedAfter ? ' (stored state used for playback)' : ''}` 
-          : undefined,
-        storedAfterBits: storedAfter,
-        segmentBitsChanged,
-        fullBitsChanged,
-        isSegmentOnly: isSegmentOp,
-      });
-
-      currentBits = afterBits;
-    }
+    // Convert replay steps to the format expected by sub-components
+    const steps = replay.steps.map(rs => ({
+      ...rs,
+      // Compatibility aliases
+      fullBeforeBits: rs.authoritativeBeforeBits,
+      fullAfterBits: rs.authoritativeAfterBits,
+      cumulativeBits: rs.authoritativeCumulativeBits,
+      beforeBits: rs.segmentBeforeBits,
+      afterBits: rs.segmentAfterBits,
+      storedAfterBits: rs.authoritativeCumulativeBits,
+      isSegmentOnly: rs.isSegmentOnly,
+    }));
 
     setReconstructedSteps(steps);
     setReconstructedBits(selectedResult.initialBits);
 
-    const finalMatches = currentBits === selectedResult.finalBits;
-    if (finalMatches) {
+    // Strict verification: chain hash must match exactly
+    if (replay.chainVerified && replay.failedSteps === 0) {
       setVerificationStatus('passed');
+    } else if (replay.chainVerified) {
+      // Chain OK but some steps failed re-execution (could be segment ops)
+      const segmentFailures = replay.steps.filter(s => !s.verified && s.isSegmentOnly).length;
+      const realFailures = replay.failedSteps - segmentFailures;
+      setVerificationStatus(realFailures === 0 ? 'passed' : 'failed');
     } else {
-      const mismatches = countMismatches(currentBits, selectedResult.finalBits);
-      setVerificationStatus(mismatches < currentBits.length * 0.01 ? 'passed' : 'failed');
+      setVerificationStatus('failed');
     }
 
     return () => {
       if (tempFile.id) fileSystemManager.deleteFile(tempFile.id);
     };
-  }, [selectedResult?.id, countMismatches]);
+  }, [selectedResult?.id]);
 
   // Playback with breakpoint support
   useEffect(() => {
