@@ -167,7 +167,6 @@ export function replayFromStoredSteps(
       failedCount++;
       console.warn(`[REPLAY] Step ${i} verification FAILED: ${verificationNote || executionError || 'unknown'}`);
     }
-    else failedCount++;
 
     // Compute deltas
     const segmentBefore = originalStep.beforeBits || beforeBits;
